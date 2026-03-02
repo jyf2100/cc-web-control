@@ -27,3 +27,12 @@ test('buildSyncLine clears line then types input without Enter', () => {
     { type: 'input', data: '/m', enter: false },
   ]);
 });
+
+test('buildSyncAndKey syncs input then sends extra key', () => {
+  const seq = actions.buildSyncAndKey('/model', 'Enter');
+  assert.deepEqual(seq, [
+    { type: 'key', data: 'C-u' },
+    { type: 'input', data: '/model', enter: false },
+    { type: 'key', data: 'Enter' },
+  ]);
+});

@@ -42,6 +42,13 @@
     return [...buildClearLine(), input(text, true)];
   }
 
+  function buildSyncAndKey(line, keyName) {
+    const text = String(line ?? '');
+    const k = String(keyName ?? '');
+    if (!k) throw new Error('keyName must be a non-empty string');
+    return [...buildSyncLine(text), key(k)];
+  }
+
   function buildTabComplete(line) {
     const text = String(line ?? '');
     return [...buildClearLine(), input(text, false), key('Tab')];
@@ -53,8 +60,8 @@
     batch,
     buildClearLine,
     buildSyncLine,
+    buildSyncAndKey,
     buildSubmitLine,
     buildTabComplete,
   };
 });
-

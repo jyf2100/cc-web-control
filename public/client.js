@@ -238,6 +238,20 @@
         const { inputEl, contentEl, viewEl } = ensureTerminalView();
         let slashSyncTimer = null;
         let composing = false;
+        let lastSlashSyncedValue = null;
+
+        const syncLineNow = (line) => {
+            if (!isConnected) return;
+            const latest = typeof line === 'string' ? line : String(line ?? '');
+            if (tmuxActions?.buildSyncLine) {
+                sendBatch(tmuxActions.buildSyncLine(latest));
+            } else {
+                sendBatch([{ type: 'key', data: 'C-u' }, { type: 'input', data: latest, enter: false }]);
+            }
+            if (latest.startsWith('/')) {
+                lastSlashSyncedValue = latest;
+            }
+        };
 
         const scheduleSlashSync = () => {
             if (composing) return;
@@ -250,11 +264,7 @@
                 if (!isConnected) return;
                 const latest = typeof inputEl.value === 'string' ? inputEl.value : '';
                 if (!latest.startsWith('/')) return;
-                if (tmuxActions?.buildSyncLine) {
-                    sendBatch(tmuxActions.buildSyncLine(latest));
-                } else {
-                    sendBatch([{ type: 'key', data: 'C-u' }, { type: 'input', data: latest, enter: false }]);
-                }
+                syncLineNow(latest);
             }, 120);
         };
 
@@ -266,6 +276,30 @@
             scheduleSlashSync();
         });
         inputEl.addEventListener('input', scheduleSlashSync);
+
+        const isEditableTarget = (el) => {
+            if (!el || typeof el !== 'object') return false;
+            const tag = (el.tagName || '').toUpperCase();
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+            return !!el.isContentEditable;
+        };
+
+        // 让 web 操作习惯更像 Claude Code：不需要先点击输入框，按 "/" 就能进入命令面板
+        document.addEventListener('keydown', (e) => {
+            if (e.defaultPrevented) return;
+            if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+            if (isEditableTarget(e.target)) return;
+
+            e.preventDefault();
+            if (inputEl.disabled) return;
+            inputEl.focus({ preventScroll: true });
+
+            // 只有在输入框为空时才自动写入 "/"，避免意外覆盖用户正在编辑的内容
+            if (!inputEl.value) {
+                inputEl.value = '/';
+                syncLineNow('/');
+            }
+        }, true);
 
         inputEl.addEventListener('keydown', (e) => {
             // Tab 在浏览器默认会切换焦点，这里改为发送给 tmux 做补全
@@ -282,22 +316,56 @@
                 return;
             }
 
-            // 空输入时，把方向键/ESC 作为“发送按键”给 tmux（用于命令面板、补全列表等）
+            // 方向键/ESC：在命令面板（/ 开头）或空输入时，转发给 tmux（用于命令面板/补全列表选择）
             if ((e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Escape') && !e.isComposing) {
-                const value = typeof inputEl.value === 'string' ? inputEl.value.trim() : '';
-                if (!value && isConnected) {
+                const rawValue = typeof inputEl.value === 'string' ? inputEl.value : '';
+                const trimmed = rawValue.trim();
+                const slashMode = rawValue.startsWith('/');
+
+                if ((slashMode || !trimmed) && isConnected) {
                     e.preventDefault();
                     const keyName =
                         e.key === 'ArrowUp' ? 'Up' :
                         e.key === 'ArrowDown' ? 'Down' :
                         'Escape';
                     sendBatch([{ type: 'key', data: keyName }]);
+                    if (keyName === 'Escape' && slashMode) {
+                        inputEl.value = '';
+                    }
                     return;
                 }
             }
 
             if (e.key === 'Enter' && !e.isComposing) {
                 e.preventDefault();
+                const rawValue = typeof inputEl.value === 'string' ? inputEl.value : '';
+                const trimmed = rawValue.trim();
+                const slashMode = rawValue.startsWith('/');
+
+                if (slashMode && isConnected) {
+                    // 纯 "/"：只同步不回车（避免误触执行第一项命令）
+                    if (trimmed === '/') {
+                        syncLineNow('/');
+                        inputEl.value = '';
+                        showSystemNote('已发送 "/"（不回车），可继续输入命令名称并回车');
+                        return;
+                    }
+
+                    // Slash 命令：优先只发 Enter（不重写输入行），避免重置命令面板的光标选择
+                    // 若 web 输入与 tmux 行不同步，再做一次“同步 + Enter”兜底。
+                    if (rawValue === lastSlashSyncedValue) {
+                        sendBatch([{ type: 'key', data: 'Enter' }]);
+                    } else if (tmuxActions?.buildSyncAndKey) {
+                        sendBatch(tmuxActions.buildSyncAndKey(rawValue, 'Enter'));
+                    } else if (tmuxActions?.buildSyncLine) {
+                        sendBatch([...tmuxActions.buildSyncLine(rawValue), { type: 'key', data: 'Enter' }]);
+                    } else {
+                        sendBatch([{ type: 'key', data: 'C-u' }, { type: 'input', data: rawValue, enter: false }, { type: 'key', data: 'Enter' }]);
+                    }
+                    inputEl.value = '';
+                    return;
+                }
+
                 sendCommand();
             }
         });
@@ -414,6 +482,14 @@
             sessionSelect.innerHTML = '';
 
             const names = Array.isArray(sessions) ? sessions.map(s => s.name) : [];
+            // 默认会话不存在时，自动切换到第一个可用会话，避免页面一直连到不存在的 session
+            if (currentSession === DEFAULT_SESSION && !names.includes(DEFAULT_SESSION) && names.length) {
+                currentSession = names[0];
+                setSessionInUrl(currentSession);
+                updateSessionUi();
+                lastOutput = null;
+                connect();
+            }
             if (currentSession && !names.includes(currentSession)) {
                 const opt = document.createElement('option');
                 opt.value = currentSession;

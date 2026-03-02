@@ -302,10 +302,32 @@ function startWebServer() {
 
   // WebSocket
   const wss = new WebSocketServer({ server });
+  const WS_PING_INTERVAL_MS = Number.parseInt(process.env.CC_WEB_WS_PING_INTERVAL || '', 10) || 30_000;
 
   const allowedKeyNames = new Set(['Tab', 'Enter', 'Escape', 'Up', 'Down', 'Left', 'Right', 'BSpace', 'Delete', 'C-u', 'C-c']);
 
+  const pingInterval = setInterval(() => {
+    for (const ws of wss.clients) {
+      if (ws.readyState !== 1) continue;
+      if (ws.isAlive === false) {
+        try {
+          ws.terminate();
+        } catch {}
+        continue;
+      }
+      ws.isAlive = false;
+      try {
+        ws.ping();
+      } catch {}
+    }
+  }, WS_PING_INTERVAL_MS);
+
   wss.on('connection', async (ws, req) => {
+    ws.isAlive = true;
+    ws.on('pong', () => {
+      ws.isAlive = true;
+    });
+
     const url = new URL(req.url, `http://localhost:${PORT}`);
     const sessionName = url.searchParams.get('session') || DEFAULT_SESSION;
 
@@ -430,6 +452,9 @@ function startWebServer() {
   // 优雅退出
   process.on('SIGINT', () => {
     console.log('\n[Server] 正在关闭...');
+    try {
+      clearInterval(pingInterval);
+    } catch {}
     for (const [ws, info] of clients) {
       if (info?.interval) clearInterval(info.interval);
       ws.close();
