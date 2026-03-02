@@ -303,13 +303,14 @@ function startWebServer() {
   // WebSocket
   const wss = new WebSocketServer({ server });
 
-  const allowedKeyNames = new Set(['Tab', 'Enter', 'Escape', 'Up', 'Down', 'Left', 'Right', 'BSpace', 'Delete']);
+  const allowedKeyNames = new Set(['Tab', 'Enter', 'Escape', 'Up', 'Down', 'Left', 'Right', 'BSpace', 'Delete', 'C-u', 'C-c']);
 
   wss.on('connection', async (ws, req) => {
     const url = new URL(req.url, `http://localhost:${PORT}`);
     const sessionName = url.searchParams.get('session') || DEFAULT_SESSION;
 
     const clientInfo = { sessionName, lastOutput: null, isPolling: false, missingNoticeSent: false };
+    clientInfo.commandQueue = Promise.resolve();
     clients.set(ws, clientInfo);
 
     try {
@@ -351,35 +352,72 @@ function startWebServer() {
 
     clientInfo.interval = interval;
 
-    ws.on('message', async (message) => {
-      try {
+    ws.on('message', (message) => {
+      const run = async () => {
         const payload = JSON.parse(message);
         const { type, data, enter } = payload || {};
 
-        if (type === 'input') {
-          if (typeof data !== 'string') {
+        const runInput = async (inputText, inputEnter) => {
+          if (typeof inputText !== 'string') {
             throw new Error('Input payload must be a string');
           }
-          const shouldEnter = enter === false ? false : true;
-          await tmux.sendKeys(sessionName, data, { enter: shouldEnter });
+          const shouldEnter = inputEnter === false ? false : true;
+          await tmux.sendKeys(sessionName, inputText, { enter: shouldEnter });
+        };
+
+        const runKey = async (keyName) => {
+          if (typeof keyName !== 'string') {
+            throw new Error('Key payload must be a string');
+          }
+          if (!allowedKeyNames.has(keyName)) {
+            throw new Error('Key not allowed');
+          }
+          await tmux.sendKey(sessionName, keyName);
+        };
+
+        if (type === 'input') {
+          await runInput(data, enter);
           return;
         }
 
         if (type === 'key') {
-          if (typeof data !== 'string') {
-            throw new Error('Key payload must be a string');
-          }
-          if (!allowedKeyNames.has(data)) {
-            throw new Error('Key not allowed');
-          }
-          await tmux.sendKey(sessionName, data);
+          await runKey(data);
           return;
         }
-      } catch (e) {
-        if (ws.readyState === 1) {
-          ws.send(JSON.stringify({ type: 'error', data: e.message || 'Failed to send input' }));
+
+        if (type === 'batch') {
+          if (!Array.isArray(data)) {
+            throw new Error('Batch payload must be an array');
+          }
+          if (data.length > 50) {
+            throw new Error('Batch too large');
+          }
+
+          for (const action of data) {
+            if (!action || typeof action !== 'object') {
+              throw new Error('Invalid batch action');
+            }
+            if (action.type === 'input') {
+              await runInput(action.data, action.enter);
+              continue;
+            }
+            if (action.type === 'key') {
+              await runKey(action.data);
+              continue;
+            }
+            throw new Error('Unknown batch action type');
+          }
+          return;
         }
-      }
+      };
+
+      clientInfo.commandQueue = clientInfo.commandQueue
+        .then(run)
+        .catch((e) => {
+          if (ws.readyState === 1) {
+            ws.send(JSON.stringify({ type: 'error', data: e.message || 'Failed to send input' }));
+          }
+        });
     });
 
     ws.on('close', () => {

@@ -43,6 +43,19 @@
         return (output) => (typeof output === 'string' ? output : '');
     })();
 
+    const tmuxActions = (function () {
+        try {
+            if (window.TmuxActions) return window.TmuxActions;
+        } catch {}
+        return null;
+    })();
+
+    function sendBatch(actions) {
+        if (!ws || ws.readyState !== 1 || !isConnected) return;
+        if (!Array.isArray(actions) || !actions.length) return;
+        ws.send(JSON.stringify({ type: 'batch', data: actions }));
+    }
+
     function getSessionFromUrl() {
         try {
             const url = new URL(window.location.href);
@@ -194,19 +207,27 @@
 
         // 空输入：发送一个纯按键（用于命令面板选择/确认等）
         if (!trimmed) {
-            ws.send(JSON.stringify({ type: 'key', data: 'Enter' }));
+            sendBatch([{ type: 'key', data: 'Enter' }]);
             return;
         }
 
         // Claude Code 的命令面板通常需要先输入 "/" 但不要立刻回车
         if (trimmed === '/') {
-            ws.send(JSON.stringify({ type: 'input', data: '/', enter: false }));
+            if (tmuxActions?.buildSyncLine) {
+                sendBatch(tmuxActions.buildSyncLine('/'));
+            } else {
+                sendBatch([{ type: 'key', data: 'C-u' }, { type: 'input', data: '/', enter: false }]);
+            }
             terminalInputEl.value = '';
             showSystemNote('已发送 "/"（不回车），可继续输入命令名称并回车');
             return;
         }
 
-        ws.send(JSON.stringify({ type: 'input', data: raw, enter: true }));
+        if (tmuxActions?.buildSubmitLine) {
+            sendBatch(tmuxActions.buildSubmitLine(raw));
+        } else {
+            sendBatch([{ type: 'key', data: 'C-u' }, { type: 'input', data: raw, enter: true }]);
+        }
         terminalInputEl.value = '';
     }
 
@@ -215,13 +236,48 @@
      */
     function bindInlineInput() {
         const { inputEl, contentEl, viewEl } = ensureTerminalView();
+        let slashSyncTimer = null;
+        let composing = false;
+
+        const scheduleSlashSync = () => {
+            if (composing) return;
+            if (!isConnected) return;
+            const value = typeof inputEl.value === 'string' ? inputEl.value : '';
+            if (!value.startsWith('/')) return;
+
+            if (slashSyncTimer) clearTimeout(slashSyncTimer);
+            slashSyncTimer = setTimeout(() => {
+                if (!isConnected) return;
+                const latest = typeof inputEl.value === 'string' ? inputEl.value : '';
+                if (!latest.startsWith('/')) return;
+                if (tmuxActions?.buildSyncLine) {
+                    sendBatch(tmuxActions.buildSyncLine(latest));
+                } else {
+                    sendBatch([{ type: 'key', data: 'C-u' }, { type: 'input', data: latest, enter: false }]);
+                }
+            }, 120);
+        };
+
+        inputEl.addEventListener('compositionstart', () => {
+            composing = true;
+        });
+        inputEl.addEventListener('compositionend', () => {
+            composing = false;
+            scheduleSlashSync();
+        });
+        inputEl.addEventListener('input', scheduleSlashSync);
 
         inputEl.addEventListener('keydown', (e) => {
             // Tab 在浏览器默认会切换焦点，这里改为发送给 tmux 做补全
             if (e.key === 'Tab' && !e.isComposing) {
                 e.preventDefault();
                 if (isConnected) {
-                    ws.send(JSON.stringify({ type: 'key', data: 'Tab' }));
+                    const current = typeof inputEl.value === 'string' ? inputEl.value : '';
+                    if (tmuxActions?.buildTabComplete) {
+                        sendBatch(tmuxActions.buildTabComplete(current));
+                    } else {
+                        sendBatch([{ type: 'key', data: 'C-u' }, { type: 'input', data: current, enter: false }, { type: 'key', data: 'Tab' }]);
+                    }
                 }
                 return;
             }
@@ -235,7 +291,7 @@
                         e.key === 'ArrowUp' ? 'Up' :
                         e.key === 'ArrowDown' ? 'Down' :
                         'Escape';
-                    ws.send(JSON.stringify({ type: 'key', data: keyName }));
+                    sendBatch([{ type: 'key', data: keyName }]);
                     return;
                 }
             }

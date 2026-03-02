@@ -9,3 +9,6 @@ yarn-error.log*
 .env.*
 
 .claude/
+
+__pycache__/
+*.pyc
