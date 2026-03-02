@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claude Code Web</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- 顶部导航 -->
+        <header class="header">
+            <div class="logo">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                </svg>
+                <span>Claude Code Remote Control</span>
+            </div>
+            <div class="header-actions">
+                <div class="controls">
+                    <label class="control">
+                        <span class="control-label">Session</span>
+                        <select id="sessionSelect" class="control-input"></select>
+                    </label>
+                    <button id="refreshSessions" class="btn" type="button">刷新</button>
+                    <label id="projectControl" class="control" hidden>
+                        <span class="control-label">Project</span>
+                        <select id="projectSelect" class="control-input"></select>
+                    </label>
+                    <button id="startProject" class="btn" type="button" hidden>启动</button>
+                </div>
+                <span id="connectionStatus" class="status">未连接</span>
+            </div>
+        </header>
+
+        <!-- 主内容区 -->
+        <main class="main">
+            <!-- 对话区域 -->
+            <div id="chatContainer" class="chat-container">
+                <div id="messages" class="messages">
+                    <div class="welcome-message">
+                        <h2>Claude Code Remote Control</h2>
+                        <p>终端输出会实时镜像，直接在终端面板底部输入并回车发送</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="terminal_cleaner.js"></script>
+    <script src="client.js"></script>
+</body>
+</html>

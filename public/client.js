@@ -1,0 +1,512 @@
+/**
+ * Claude Code Web - 终端镜像客户端
+ * Web 端显示 tmux pane 快照，并将输入转发到 tmux
+ */
+
+(function() {
+    'use strict';
+
+    const WS_PROTOCOL = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const WS_URL = `${WS_PROTOCOL}://${window.location.host}`;
+    const DEFAULT_SESSION = 'claude-web-session';
+    const RECONNECT_INTERVAL = 3000;
+
+    // DOM 元素
+    const messagesEl = document.getElementById('messages');
+    const connectionStatus = document.getElementById('connectionStatus');
+    const chatContainer = document.getElementById('chatContainer');
+    const sessionSelect = document.getElementById('sessionSelect');
+    const refreshSessionsBtn = document.getElementById('refreshSessions');
+    const projectControl = document.getElementById('projectControl');
+    const projectSelect = document.getElementById('projectSelect');
+    const startProjectBtn = document.getElementById('startProject');
+
+    // 状态
+    let ws = null;
+    let reconnectTimer = null;
+    let isConnected = false;
+    let lastOutput = null;
+    let terminalContentEl = null;
+    let terminalInputEl = null;
+    let terminalViewEl = null;
+    let terminalHeaderEl = null;
+    let currentSession = null;
+    let disconnectNoted = false;
+    let lastWsErrorNoted = false;
+
+    const cleanOutput = (function () {
+        try {
+            if (window.TerminalCleaner && typeof window.TerminalCleaner.cleanOutput === 'function') {
+                return window.TerminalCleaner.cleanOutput;
+            }
+        } catch {}
+        return (output) => (typeof output === 'string' ? output : '');
+    })();
+
+    function getSessionFromUrl() {
+        try {
+            const url = new URL(window.location.href);
+            const s = url.searchParams.get('session');
+            return s && s.trim() ? s.trim() : null;
+        } catch {
+            return null;
+        }
+    }
+
+    function setSessionInUrl(sessionName) {
+        try {
+            const url = new URL(window.location.href);
+            url.searchParams.set('session', sessionName);
+            window.history.replaceState({}, '', url.toString());
+        } catch {}
+    }
+
+    async function fetchJson(url, options) {
+        const resp = await fetch(url, options);
+        const text = await resp.text();
+        let json = null;
+        try {
+            json = text ? JSON.parse(text) : null;
+        } catch {}
+        if (!resp.ok) {
+            const message = (json && (json.error || json.message)) || `${resp.status} ${resp.statusText}`;
+            throw new Error(message);
+        }
+        return json;
+    }
+
+    function slugifySessionName(name) {
+        const base = String(name || '').trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
+        const cleaned = base || 'project';
+        return cleaned.slice(0, 48);
+    }
+
+    /**
+     * 滚动到底部
+     */
+    function scrollToBottom() {
+        if (terminalContentEl) {
+            terminalContentEl.scrollTop = terminalContentEl.scrollHeight;
+        }
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    /**
+     * 更新连接状态
+     */
+    function updateConnectionStatus(connected) {
+        if (!connectionStatus) return;
+        connectionStatus.textContent = connected ? '已连接' : '未连接';
+        connectionStatus.classList.toggle('connected', connected);
+        if (terminalInputEl) terminalInputEl.disabled = !connected;
+    }
+
+    /**
+     * 确保终端镜像视图已创建
+     */
+    function ensureTerminalView() {
+        if (terminalContentEl && terminalInputEl && terminalViewEl) {
+            return { contentEl: terminalContentEl, inputEl: terminalInputEl, viewEl: terminalViewEl };
+        }
+
+        const welcome = messagesEl.querySelector('.welcome-message');
+        if (welcome) welcome.remove();
+
+        const terminalView = document.createElement('section');
+        terminalView.className = 'terminal-view';
+
+        const terminalHeader = document.createElement('div');
+        terminalHeader.className = 'terminal-header';
+        terminalHeader.textContent = currentSession ? `Session: ${currentSession}` : 'Claude Code Remote Control';
+
+        const terminalContent = document.createElement('pre');
+        terminalContent.className = 'terminal-content';
+
+        const inputRow = document.createElement('div');
+        inputRow.className = 'terminal-input-row';
+
+        const prompt = document.createElement('span');
+        prompt.className = 'terminal-prompt';
+        prompt.textContent = '❯';
+
+        const inlineInput = document.createElement('input');
+        inlineInput.type = 'text';
+        inlineInput.className = 'terminal-inline-input';
+        inlineInput.placeholder = '输入后回车发送；Tab 补全；空输入时 Enter/↑/↓/Esc 发送按键';
+        inlineInput.autocomplete = 'off';
+        inlineInput.autocorrect = 'off';
+        inlineInput.autocapitalize = 'off';
+        inlineInput.spellcheck = false;
+
+        inputRow.appendChild(prompt);
+        inputRow.appendChild(inlineInput);
+        terminalView.appendChild(terminalHeader);
+        terminalView.appendChild(terminalContent);
+        terminalView.appendChild(inputRow);
+        messagesEl.appendChild(terminalView);
+
+        terminalViewEl = terminalView;
+        terminalHeaderEl = terminalHeader;
+        terminalContentEl = terminalContent;
+        terminalInputEl = inlineInput;
+
+        return { contentEl: terminalContentEl, inputEl: terminalInputEl, viewEl: terminalViewEl };
+    }
+
+    /**
+     * 渲染终端快照（与 shell 同步）
+     */
+    function renderTerminal(output) {
+        const { contentEl } = ensureTerminalView();
+        const clean = cleanOutput(output);
+
+        if (contentEl.textContent === clean) return;
+
+        contentEl.textContent = clean;
+        scrollToBottom();
+    }
+
+    /**
+     * 在终端视图中追加系统状态
+     */
+    function showSystemNote(text) {
+        const { contentEl } = ensureTerminalView();
+        const now = new Date();
+        const hh = String(now.getHours()).padStart(2, '0');
+        const mm = String(now.getMinutes()).padStart(2, '0');
+        const stamp = `[${hh}:${mm}]`;
+        const current = contentEl.textContent || '';
+        contentEl.textContent = `${current}\n${stamp} ${text}`.trimStart();
+        scrollToBottom();
+    }
+
+    /**
+     * 发送命令
+     */
+    function sendCommand() {
+        if (!terminalInputEl) return;
+
+        const text = terminalInputEl.value;
+        if (!isConnected) return;
+
+        const raw = typeof text === 'string' ? text : '';
+        const trimmed = raw.trim();
+
+        // 空输入：发送一个纯按键（用于命令面板选择/确认等）
+        if (!trimmed) {
+            ws.send(JSON.stringify({ type: 'key', data: 'Enter' }));
+            return;
+        }
+
+        // Claude Code 的命令面板通常需要先输入 "/" 但不要立刻回车
+        if (trimmed === '/') {
+            ws.send(JSON.stringify({ type: 'input', data: '/', enter: false }));
+            terminalInputEl.value = '';
+            showSystemNote('已发送 "/"（不回车），可继续输入命令名称并回车');
+            return;
+        }
+
+        ws.send(JSON.stringify({ type: 'input', data: raw, enter: true }));
+        terminalInputEl.value = '';
+    }
+
+    /**
+     * 绑定终端输入行为
+     */
+    function bindInlineInput() {
+        const { inputEl, contentEl, viewEl } = ensureTerminalView();
+
+        inputEl.addEventListener('keydown', (e) => {
+            // Tab 在浏览器默认会切换焦点，这里改为发送给 tmux 做补全
+            if (e.key === 'Tab' && !e.isComposing) {
+                e.preventDefault();
+                if (isConnected) {
+                    ws.send(JSON.stringify({ type: 'key', data: 'Tab' }));
+                }
+                return;
+            }
+
+            // 空输入时，把方向键/ESC 作为“发送按键”给 tmux（用于命令面板、补全列表等）
+            if ((e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Escape') && !e.isComposing) {
+                const value = typeof inputEl.value === 'string' ? inputEl.value.trim() : '';
+                if (!value && isConnected) {
+                    e.preventDefault();
+                    const keyName =
+                        e.key === 'ArrowUp' ? 'Up' :
+                        e.key === 'ArrowDown' ? 'Down' :
+                        'Escape';
+                    ws.send(JSON.stringify({ type: 'key', data: keyName }));
+                    return;
+                }
+            }
+
+            if (e.key === 'Enter' && !e.isComposing) {
+                e.preventDefault();
+                sendCommand();
+            }
+        });
+
+        // 点击终端任意区域都能回到输入焦点，移动端更容易触发键盘
+        const focusInput = () => {
+            if (!isConnected || inputEl.disabled) return;
+            inputEl.focus({ preventScroll: true });
+        };
+
+        contentEl.addEventListener('click', focusInput);
+        viewEl.addEventListener('click', focusInput);
+        viewEl.addEventListener('touchend', () => {
+            setTimeout(focusInput, 0);
+        }, { passive: true });
+    }
+
+    /**
+     * 连接 WebSocket
+     */
+    function connect() {
+        if (ws) {
+            try {
+                ws.onopen = null;
+                ws.onmessage = null;
+                ws.onerror = null;
+                ws.onclose = null;
+                ws.close();
+            } catch {}
+        }
+
+        const sessionName = currentSession || DEFAULT_SESSION;
+        const wsUrl = `${WS_URL}/?session=${encodeURIComponent(sessionName)}`;
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+            isConnected = true;
+            disconnectNoted = false;
+            lastWsErrorNoted = false;
+            updateConnectionStatus(true);
+            if (terminalInputEl && !terminalInputEl.disabled) {
+                terminalInputEl.focus({ preventScroll: true });
+            }
+            console.log('[WS] 已连接');
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+
+                if (msg.type === 'error') {
+                    showSystemNote(String(msg.data || '发生错误'));
+                    return;
+                }
+
+                if (msg.type !== 'output' && msg.type !== 'init') return;
+
+                const output = msg.data;
+                if (output === lastOutput) return;
+
+                lastOutput = output;
+                renderTerminal(output);
+            } catch (e) {
+                console.error('[WS] 解析失败:', e);
+            }
+        };
+
+        ws.onclose = (event) => {
+            isConnected = false;
+            updateConnectionStatus(false);
+            if (!disconnectNoted) {
+                disconnectNoted = true;
+                const code = event && typeof event.code === 'number' ? event.code : null;
+                const reason = event && typeof event.reason === 'string' ? event.reason : '';
+                const suffix = code !== null ? `（code=${code}${reason ? `, reason=${reason}` : ''}）` : '';
+                showSystemNote(`连接已断开${suffix}，正在重连...`);
+            }
+            scheduleReconnect();
+        };
+
+        ws.onerror = (err) => {
+            console.error('[WS] 错误:', err);
+            if (!lastWsErrorNoted) {
+                lastWsErrorNoted = true;
+                showSystemNote('WebSocket 连接异常（可打开浏览器控制台查看详情）');
+            }
+        };
+    }
+
+    /**
+     * 重连
+     */
+    function scheduleReconnect() {
+        if (reconnectTimer) return;
+        reconnectTimer = setTimeout(() => {
+            reconnectTimer = null;
+            connect();
+        }, RECONNECT_INTERVAL);
+    }
+
+    function updateSessionUi() {
+        if (terminalHeaderEl) {
+            terminalHeaderEl.textContent = currentSession ? `Session: ${currentSession}` : 'Claude Code Remote Control';
+        }
+        if (sessionSelect && currentSession) {
+            sessionSelect.value = currentSession;
+        }
+    }
+
+    async function loadSessions() {
+        if (!sessionSelect) return;
+        try {
+            const sessions = await fetchJson('/api/sessions');
+            sessionSelect.innerHTML = '';
+
+            const names = Array.isArray(sessions) ? sessions.map(s => s.name) : [];
+            if (currentSession && !names.includes(currentSession)) {
+                const opt = document.createElement('option');
+                opt.value = currentSession;
+                opt.textContent = `${currentSession} (missing)`;
+                sessionSelect.appendChild(opt);
+            }
+
+            for (const s of sessions) {
+                const opt = document.createElement('option');
+                opt.value = s.name;
+                opt.textContent = s.attached ? `${s.name} (attached)` : s.name;
+                sessionSelect.appendChild(opt);
+            }
+
+            if (!currentSession) {
+                currentSession = names.includes(DEFAULT_SESSION) ? DEFAULT_SESSION : (names[0] || DEFAULT_SESSION);
+                setSessionInUrl(currentSession);
+            }
+
+            updateSessionUi();
+        } catch (e) {
+            showSystemNote(`无法加载会话列表: ${e.message}`);
+        }
+    }
+
+    async function loadProjects() {
+        if (!projectSelect || !projectControl || !startProjectBtn) return;
+        try {
+            const data = await fetchJson('/api/projects');
+            const projects = data && Array.isArray(data.projects) ? data.projects : [];
+            if (!projects.length) {
+                projectControl.hidden = true;
+                startProjectBtn.hidden = true;
+                return;
+            }
+
+            projectSelect.innerHTML = '';
+            for (const p of projects) {
+                const opt = document.createElement('option');
+                opt.value = p.path;
+                opt.dataset.projectName = p.name;
+                if (p.root) opt.dataset.projectRoot = p.root;
+                opt.textContent = p.root ? `${p.name} (${p.root})` : p.name;
+                projectSelect.appendChild(opt);
+            }
+
+            projectControl.hidden = false;
+            startProjectBtn.hidden = false;
+        } catch {
+            projectControl.hidden = true;
+            startProjectBtn.hidden = true;
+        }
+    }
+
+    async function startProjectSession() {
+        if (!projectSelect) return;
+        const cwd = projectSelect.value;
+        if (!cwd) return;
+
+        const selectedOption = projectSelect.options[projectSelect.selectedIndex];
+        const projectName = selectedOption?.dataset?.projectName || selectedOption?.textContent || cwd;
+        const sessionName = `claude-${slugifySessionName(projectName)}`;
+
+        try {
+            const sessions = await fetchJson('/api/sessions');
+            const names = Array.isArray(sessions) ? sessions.map(s => s.name) : [];
+            if (names.includes(sessionName)) {
+                currentSession = sessionName;
+                setSessionInUrl(currentSession);
+                updateSessionUi();
+                lastOutput = null;
+                connect();
+                showSystemNote(`已切换到会话: ${sessionName}`);
+                return;
+            }
+
+            await fetchJson('/api/sessions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: sessionName, cwd })
+            });
+
+            currentSession = sessionName;
+            setSessionInUrl(currentSession);
+            updateSessionUi();
+            lastOutput = null;
+            connect();
+            await loadSessions();
+            showSystemNote(`已启动项目会话: ${sessionName}`);
+        } catch (e) {
+            const msg = String(e.message || e || 'unknown error');
+            if (msg.includes('already exists')) {
+                currentSession = sessionName;
+                setSessionInUrl(currentSession);
+                updateSessionUi();
+                lastOutput = null;
+                connect();
+                showSystemNote(`已切换到会话: ${sessionName}`);
+                return;
+            }
+            showSystemNote(`启动项目失败: ${msg}`);
+        }
+    }
+
+    /**
+     * 初始化
+     */
+    function init() {
+        currentSession = getSessionFromUrl() || DEFAULT_SESSION;
+        setSessionInUrl(currentSession);
+
+        ensureTerminalView();
+        bindInlineInput();
+        updateConnectionStatus(false);
+        loadSessions();
+        loadProjects();
+        connect();
+
+        if (refreshSessionsBtn) {
+            refreshSessionsBtn.addEventListener('click', () => {
+                loadSessions();
+                loadProjects();
+            });
+        }
+
+        if (sessionSelect) {
+            sessionSelect.addEventListener('change', () => {
+                const next = sessionSelect.value;
+                if (!next || next === currentSession) return;
+                currentSession = next;
+                setSessionInUrl(currentSession);
+                updateSessionUi();
+                lastOutput = null;
+                showSystemNote(`切换会话: ${currentSession}`);
+                connect();
+            });
+        }
+
+        if (startProjectBtn) {
+            startProjectBtn.addEventListener('click', () => startProjectSession());
+        }
+
+        console.log('[App] 初始化完成');
+    }
+
+    // 启动
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();
