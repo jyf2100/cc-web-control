@@ -7,7 +7,7 @@ TMUX_SESSION="${CC_WEB_TMUX_SESSION:-cc-web-control}"
 HOST="${CC_WEB_HOST:-127.0.0.1}"
 PORT="${CC_WEB_PORT:-7684}"
 PROJECT_ROOTS="${CC_WEB_PROJECT_ROOTS:-/Volumes/work/workspace}"
-PROXY_URL="${CC_WEB_PROXY_URL:-http://127.0.0.1:7890}"
+PROXY_URL="${CC_WEB_PROXY_URL:-}"
 CLAUDE_CONTINUE="${CC_WEB_CLAUDE_CONTINUE:-1}"
 CLOUDFLARED_PROTOCOL="${CC_WEB_CLOUDFLARED_PROTOCOL:-http2}"
 CLOUDFLARED_EDGE_IP_VERSION="${CC_WEB_CLOUDFLARED_EDGE_IP_VERSION:-4}"
@@ -63,7 +63,11 @@ if tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
 fi
 
 server_inner="set -euo pipefail; source \"$ENV_FILE\"; cd \"$ROOT_DIR\"; node server.js --no-open --no-attach"
-tunnel_inner="set -euo pipefail; rm -f \"$TUNNEL_LOG_FILE\"; HTTP_PROXY=\"$PROXY_URL\" HTTPS_PROXY=\"$PROXY_URL\" ALL_PROXY=\"$PROXY_URL\" NO_PROXY='127.0.0.1,localhost' cloudflared tunnel --no-autoupdate --protocol \"$CLOUDFLARED_PROTOCOL\" --edge-ip-version \"$CLOUDFLARED_EDGE_IP_VERSION\" --url http://$HOST:$PORT 2>&1 | tee -a \"$TUNNEL_LOG_FILE\""
+proxy_export=""
+if [[ -n "$PROXY_URL" ]]; then
+  proxy_export="HTTP_PROXY=\"$PROXY_URL\" HTTPS_PROXY=\"$PROXY_URL\" ALL_PROXY=\"$PROXY_URL\" NO_PROXY='127.0.0.1,localhost' "
+fi
+tunnel_inner="set -euo pipefail; rm -f \"$TUNNEL_LOG_FILE\"; ${proxy_export}cloudflared tunnel --no-autoupdate --protocol \"$CLOUDFLARED_PROTOCOL\" --edge-ip-version \"$CLOUDFLARED_EDGE_IP_VERSION\" --url http://$HOST:$PORT 2>&1 | tee -a \"$TUNNEL_LOG_FILE\""
 
 tmux new-session -d -s "$TMUX_SESSION" -n server "bash -lc $(single_quote "$server_inner")"
 tmux new-window -t "$TMUX_SESSION" -n tunnel "bash -lc $(single_quote "$tunnel_inner")"
