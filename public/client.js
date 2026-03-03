@@ -157,7 +157,7 @@
 
         const terminalHeader = document.createElement('div');
         terminalHeader.className = 'terminal-header';
-        terminalHeader.textContent = currentSession ? `Session: ${currentSession}` : 'Claude Code Remote Control';
+        terminalHeader.textContent = currentSession ? `Session: ${currentSession}` : 'Roc-CC Remote Control';
 
         const terminalContent = document.createElement('pre');
         terminalContent.className = 'terminal-content';
@@ -495,7 +495,7 @@
 
     function updateSessionUi() {
         if (terminalHeaderEl) {
-            terminalHeaderEl.textContent = currentSession ? `Session: ${currentSession}` : 'Claude Code Remote Control';
+            terminalHeaderEl.textContent = currentSession ? `Session: ${currentSession}` : 'Roc-CC Remote Control';
         }
         if (sessionSelect && currentSession) {
             sessionSelect.value = currentSession;
