@@ -130,6 +130,39 @@ Claude Code 有些交互会在输入 `/` 后弹出命令面板（不一定需要
 - `CC_WEB_SESSION`：默认会话名（默认 `claude-web-session`）
 - `CC_WEB_POLL_INTERVAL`：输出轮询间隔 ms（默认 `100`）
 - `CC_WEB_PROJECT_ROOTS`：允许扫描的项目根目录（逗号分隔；不设置则不展示项目下拉框）
+- `CC_WEB_AUTH_TOKEN`：开启鉴权（设置后需要先访问 `/login` 输入 token 才能进入主页面；WS/API 同样受保护）
 - `CC_WEB_WEB_ONLY=1` 或 `--web-only`：只启动 Web（不创建/附加 tmux 会话）
 - `CC_WEB_NO_OPEN=1` 或 `--no-open`：不自动打开浏览器
 - `CC_WEB_NO_ATTACH=1` 或 `--no-attach`：不在当前终端 attach 到 tmux 会话
+
+## 外网访问（安全隧道 / 手机访问）
+
+推荐用 Cloudflare Quick Tunnel（`cloudflared`）把本机服务安全暴露到外网，并开启 token 鉴权。
+
+### 一键重启并打印 URL + 新 token
+
+脚本：`scripts/restart_tunnel.sh`
+
+```bash
+cd /Volumes/work/workspace/cc-control
+bash scripts/restart_tunnel.sh
+```
+
+输出会包含：
+
+- `URL: https://*.trycloudflare.com`
+- `TOKEN: <new token>`
+
+手机打开 URL 后会进入 `/login`，输入 token 才能进入主页面。
+
+### 代理（安装/隧道走 127.0.0.1:7890）
+
+`scripts/restart_tunnel.sh` 默认使用：
+
+- `CC_WEB_PROXY_URL=http://127.0.0.1:7890`
+
+可按需覆盖：
+
+```bash
+CC_WEB_PROXY_URL="http://127.0.0.1:7890" bash scripts/restart_tunnel.sh
+```
