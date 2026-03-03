@@ -43,3 +43,12 @@ test('isSameOrigin matches exact origin', () => {
   assert.equal(auth.isSameOrigin('https://evil.com', { protocol: 'https', host: 'example.com' }), false);
 });
 
+test('normalizeNextPath allows only safe relative paths', () => {
+  assert.equal(auth.normalizeNextPath('/'), '/');
+  assert.equal(auth.normalizeNextPath('/?session=claude-1'), '/?session=claude-1');
+  assert.equal(auth.normalizeNextPath('/login?next=%2F'), '/login?next=%2F');
+  assert.equal(auth.normalizeNextPath('https://evil.com/'), null);
+  assert.equal(auth.normalizeNextPath('//evil.com/'), null);
+  assert.equal(auth.normalizeNextPath('javascript:alert(1)'), null);
+  assert.equal(auth.normalizeNextPath(''), null);
+});

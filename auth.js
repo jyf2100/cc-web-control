@@ -65,11 +65,27 @@ function isSameOrigin(originHeader, { protocol, host }) {
   return url.origin === expected;
 }
 
+function normalizeNextPath(nextPath) {
+  const raw = typeof nextPath === 'string' ? nextPath.trim() : '';
+  if (!raw) return null;
+
+  // Only allow relative paths. Reject protocol-relative and absolute URLs.
+  if (!raw.startsWith('/')) return null;
+  if (raw.startsWith('//')) return null;
+  if (raw.startsWith('/\\')) return null;
+  if (raw.includes('\u0000')) return null;
+
+  // Avoid header splitting and other weirdness.
+  if (raw.includes('\r') || raw.includes('\n')) return null;
+
+  return raw;
+}
+
 module.exports = {
   parseCookieHeader,
   safeEqual,
   extractBearerToken,
   isAuthorized,
   isSameOrigin,
+  normalizeNextPath,
 };
-

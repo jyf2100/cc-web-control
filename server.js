@@ -133,7 +133,13 @@ async function listSessions() {
       .filter(line => line)
       .map(line => {
         const [name, attached, created] = line.split('|');
-        return { name, attached: parseInt(attached) > 0, created: new Date(parseInt(created) * 1000).toLocaleString() };
+        const createdEpoch = Number.parseInt(created, 10);
+        return {
+          name,
+          attached: Number.parseInt(attached, 10) > 0,
+          createdEpoch: Number.isFinite(createdEpoch) ? createdEpoch : null,
+          created: Number.isFinite(createdEpoch) ? new Date(createdEpoch * 1000).toLocaleString() : null,
+        };
       });
   } catch (error) {
     return [];
@@ -252,6 +258,7 @@ function startWebServer() {
     if (!requireSameOriginForUnsafeMethods(req, res)) return;
 
     const token = typeof req.body?.token === 'string' ? req.body.token : '';
+    const nextRaw = typeof req.body?.next === 'string' ? req.body.next : '';
     if (!token) {
       res.status(400).type('text/plain').send('Missing token');
       return;
@@ -268,7 +275,8 @@ function startWebServer() {
       secure,
       path: '/',
     });
-    res.redirect('/');
+    const nextPath = auth.normalizeNextPath(nextRaw);
+    res.redirect(nextPath || '/');
   });
 
   app.post('/logout', (req, res) => {
@@ -295,12 +303,21 @@ function startWebServer() {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
-    res.redirect('/login');
+    const nextUrl = typeof req.originalUrl === 'string' && req.originalUrl.startsWith('/') ? req.originalUrl : '/';
+    res.redirect(`/login?next=${encodeURIComponent(nextUrl)}`);
   };
 
   app.use(requireAuth);
 
   // API 路由
+  app.get('/api/config', (req, res) => {
+    res.json({
+      defaultSession: DEFAULT_SESSION,
+      authEnabled: !!AUTH_TOKEN,
+      projectRoots: PROJECT_ROOTS,
+    });
+  });
+
   app.get('/api/sessions', async (req, res) => {
     try {
       const hasTmux = await isCommandAvailable('tmux');

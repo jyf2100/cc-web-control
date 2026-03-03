@@ -8,7 +8,7 @@
 
     const WS_PROTOCOL = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const WS_URL = `${WS_PROTOCOL}://${window.location.host}`;
-    const DEFAULT_SESSION = 'claude-web-session';
+    let defaultSession = 'claude-web-session';
     const RECONNECT_INTERVAL = 3000;
 
     // DOM 元素
@@ -33,6 +33,23 @@
     let currentSession = null;
     let disconnectNoted = false;
     let lastWsErrorNoted = false;
+    const STORAGE_KEY_LAST_SESSION = 'cc_web_last_session';
+
+    function getStoredSession() {
+        try {
+            const v = localStorage.getItem(STORAGE_KEY_LAST_SESSION);
+            return v && typeof v === 'string' ? v : null;
+        } catch {
+            return null;
+        }
+    }
+
+    function storeSession(name) {
+        try {
+            if (!name) return;
+            localStorage.setItem(STORAGE_KEY_LAST_SESSION, String(name));
+        } catch {}
+    }
 
     const cleanOutput = (function () {
         try {
@@ -72,6 +89,16 @@
             url.searchParams.set('session', sessionName);
             window.history.replaceState({}, '', url.toString());
         } catch {}
+    }
+
+    async function loadConfig() {
+        try {
+            const cfg = await fetchJson('/api/config');
+            const s = cfg && typeof cfg.defaultSession === 'string' ? cfg.defaultSession.trim() : '';
+            if (s) defaultSession = s;
+        } catch {
+            // ignore: config is optional
+        }
     }
 
     async function fetchJson(url, options) {
@@ -397,7 +424,7 @@
             } catch {}
         }
 
-        const sessionName = currentSession || DEFAULT_SESSION;
+        const sessionName = currentSession || defaultSession;
         const wsUrl = `${WS_URL}/?session=${encodeURIComponent(sessionName)}`;
         ws = new WebSocket(wsUrl);
 
@@ -482,13 +509,35 @@
             sessionSelect.innerHTML = '';
 
             const names = Array.isArray(sessions) ? sessions.map(s => s.name) : [];
-            // 默认会话不存在时，自动切换到第一个可用会话，避免页面一直连到不存在的 session
-            if (currentSession === DEFAULT_SESSION && !names.includes(DEFAULT_SESSION) && names.length) {
-                currentSession = names[0];
-                setSessionInUrl(currentSession);
-                updateSessionUi();
-                lastOutput = null;
-                connect();
+            const urlSession = getSessionFromUrl();
+            const stored = getStoredSession();
+
+            // URL 明确指定 session 时，绝不自动切换，避免用户以为自己在操作 A 实际连到 B
+            if (!urlSession) {
+                // 先优先恢复 localStorage
+                if (!currentSession && stored) currentSession = stored;
+
+                // 若当前 session 不存在，按优先级回退：stored -> default -> attached -> first
+                const exists = currentSession && names.includes(currentSession);
+                if (!exists) {
+                    const attached = Array.isArray(sessions) ? sessions.find(s => s && s.attached) : null;
+                    const next =
+                        (stored && names.includes(stored) && stored) ||
+                        (defaultSession && names.includes(defaultSession) && defaultSession) ||
+                        (attached && attached.name) ||
+                        (names[0] || defaultSession);
+
+                    if (next && next !== currentSession) {
+                        currentSession = next;
+                        setSessionInUrl(currentSession);
+                        storeSession(currentSession);
+                        updateSessionUi();
+                        lastOutput = null;
+                        if (ws) connect();
+                    }
+                } else if (currentSession) {
+                    storeSession(currentSession);
+                }
             }
             if (currentSession && !names.includes(currentSession)) {
                 const opt = document.createElement('option');
@@ -505,8 +554,9 @@
             }
 
             if (!currentSession) {
-                currentSession = names.includes(DEFAULT_SESSION) ? DEFAULT_SESSION : (names[0] || DEFAULT_SESSION);
+                currentSession = names.includes(defaultSession) ? defaultSession : (names[0] || defaultSession);
                 setSessionInUrl(currentSession);
+                storeSession(currentSession);
             }
 
             updateSessionUi();
@@ -559,6 +609,7 @@
             if (names.includes(sessionName)) {
                 currentSession = sessionName;
                 setSessionInUrl(currentSession);
+                storeSession(currentSession);
                 updateSessionUi();
                 lastOutput = null;
                 connect();
@@ -574,6 +625,7 @@
 
             currentSession = sessionName;
             setSessionInUrl(currentSession);
+            storeSession(currentSession);
             updateSessionUi();
             lastOutput = null;
             connect();
@@ -584,6 +636,7 @@
             if (msg.includes('already exists')) {
                 currentSession = sessionName;
                 setSessionInUrl(currentSession);
+                storeSession(currentSession);
                 updateSessionUi();
                 lastOutput = null;
                 connect();
@@ -598,15 +651,32 @@
      * 初始化
      */
     function init() {
-        currentSession = getSessionFromUrl() || DEFAULT_SESSION;
-        setSessionInUrl(currentSession);
+        currentSession = getSessionFromUrl() || getStoredSession() || defaultSession;
+        if (currentSession) {
+            setSessionInUrl(currentSession);
+            storeSession(currentSession);
+        }
 
         ensureTerminalView();
         bindInlineInput();
         updateConnectionStatus(false);
-        loadSessions();
-        loadProjects();
-        connect();
+
+        // Bootstrap in order: config -> sessions/projects -> ws connect
+        (async () => {
+            await loadConfig();
+            if (!getSessionFromUrl()) {
+                // If URL didn't explicitly pin a session, update to server default if needed.
+                if (!getStoredSession() && defaultSession && currentSession !== defaultSession) {
+                    currentSession = defaultSession;
+                    setSessionInUrl(currentSession);
+                    storeSession(currentSession);
+                    updateSessionUi();
+                }
+            }
+            await loadSessions();
+            await loadProjects();
+            connect();
+        })();
 
         if (refreshSessionsBtn) {
             refreshSessionsBtn.addEventListener('click', () => {
@@ -621,6 +691,7 @@
                 if (!next || next === currentSession) return;
                 currentSession = next;
                 setSessionInUrl(currentSession);
+                storeSession(currentSession);
                 updateSessionUi();
                 lastOutput = null;
                 showSystemNote(`切换会话: ${currentSession}`);

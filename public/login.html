@@ -24,6 +24,7 @@
     <p class="hint">此页面需要 <code>CC_WEB_AUTH_TOKEN</code>。请输入 token 以继续。</p>
 
     <form method="POST" action="/login">
+      <input id="next" name="next" type="hidden" value="/" />
       <label for="token">Token</label>
       <input id="token" name="token" type="password" autocomplete="current-password" required />
       <div class="row">
@@ -33,6 +34,17 @@
 
     <p class="hint">注意：该服务可远程控制 tmux/Claude Code，请仅在可信设备与网络中使用，并妥善保管 token。</p>
   </div>
+  <script>
+    (function () {
+      try {
+        var url = new URL(window.location.href);
+        var next = url.searchParams.get('next');
+        if (next && typeof next === 'string' && next.startsWith('/') && !next.startsWith('//')) {
+          var el = document.getElementById('next');
+          if (el) el.value = next;
+        }
+      } catch {}
+    })();
+  </script>
 </body>
 </html>
-
