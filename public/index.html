@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Roc-CC Remote Control</title>
+    <link rel="icon" href="logo.png">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -11,7 +12,18 @@
         <!-- 顶部导航 -->
         <header class="header">
             <div class="logo">
-                <img class="app-logo" src="logo.png" alt="Roc-CC" width="24" height="24" />
+                <img
+                    class="app-logo"
+                    src="logo.png"
+                    alt="Roc-CC"
+                    width="24"
+                    height="24"
+                    onload="document.getElementById('logoFallback').hidden=true;"
+                    onerror="this.hidden=true; document.getElementById('logoFallback').hidden=false;"
+                />
+                <svg id="logoFallback" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" hidden>
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                </svg>
                 <span>Roc-CC Remote Control</span>
             </div>
             <div class="header-actions">
