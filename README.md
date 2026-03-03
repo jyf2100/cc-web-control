@@ -131,6 +131,7 @@ Claude Code 有些交互会在输入 `/` 后弹出命令面板（不一定需要
 - `CC_WEB_POLL_INTERVAL`：输出轮询间隔 ms（默认 `100`）
 - `CC_WEB_PROJECT_ROOTS`：允许扫描的项目根目录（逗号分隔；不设置则不展示项目下拉框）
 - `CC_WEB_AUTH_TOKEN`：开启鉴权（设置后需要先访问 `/login` 输入 token 才能进入主页面；WS/API 同样受保护）
+- `CC_WEB_CLAUDE_CONTINUE=1`：当服务端需要新启动 `claude` 时，使用 `claude -c/--continue`（在项目目录继续最近一次对话，减少“记忆断层”）
 - `CC_WEB_WEB_ONLY=1` 或 `--web-only`：只启动 Web（不创建/附加 tmux 会话）
 - `CC_WEB_NO_OPEN=1` 或 `--no-open`：不自动打开浏览器
 - `CC_WEB_NO_ATTACH=1` 或 `--no-attach`：不在当前终端 attach 到 tmux 会话

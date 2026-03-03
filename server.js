@@ -16,6 +16,7 @@ const { spawn, exec } = require('child_process');
 const { WebSocketServer } = require('ws');
 const tmux = require('./tmux');
 const auth = require('./auth');
+const { buildClaudeLaunchCommand } = require('./claude_launch');
 
 function hasFlag(flag) {
   return process.argv.includes(flag);
@@ -30,6 +31,7 @@ const NO_ATTACH = process.env.CC_WEB_NO_ATTACH === '1' || hasFlag('--no-attach')
 const WEB_ONLY = process.env.CC_WEB_WEB_ONLY === '1' || hasFlag('--web-only');
 const CLAUDE_WRAPPER = path.join(__dirname, 'claude-wrapper.sh');
 const AUTH_TOKEN = process.env.CC_WEB_AUTH_TOKEN || '';
+const CLAUDE_CONTINUE = process.env.CC_WEB_CLAUDE_CONTINUE === '1';
 const PROJECT_ROOTS = (process.env.CC_WEB_PROJECT_ROOTS || '')
   .split(',')
   .map(s => s.trim())
@@ -113,7 +115,8 @@ function normalizeProjectCwd(cwdInput) {
 async function startClaudeInSession(sessionName, cwd) {
   const escapedCwd = shellEscapeForDoubleQuotes(cwd);
   await tmux.sendKeys(sessionName, `cd "${escapedCwd}"`);
-  await tmux.sendKeys(sessionName, `bash "${shellEscapeForDoubleQuotes(CLAUDE_WRAPPER)}"`);
+  const cmd = buildClaudeLaunchCommand({ wrapperPath: CLAUDE_WRAPPER, continueConversation: CLAUDE_CONTINUE });
+  await tmux.sendKeys(sessionName, cmd);
 }
 
 /**
