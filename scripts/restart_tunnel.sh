@@ -8,6 +8,7 @@ HOST="${CC_WEB_HOST:-127.0.0.1}"
 PORT="${CC_WEB_PORT:-7684}"
 PROJECT_ROOTS="${CC_WEB_PROJECT_ROOTS:-/Volumes/work/workspace}"
 PROXY_URL="${CC_WEB_PROXY_URL:-http://127.0.0.1:7890}"
+CLAUDE_CONTINUE="${CC_WEB_CLAUDE_CONTINUE:-1}"
 
 ENV_FILE="${CC_WEB_ENV_FILE:-/tmp/${TMUX_SESSION}-env.sh}"
 TUNNEL_LOG_FILE="${CC_WEB_TUNNEL_LOG_FILE:-/tmp/${TMUX_SESSION}-tunnel.log}"
@@ -48,6 +49,7 @@ export CC_WEB_AUTH_TOKEN=$(single_quote "$TOKEN")
 export CC_WEB_PROJECT_ROOTS=$(single_quote "$PROJECT_ROOTS")
 export CC_WEB_HOST=$(single_quote "$HOST")
 export CC_WEB_PORT=$(single_quote "$PORT")
+export CC_WEB_CLAUDE_CONTINUE=$(single_quote "$CLAUDE_CONTINUE")
 export CC_WEB_NO_OPEN=1
 export CC_WEB_NO_ATTACH=1
 EOF
