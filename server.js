@@ -15,6 +15,7 @@ const fs = require('fs');
 const { spawn, exec } = require('child_process');
 const { WebSocketServer } = require('ws');
 const tmux = require('./tmux');
+const auth = require('./auth');
 
 function hasFlag(flag) {
   return process.argv.includes(flag);
@@ -28,6 +29,7 @@ const NO_OPEN = process.env.CC_WEB_NO_OPEN === '1' || hasFlag('--no-open');
 const NO_ATTACH = process.env.CC_WEB_NO_ATTACH === '1' || hasFlag('--no-attach');
 const WEB_ONLY = process.env.CC_WEB_WEB_ONLY === '1' || hasFlag('--web-only');
 const CLAUDE_WRAPPER = path.join(__dirname, 'claude-wrapper.sh');
+const AUTH_TOKEN = process.env.CC_WEB_AUTH_TOKEN || '';
 const PROJECT_ROOTS = (process.env.CC_WEB_PROJECT_ROOTS || '')
   .split(',')
   .map(s => s.trim())
@@ -38,9 +40,9 @@ const app = express();
 const server = http.createServer(app);
 let webServerStarted = false;
 
-// 静态文件服务
-app.use(express.static(path.join(__dirname, 'public')));
+app.set('trust proxy', 1);
 app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 
 // WebSocket 客户端
 const clients = new Map();
@@ -213,6 +215,91 @@ function startWebServer() {
   if (webServerStarted) return;
   webServerStarted = true;
 
+  app.get('/healthz', (req, res) => {
+    res.status(200).type('text/plain').send('ok');
+  });
+
+  const expectedOriginForHttp = (req) => ({
+    protocol: req.protocol,
+    host: req.get('host'),
+  });
+
+  const requireSameOriginForUnsafeMethods = (req, res) => {
+    if (!AUTH_TOKEN) return true;
+    const method = String(req.method || 'GET').toUpperCase();
+    if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return true;
+    const ok = auth.isSameOrigin(req.get('origin'), expectedOriginForHttp(req));
+    if (!ok) {
+      res.status(403).json({ error: 'Forbidden (origin mismatch)' });
+      return false;
+    }
+    return true;
+  };
+
+  app.get('/login', (req, res) => {
+    if (!AUTH_TOKEN) {
+      res.redirect('/');
+      return;
+    }
+    res.sendFile(path.join(__dirname, 'public', 'login.html'));
+  });
+
+  app.post('/login', (req, res) => {
+    if (!AUTH_TOKEN) {
+      res.redirect('/');
+      return;
+    }
+    if (!requireSameOriginForUnsafeMethods(req, res)) return;
+
+    const token = typeof req.body?.token === 'string' ? req.body.token : '';
+    if (!token) {
+      res.status(400).type('text/plain').send('Missing token');
+      return;
+    }
+    if (!auth.safeEqual(token, AUTH_TOKEN)) {
+      res.status(401).type('text/plain').send('Invalid token');
+      return;
+    }
+
+    const secure = req.secure || String(req.get('x-forwarded-proto') || '').toLowerCase().startsWith('https');
+    res.cookie('cc_web_auth', token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure,
+      path: '/',
+    });
+    res.redirect('/');
+  });
+
+  app.post('/logout', (req, res) => {
+    if (!AUTH_TOKEN) {
+      res.redirect('/');
+      return;
+    }
+    if (!requireSameOriginForUnsafeMethods(req, res)) return;
+    res.clearCookie('cc_web_auth', { path: '/' });
+    res.redirect('/login');
+  });
+
+  const requireAuth = (req, res, next) => {
+    if (!AUTH_TOKEN) return next();
+    const p = req.path || '/';
+    if (p === '/login' || p === '/healthz') return next();
+    const ok = auth.isAuthorized(
+      { cookieHeader: req.headers.cookie, authorizationHeader: req.headers.authorization },
+      AUTH_TOKEN
+    );
+    if (ok) return next();
+
+    if (p.startsWith('/api/')) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    res.redirect('/login');
+  };
+
+  app.use(requireAuth);
+
   // API 路由
   app.get('/api/sessions', async (req, res) => {
     try {
@@ -265,6 +352,7 @@ function startWebServer() {
 
   app.post('/api/sessions', async (req, res) => {
     try {
+      if (!requireSameOriginForUnsafeMethods(req, res)) return;
       const hasTmux = await isCommandAvailable('tmux');
       if (!hasTmux) {
         res.status(503).json({ error: 'tmux is not available on PATH' });
@@ -293,12 +381,16 @@ function startWebServer() {
 
   app.delete('/api/sessions/:name', async (req, res) => {
     try {
+      if (!requireSameOriginForUnsafeMethods(req, res)) return;
       await tmux.killSession(req.params.name);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
     }
   });
+
+  // 静态文件服务（放在鉴权之后）
+  app.use(express.static(path.join(__dirname, 'public')));
 
   // WebSocket
   const wss = new WebSocketServer({ server });
@@ -323,6 +415,22 @@ function startWebServer() {
   }, WS_PING_INTERVAL_MS);
 
   wss.on('connection', async (ws, req) => {
+    if (AUTH_TOKEN) {
+      const forwardedProto = String(req.headers['x-forwarded-proto'] || 'http').split(',')[0].trim();
+      const forwardedHost = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
+      const originOk = auth.isSameOrigin(req.headers.origin, { protocol: forwardedProto, host: forwardedHost });
+      const authOk = auth.isAuthorized(
+        { cookieHeader: req.headers.cookie, authorizationHeader: req.headers.authorization },
+        AUTH_TOKEN
+      );
+      if (!originOk || !authOk) {
+        try {
+          ws.close(1008, 'Unauthorized');
+        } catch {}
+        return;
+      }
+    }
+
     ws.isAlive = true;
     ws.on('pong', () => {
       ws.isAlive = true;
@@ -330,6 +438,12 @@ function startWebServer() {
 
     const url = new URL(req.url, `http://localhost:${PORT}`);
     const sessionName = url.searchParams.get('session') || DEFAULT_SESSION;
+    if (!isValidSessionName(sessionName)) {
+      try {
+        ws.close(1008, 'Invalid session name');
+      } catch {}
+      return;
+    }
 
     const clientInfo = { sessionName, lastOutput: null, isPolling: false, missingNoticeSent: false };
     clientInfo.commandQueue = Promise.resolve();

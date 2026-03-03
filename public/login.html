@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Claude Code Web - Login</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; margin: 0; padding: 24px; }
+    .card { max-width: 520px; margin: 8vh auto; padding: 20px 18px; border: 1px solid rgba(127,127,127,.35); border-radius: 12px; }
+    h1 { margin: 0 0 12px; font-size: 18px; }
+    p { margin: 8px 0; opacity: .9; line-height: 1.45; }
+    label { display: block; margin-top: 14px; font-size: 13px; opacity: .9; }
+    input { width: 100%; margin-top: 8px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(127,127,127,.45); background: transparent; font-size: 14px; }
+    .row { margin-top: 14px; display: flex; gap: 10px; align-items: center; }
+    button { padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(127,127,127,.45); background: rgba(127,127,127,.15); cursor: pointer; }
+    .hint { font-size: 12px; opacity: .75; }
+    .error { margin-top: 12px; color: #c62828; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Claude Code Web 登录</h1>
+    <p class="hint">此页面需要 <code>CC_WEB_AUTH_TOKEN</code>。请输入 token 以继续。</p>
+
+    <form method="POST" action="/login">
+      <label for="token">Token</label>
+      <input id="token" name="token" type="password" autocomplete="current-password" required />
+      <div class="row">
+        <button type="submit">登录</button>
+      </div>
+    </form>
+
+    <p class="hint">注意：该服务可远程控制 tmux/Claude Code，请仅在可信设备与网络中使用，并妥善保管 token。</p>
+  </div>
+</body>
+</html>
+
