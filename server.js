@@ -295,7 +295,9 @@ function startWebServer() {
   const requireAuth = (req, res, next) => {
     if (!AUTH_TOKEN) return next();
     const p = req.path || '/';
-    if (p === '/login' || p === '/healthz') return next();
+    // Allow login + health check + public favicon/logo.
+    // These do not grant access to tmux control and help avoid confusing stale icons in browsers.
+    if (p === '/login' || p === '/healthz' || p === '/logo.png' || p === '/favicon.ico') return next();
     const ok = auth.isAuthorized(
       { cookieHeader: req.headers.cookie, authorizationHeader: req.headers.authorization },
       AUTH_TOKEN
