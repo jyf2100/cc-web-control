@@ -2,6 +2,8 @@
 
 通过 Web 页面对话形式控制本地 Claude Code，实现双向同步：Web 输入发送给 Claude Code，Claude Code 输出显示在 Web 上。
 
+> 更完整的中文使用说明见：`docs/操作手册.md`
+
 ## 功能特性
 
 - **自动启动 Claude Code**: `npm start` 自动创建 tmux 会话并启动 Claude Code
