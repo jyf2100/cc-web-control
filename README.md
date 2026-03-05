@@ -2,7 +2,8 @@
 
 通过 Web 页面对话形式控制本地 Claude Code，实现双向同步：Web 输入发送给 Claude Code，Claude Code 输出显示在 Web 上。
 
-> 更完整的中文使用说明见：`docs/操作手册.md`
+> 部署与运维入口：`docs/部署使用文档.md`  
+> 完整中文手册：`docs/操作手册.md`
 
 ## 功能特性
 
@@ -158,11 +159,9 @@ bash scripts/restart_tunnel.sh
 
 手机打开 URL 后会进入 `/login`，输入 token 才能进入主页面。
 
-### 代理（安装/隧道走 127.0.0.1:7890）
+### 代理（按需开启）
 
-`scripts/restart_tunnel.sh` 默认使用：
-
-- `CC_WEB_PROXY_URL=http://127.0.0.1:7890`
+`scripts/restart_tunnel.sh` 默认不走代理；仅在设置 `CC_WEB_PROXY_URL` 时启用。
 
 可按需覆盖：
 
