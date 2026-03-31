@@ -126,7 +126,11 @@
      */
     function scrollToBottom() {
         if (terminalContentEl) {
+            const prevScrollTop = terminalContentEl.scrollTop;
             terminalContentEl.scrollTop = terminalContentEl.scrollHeight;
+            if (window.ccModules?.updateScrollTop) {
+                window.ccModules.updateScrollTop(prevScrollTop);
+            }
         }
         chatContainer.scrollTop = chatContainer.scrollHeight;
     }
@@ -198,10 +202,22 @@
      */
     function renderTerminal(output) {
         const { contentEl } = ensureTerminalView();
+
+        // P0: Use virtual scroll if available
+        if (window.ccModules?.renderTerminal) {
+            const lineRenderer = (line, index) => {
+                const el = document.createElement('div');
+                el.className = 'terminal-line';
+                el.textContent = line;
+                return el;
+            };
+            window.ccModules.renderTerminal(output, lineRenderer);
+            return;
+        }
+
+        // Fallback: existing behavior
         const clean = cleanOutput(output);
-
         if (contentEl.textContent === clean) return;
-
         contentEl.textContent = clean;
         scrollToBottom();
     }
@@ -702,6 +718,16 @@
         if (startProjectBtn) {
             startProjectBtn.addEventListener('click', () => startProjectSession());
         }
+
+        let resizeTimer = null;
+        window.addEventListener('resize', () => {
+            if (resizeTimer) clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => {
+                if (window.ccModules?.virtualScroll) {
+                    window.ccModules.virtualScroll.remeasure();
+                }
+            }, 100);
+        });
 
         console.log('[App] 初始化完成');
     }
