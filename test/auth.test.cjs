@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const auth = require('../auth');
+const auth = require('../auth.cjs');
 
 test('parseCookieHeader parses simple cookie pairs', () => {
   const cookies = auth.parseCookieHeader('a=1; b=hello%20world; cc_web_auth=test');

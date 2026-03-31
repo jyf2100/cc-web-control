@@ -1,3 +1,5 @@
+const SCROLL_THRESHOLD_PX = 2;
+
 export class VirtualScrollView {
     #container;
     #lineHeight;
@@ -49,7 +51,7 @@ export class VirtualScrollView {
     }
 
     wasAtBottom(scrollTop) {
-        return scrollTop + this.#container.clientHeight >= this.#container.scrollHeight - 2;
+        return scrollTop + this.#container.clientHeight >= this.#container.scrollHeight - SCROLL_THRESHOLD_PX;
     }
 
     scrollToBottom() {

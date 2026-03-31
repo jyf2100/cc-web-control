@@ -14,9 +14,9 @@ const path = require('path');
 const fs = require('fs');
 const { spawn, exec } = require('child_process');
 const { WebSocketServer } = require('ws');
-const tmux = require('./tmux');
-const auth = require('./auth');
-const { buildClaudeLaunchCommand } = require('./claude_launch');
+const tmux = require('./tmux.cjs');
+const auth = require('./auth.cjs');
+const { buildClaudeLaunchCommand } = require('./claude_launch.cjs');
 
 function hasFlag(flag) {
   return process.argv.includes(flag);

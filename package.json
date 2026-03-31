@@ -2,11 +2,12 @@
   "name": "tmux-web-control",
   "version": "1.0.0",
   "description": "通过 Web 页面以对话框形式控制本地 tmux 会话",
-  "main": "server.js",
+  "type": "module",
+  "main": "server.cjs",
   "scripts": {
-    "start": "node server.js",
+    "start": "node server.cjs",
     "dev": "nodemon server.js",
-    "test": "node --test 'test/*.test.js'"
+    "test": "node --test test/*.test.cjs"
   },
   "dependencies": {
     "express": "^4.18.2",

@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const actions = require('../public/tmux_actions');
+const actions = require('../public/tmux_actions.cjs');
 
 test('buildTabComplete clears line, syncs input, then sends Tab', () => {
   const seq = actions.buildTabComplete('/m');

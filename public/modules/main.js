@@ -13,6 +13,7 @@ let pretextMeasurer = null;
 let toastManager = null;
 let multiLineInput = null;
 let lineHeight = 20;
+let _prevScrollTop = 0;
 
 function initP0(container) {
     terminalModel = new TerminalModel();
@@ -37,8 +38,7 @@ function renderTerminal(output, lineRenderer) {
     if (!terminalModel || !virtualScroll) return;
     const changed = terminalModel.replace(output);
     if (!changed) return;
-    const scrollTop = terminalModel._scrollTop ?? 0;
-    terminalModel._scrollTop = scrollTop;
+    const scrollTop = _prevScrollTop;
     virtualScroll.render(terminalModel, lineRenderer);
     if (virtualScroll.wasAtBottom(scrollTop)) {
         virtualScroll.scrollToBottom();
@@ -46,7 +46,7 @@ function renderTerminal(output, lineRenderer) {
 }
 
 function updateScrollTop(scrollTop) {
-    if (terminalModel) terminalModel._scrollTop = scrollTop;
+    _prevScrollTop = scrollTop;
 }
 
 function initP1(container) {

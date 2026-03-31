@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { buildClaudeLaunchCommand } = require('../claude_launch');
+const { buildClaudeLaunchCommand } = require('../claude_launch.cjs');
 
 test('buildClaudeLaunchCommand includes -c when continueConversation=true', () => {
   const cmd = buildClaudeLaunchCommand({ wrapperPath: '/tmp/claude-wrapper.sh', continueConversation: true });

@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { cleanOutput } = require('../public/terminal_cleaner');
+const { cleanOutput } = require('../public/terminal_cleaner.cjs');
 
 test('cleanOutput keeps slash palette text visible', () => {
   const sample = [
