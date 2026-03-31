@@ -28,6 +28,7 @@
     let lastOutput = null;
     let terminalContentEl = null;
     let terminalInputEl = null;
+    let commandPalette = null;
     let terminalViewEl = null;
     let terminalHeaderEl = null;
     let currentSession = null;
@@ -126,7 +127,11 @@
      */
     function scrollToBottom() {
         if (terminalContentEl) {
+            const prevScrollTop = terminalContentEl.scrollTop;
             terminalContentEl.scrollTop = terminalContentEl.scrollHeight;
+            if (window.ccModules?.updateScrollTop) {
+                window.ccModules.updateScrollTop(prevScrollTop);
+            }
         }
         chatContainer.scrollTop = chatContainer.scrollHeight;
     }
@@ -169,9 +174,10 @@
         prompt.className = 'terminal-prompt';
         prompt.textContent = '❯';
 
-        const inlineInput = document.createElement('input');
-        inlineInput.type = 'text';
-        inlineInput.className = 'terminal-inline-input';
+        const inlineInput = document.createElement('textarea');
+        inlineInput.className = 'terminal-inline-input terminal-inline-textarea';
+        inlineInput.rows = 1;
+        inlineInput.wrap = 'soft';
         inlineInput.placeholder = '输入后回车发送；Tab 补全；空输入时 Enter/↑/↓/Esc 发送按键';
         inlineInput.autocomplete = 'off';
         inlineInput.autocorrect = 'off';
@@ -190,6 +196,13 @@
         terminalContentEl = terminalContent;
         terminalInputEl = inlineInput;
 
+        // P0/P2/P4: Initialize modules after terminal view is created
+        if (window.ccModules?.initP0) window.ccModules.initP0(terminalContent);
+        if (window.ccModules?.initP4) window.ccModules.initP4(terminalContent);
+        if (window.ccModules?.CommandPalette && terminalInputEl) {
+            commandPalette = new window.ccModules.CommandPalette(terminalInputEl);
+        }
+
         return { contentEl: terminalContentEl, inputEl: terminalInputEl, viewEl: terminalViewEl };
     }
 
@@ -198,10 +211,22 @@
      */
     function renderTerminal(output) {
         const { contentEl } = ensureTerminalView();
+
+        // P0: Use virtual scroll if available and initialized
+        if (window.ccModules?.renderTerminal && window.ccModules?.virtualScroll) {
+            const lineRenderer = (line, index) => {
+                const el = document.createElement('div');
+                el.className = 'terminal-line';
+                el.textContent = line;
+                return el;
+            };
+            window.ccModules.renderTerminal(output, lineRenderer);
+            return;
+        }
+
+        // Fallback: existing behavior
         const clean = cleanOutput(output);
-
         if (contentEl.textContent === clean) return;
-
         contentEl.textContent = clean;
         scrollToBottom();
     }
@@ -302,7 +327,25 @@
             composing = false;
             scheduleSlashSync();
         });
-        inputEl.addEventListener('input', scheduleSlashSync);
+        inputEl.addEventListener('input', () => {
+            scheduleSlashSync();
+            // P2: Show/hide command palette on slash input
+            const rawValue = typeof inputEl.value === 'string' ? inputEl.value : '';
+            const slashMode = rawValue.startsWith('/');
+            if (slashMode && commandPalette) {
+                const commands = ['/model', '/claude', '/commit', '/review', '/ask', '/web', '/clear', '/help'];
+                commandPalette.show(
+                    commands,
+                    (item, filter) => item.includes(filter) ? item : '',
+                    (selected) => {
+                        inputEl.value = selected + ' ';
+                        inputEl.focus();
+                    }
+                );
+            } else if (commandPalette) {
+                commandPalette.hide();
+            }
+        });
 
         const isEditableTarget = (el) => {
             if (!el || typeof el !== 'object') return false;
@@ -329,6 +372,9 @@
         }, true);
 
         inputEl.addEventListener('keydown', (e) => {
+            // P2: Let command palette handle arrow/enter/escape when visible
+            if (commandPalette?.handleKeyDown(e)) return;
+
             // Tab 在浏览器默认会切换焦点，这里改为发送给 tmux 做补全
             if (e.key === 'Tab' && !e.isComposing) {
                 e.preventDefault();
@@ -433,6 +479,7 @@
             disconnectNoted = false;
             lastWsErrorNoted = false;
             updateConnectionStatus(true);
+            window.ccModules?.showToast?.('已连接', 'success');
             if (terminalInputEl && !terminalInputEl.disabled) {
                 terminalInputEl.focus({ preventScroll: true });
             }
@@ -463,6 +510,7 @@
         ws.onclose = (event) => {
             isConnected = false;
             updateConnectionStatus(false);
+            window.ccModules?.showToast?.('连接已断开，正在重连', 'error', 5000);
             if (!disconnectNoted) {
                 disconnectNoted = true;
                 const code = event && typeof event.code === 'number' ? event.code : null;
@@ -474,6 +522,7 @@
         };
 
         ws.onerror = (err) => {
+            window.ccModules?.showToast?.('WebSocket 连接异常', 'error', 5000);
             console.error('[WS] 错误:', err);
             if (!lastWsErrorNoted) {
                 lastWsErrorNoted = true;
@@ -702,6 +751,16 @@
         if (startProjectBtn) {
             startProjectBtn.addEventListener('click', () => startProjectSession());
         }
+
+        let resizeTimer = null;
+        window.addEventListener('resize', () => {
+            if (resizeTimer) clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => {
+                if (window.ccModules?.virtualScroll) {
+                    window.ccModules.virtualScroll.remeasure();
+                }
+            }, 100);
+        });
 
         console.log('[App] 初始化完成');
     }
