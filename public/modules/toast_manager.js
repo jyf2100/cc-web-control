@@ -7,6 +7,7 @@ export class ToastManager {
     #toastWidth = 320;
     #toastLineHeight = 20;
     #toastGap = 8;
+    #maxMessageLength = 500;
 
     constructor(container, measurer) {
         this.#container = container;
@@ -14,6 +15,9 @@ export class ToastManager {
     }
 
     show(message, type = 'info', duration = 3000) {
+        if (message.length > this.#maxMessageLength) {
+            message = message.slice(0, this.#maxMessageLength) + '…';
+        }
         const { height } = this.#measurer.measureHeight(
             message,
             FONTS.toast,
