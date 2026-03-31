@@ -6,7 +6,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMUX_SESSION="${CC_WEB_TMUX_SESSION:-cc-web-control}"
 HOST="${CC_WEB_HOST:-127.0.0.1}"
 PORT="${CC_WEB_PORT:-7684}"
-PROJECT_ROOTS="${CC_WEB_PROJECT_ROOTS:-/Volumes/work/workspace}"
+PROJECT_ROOTS="${CC_WEB_PROJECT_ROOTS:-/Users/roc/workspace}"
 PROXY_URL="${CC_WEB_PROXY_URL:-}"
 CLAUDE_CONTINUE="${CC_WEB_CLAUDE_CONTINUE:-1}"
 CLOUDFLARED_PROTOCOL="${CC_WEB_CLOUDFLARED_PROTOCOL:-http2}"
@@ -62,7 +62,7 @@ if tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
   tmux kill-session -t "$TMUX_SESSION"
 fi
 
-server_inner="set -euo pipefail; source \"$ENV_FILE\"; cd \"$ROOT_DIR\"; node server.js --no-open --no-attach"
+server_inner="set -euo pipefail; source \"$ENV_FILE\"; cd \"$ROOT_DIR\"; node server.cjs --no-open --no-attach"
 proxy_export=""
 if [[ -n "$PROXY_URL" ]]; then
   proxy_export="HTTP_PROXY=\"$PROXY_URL\" HTTPS_PROXY=\"$PROXY_URL\" ALL_PROXY=\"$PROXY_URL\" NO_PROXY='127.0.0.1,localhost' "
@@ -71,6 +71,23 @@ tunnel_inner="set -euo pipefail; rm -f \"$TUNNEL_LOG_FILE\"; ${proxy_export}clou
 
 tmux new-session -d -s "$TMUX_SESSION" -n server "bash -lc $(single_quote "$server_inner")"
 tmux new-window -t "$TMUX_SESSION" -n tunnel "bash -lc $(single_quote "$tunnel_inner")"
+
+# Wait for server to be ready
+echo -n "Waiting for server on $HOST:$PORT"
+server_deadline=$((SECONDS + 15))
+while [[ $SECONDS -lt $server_deadline ]]; do
+  if curl -s -o /dev/null -w "" "http://$HOST:$PORT/" 2>/dev/null; then
+    echo " ✓"
+    break
+  fi
+  echo -n "."
+  sleep 0.5
+done
+if [[ $SECONDS -ge $server_deadline ]]; then
+  echo " ✗"
+  echo "Server failed to start. Check: tmux attach -t $TMUX_SESSION:server"
+  exit 1
+fi
 
 deadline=$((SECONDS + 40))
 URL=""
