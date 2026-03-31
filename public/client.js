@@ -28,6 +28,7 @@
     let lastOutput = null;
     let terminalContentEl = null;
     let terminalInputEl = null;
+    let commandPalette = null;
     let terminalViewEl = null;
     let terminalHeaderEl = null;
     let currentSession = null;
@@ -194,6 +195,11 @@
         terminalContentEl = terminalContent;
         terminalInputEl = inlineInput;
 
+        // P2: Command palette for slash commands
+        if (window.ccModules?.CommandPalette && terminalInputEl) {
+            commandPalette = new window.ccModules.CommandPalette(terminalInputEl);
+        }
+
         return { contentEl: terminalContentEl, inputEl: terminalInputEl, viewEl: terminalViewEl };
     }
 
@@ -318,7 +324,25 @@
             composing = false;
             scheduleSlashSync();
         });
-        inputEl.addEventListener('input', scheduleSlashSync);
+        inputEl.addEventListener('input', () => {
+            scheduleSlashSync();
+            // P2: Show/hide command palette on slash input
+            const rawValue = typeof inputEl.value === 'string' ? inputEl.value : '';
+            const slashMode = rawValue.startsWith('/');
+            if (slashMode && commandPalette) {
+                const commands = ['/model', '/claude', '/commit', '/review', '/ask', '/web', '/clear', '/help'];
+                commandPalette.show(
+                    commands,
+                    (item, filter) => item.includes(filter) ? item : '',
+                    (selected) => {
+                        inputEl.value = selected + ' ';
+                        inputEl.focus();
+                    }
+                );
+            } else if (commandPalette) {
+                commandPalette.hide();
+            }
+        });
 
         const isEditableTarget = (el) => {
             if (!el || typeof el !== 'object') return false;
@@ -345,6 +369,9 @@
         }, true);
 
         inputEl.addEventListener('keydown', (e) => {
+            // P2: Let command palette handle arrow/enter/escape when visible
+            if (commandPalette?.handleKeyDown(e)) return;
+
             // Tab 在浏览器默认会切换焦点，这里改为发送给 tmux 做补全
             if (e.key === 'Tab' && !e.isComposing) {
                 e.preventDefault();

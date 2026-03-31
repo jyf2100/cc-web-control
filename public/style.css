@@ -306,9 +306,72 @@ html, body {
     color: #ffffff;
 }
 
+/* Command Palette */
+.command-palette {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    overflow-y: auto;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    z-index: 100;
+    margin-top: 4px;
+}
+
+.command-palette[hidden] {
+    display: none;
+}
+
+.palette-item {
+    padding: 8px 14px;
+    font-family: 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', monospace;
+    font-size: 13px;
+    color: #0f172a;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    /* CSS max-content: shrinkwrap width — no pretext needed */
+    width: max-content;
+    min-width: 100%;
+}
+
+.palette-item:hover,
+.palette-item.selected {
+    background-color: #f1f5f9;
+}
+
+.palette-item.selected {
+    background-color: #e0f2fe;
+    color: #0369a1;
+}
+
 @media (prefers-color-scheme: dark) {
     .toast {
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+
+    .command-palette {
+        background: #161b22;
+        border-color: #30363d;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+
+    .palette-item {
+        color: #e2e8f0;
+    }
+
+    .palette-item:hover,
+    .palette-item.selected {
+        background-color: #1c2128;
+    }
+
+    .palette-item.selected {
+        background-color: #0c2d4a;
+        color: #38bdf8;
     }
 }
 
