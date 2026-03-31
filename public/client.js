@@ -449,6 +449,7 @@
             disconnectNoted = false;
             lastWsErrorNoted = false;
             updateConnectionStatus(true);
+            window.ccModules?.showToast?.('已连接', 'success');
             if (terminalInputEl && !terminalInputEl.disabled) {
                 terminalInputEl.focus({ preventScroll: true });
             }
@@ -479,6 +480,7 @@
         ws.onclose = (event) => {
             isConnected = false;
             updateConnectionStatus(false);
+            window.ccModules?.showToast?.('连接已断开，正在重连', 'error', 5000);
             if (!disconnectNoted) {
                 disconnectNoted = true;
                 const code = event && typeof event.code === 'number' ? event.code : null;
@@ -490,6 +492,7 @@
         };
 
         ws.onerror = (err) => {
+            window.ccModules?.showToast?.('WebSocket 连接异常', 'error', 5000);
             console.error('[WS] 错误:', err);
             if (!lastWsErrorNoted) {
                 lastWsErrorNoted = true;
