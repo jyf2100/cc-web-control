@@ -174,9 +174,10 @@
         prompt.className = 'terminal-prompt';
         prompt.textContent = '❯';
 
-        const inlineInput = document.createElement('input');
-        inlineInput.type = 'text';
-        inlineInput.className = 'terminal-inline-input';
+        const inlineInput = document.createElement('textarea');
+        inlineInput.className = 'terminal-inline-input terminal-inline-textarea';
+        inlineInput.rows = 1;
+        inlineInput.wrap = 'soft';
         inlineInput.placeholder = '输入后回车发送；Tab 补全；空输入时 Enter/↑/↓/Esc 发送按键';
         inlineInput.autocomplete = 'off';
         inlineInput.autocorrect = 'off';

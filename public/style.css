@@ -239,6 +239,30 @@ html, body {
     cursor: not-allowed;
 }
 
+.terminal-inline-textarea {
+    flex: 1;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-family: 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #0f172a;
+    padding: 0;
+    resize: none;
+    overflow: hidden;
+    field-sizing: content;
+}
+
+.terminal-inline-textarea::placeholder {
+    color: #94a3b8;
+}
+
+.terminal-inline-textarea:disabled {
+    color: #94a3b8;
+    cursor: not-allowed;
+}
+
 .terminal-line {
     min-height: 1.5em;
 }
