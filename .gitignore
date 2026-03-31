@@ -13,3 +13,4 @@ yarn-error.log*
 __pycache__/
 *.pyc
 /.worktrees/
+/pretext/
