@@ -196,7 +196,9 @@
         terminalContentEl = terminalContent;
         terminalInputEl = inlineInput;
 
-        // P2: Command palette for slash commands
+        // P0/P2/P4: Initialize modules after terminal view is created
+        if (window.ccModules?.initP0) window.ccModules.initP0(terminalContent);
+        if (window.ccModules?.initP4) window.ccModules.initP4(terminalContent);
         if (window.ccModules?.CommandPalette && terminalInputEl) {
             commandPalette = new window.ccModules.CommandPalette(terminalInputEl);
         }
@@ -210,8 +212,8 @@
     function renderTerminal(output) {
         const { contentEl } = ensureTerminalView();
 
-        // P0: Use virtual scroll if available
-        if (window.ccModules?.renderTerminal) {
+        // P0: Use virtual scroll if available and initialized
+        if (window.ccModules?.renderTerminal && window.ccModules?.virtualScroll) {
             const lineRenderer = (line, index) => {
                 const el = document.createElement('div');
                 el.className = 'terminal-line';
