@@ -77,6 +77,18 @@ html, body {
     background-color: #f0fdf4;
 }
 
+.status.pending {
+    color: #b45309;
+    border-color: #f59e0b;
+    background-color: #fffbeb;
+}
+
+.status.error {
+    color: #dc2626;
+    border-color: #fca5a5;
+    background-color: #fef2f2;
+}
+
 .controls {
     display: flex;
     align-items: center;
@@ -111,6 +123,12 @@ html, body {
     box-shadow: 0 0 0 3px rgba(147, 197, 253, 0.35);
 }
 
+.control-input:disabled {
+    cursor: not-allowed;
+    color: #94a3b8;
+    background: #f8fafc;
+}
+
 .btn {
     height: 28px;
     padding: 0 10px;
@@ -128,6 +146,12 @@ html, body {
 
 .btn:active {
     background: #f1f5f9;
+}
+
+.btn:disabled {
+    cursor: not-allowed;
+    color: #94a3b8;
+    background: #f8fafc;
 }
 
 .main {
@@ -457,6 +481,18 @@ html, body {
         color: #8b949e;
     }
 
+    .status.pending {
+        color: #fbbf24;
+        border-color: #92400e;
+        background-color: #2b2112;
+    }
+
+    .status.error {
+        color: #fca5a5;
+        border-color: #7f1d1d;
+        background-color: #2a1215;
+    }
+
     .control {
         color: #94a3b8;
     }
@@ -465,6 +501,11 @@ html, body {
         background: #0b1220;
         border-color: #30363d;
         color: #e2e8f0;
+    }
+
+    .control-input:disabled {
+        background: #111827;
+        color: #64748b;
     }
 
     .control-input:focus {
@@ -476,6 +517,11 @@ html, body {
         background: #0b1220;
         border-color: #30363d;
         color: #e2e8f0;
+    }
+
+    .btn:disabled {
+        background: #111827;
+        color: #64748b;
     }
 
     .btn:hover {

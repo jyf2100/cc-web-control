@@ -1,3 +1,10 @@
+import {
+    buildPinnedMissingMessage,
+    buildRecoveryMessage,
+    getBootstrapSession,
+    resolveSessionTarget,
+} from './modules/session_state.js';
+
 /**
  * Claude Code Web - 终端镜像客户端
  * Web 端显示 tmux pane 快照，并将输入转发到 tmux
@@ -20,6 +27,17 @@
     const projectControl = document.getElementById('projectControl');
     const projectSelect = document.getElementById('projectSelect');
     const startProjectBtn = document.getElementById('startProject');
+    const REFRESH_BUTTON_LABEL = refreshSessionsBtn ? refreshSessionsBtn.textContent : '刷新';
+    const START_PROJECT_BUTTON_LABEL = startProjectBtn ? startProjectBtn.textContent : '启动';
+    const CONNECTION_LABELS = {
+        offline: '未连接',
+        connecting: '连接中',
+        reconnecting: '重连中',
+        switching: '切换中',
+        loading: '加载中',
+        connected: '已连接',
+        error: '连接异常',
+    };
 
     // 状态
     let ws = null;
@@ -34,6 +52,11 @@
     let currentSession = null;
     let disconnectNoted = false;
     let lastWsErrorNoted = false;
+    let isLoadingSessions = false;
+    let isLoadingProjects = false;
+    let isSwitchingSession = false;
+    let isStartingProject = false;
+    let lastPinnedMissingNotice = null;
     const STORAGE_KEY_LAST_SESSION = 'cc_web_last_session';
 
     function getStoredSession() {
@@ -50,6 +73,66 @@
             if (!name) return;
             localStorage.setItem(STORAGE_KEY_LAST_SESSION, String(name));
         } catch {}
+    }
+
+    function showToast(message, type = 'info', duration = 3500) {
+        window.ccModules?.showToast?.(message, type, duration);
+    }
+
+    function announceStatus(message, type = 'info', duration = 4000) {
+        if (!message) return;
+        showSystemNote(message);
+        showToast(message, type, duration);
+    }
+
+    function syncControlState() {
+        const sessionBusy = isLoadingSessions || isSwitchingSession || isStartingProject;
+        if (sessionSelect) {
+            sessionSelect.disabled = sessionBusy;
+        }
+        if (refreshSessionsBtn) {
+            refreshSessionsBtn.disabled = sessionBusy;
+            refreshSessionsBtn.textContent = isLoadingSessions ? '刷新中...' : REFRESH_BUTTON_LABEL;
+        }
+
+        const projectBusy = isLoadingProjects || isSwitchingSession || isStartingProject;
+        if (projectSelect) {
+            projectSelect.disabled = projectBusy || !!projectControl?.hidden;
+        }
+        if (startProjectBtn) {
+            startProjectBtn.disabled = projectBusy || !!startProjectBtn.hidden || !projectSelect?.value;
+            startProjectBtn.textContent = isStartingProject ? '启动中...' : START_PROJECT_BUTTON_LABEL;
+        }
+    }
+
+    function buildTransientStatusOutput(text) {
+        const now = new Date();
+        const hh = String(now.getHours()).padStart(2, '0');
+        const mm = String(now.getMinutes()).padStart(2, '0');
+        return `[${hh}:${mm}] ${text}\n\n等待新的终端输出...`;
+    }
+
+    function renderTransientStatus(text) {
+        const output = buildTransientStatusOutput(text);
+        renderTerminal(output);
+        lastOutput = output;
+    }
+
+    function setCurrentSession(sessionName) {
+        const next = typeof sessionName === 'string' ? sessionName.trim() : '';
+        currentSession = next || null;
+        if (currentSession) {
+            setSessionInUrl(currentSession);
+            storeSession(currentSession);
+        }
+        updateSessionUi();
+    }
+
+    function beginSessionTransition(message) {
+        isSwitchingSession = true;
+        syncControlState();
+        updateConnectionStatus('switching', currentSession ? `切换中: ${currentSession}` : CONNECTION_LABELS.switching);
+        renderTransientStatus(message || `正在切换到会话: ${currentSession || defaultSession}`);
     }
 
     const cleanOutput = (function () {
@@ -139,11 +222,13 @@
     /**
      * 更新连接状态
      */
-    function updateConnectionStatus(connected) {
+    function updateConnectionStatus(mode = 'offline', label) {
         if (!connectionStatus) return;
-        connectionStatus.textContent = connected ? '已连接' : '未连接';
-        connectionStatus.classList.toggle('connected', connected);
-        if (terminalInputEl) terminalInputEl.disabled = !connected;
+        connectionStatus.textContent = label || CONNECTION_LABELS[mode] || CONNECTION_LABELS.offline;
+        connectionStatus.classList.toggle('connected', mode === 'connected');
+        connectionStatus.classList.toggle('pending', mode === 'connecting' || mode === 'reconnecting' || mode === 'switching' || mode === 'loading');
+        connectionStatus.classList.toggle('error', mode === 'error');
+        if (terminalInputEl) terminalInputEl.disabled = mode !== 'connected';
     }
 
     /**
@@ -472,13 +557,19 @@
 
         const sessionName = currentSession || defaultSession;
         const wsUrl = `${WS_URL}/?session=${encodeURIComponent(sessionName)}`;
+        const mode = isSwitchingSession ? 'switching' : (disconnectNoted ? 'reconnecting' : 'connecting');
+        const label = isSwitchingSession && sessionName ? `切换中: ${sessionName}` : CONNECTION_LABELS[mode];
+        updateConnectionStatus(mode, label);
+        syncControlState();
         ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {
             isConnected = true;
+            isSwitchingSession = false;
             disconnectNoted = false;
             lastWsErrorNoted = false;
-            updateConnectionStatus(true);
+            updateConnectionStatus('connected');
+            syncControlState();
             window.ccModules?.showToast?.('已连接', 'success');
             if (terminalInputEl && !terminalInputEl.disabled) {
                 terminalInputEl.focus({ preventScroll: true });
@@ -509,7 +600,9 @@
 
         ws.onclose = (event) => {
             isConnected = false;
-            updateConnectionStatus(false);
+            isSwitchingSession = false;
+            updateConnectionStatus('reconnecting');
+            syncControlState();
             window.ccModules?.showToast?.('连接已断开，正在重连', 'error', 5000);
             if (!disconnectNoted) {
                 disconnectNoted = true;
@@ -522,6 +615,7 @@
         };
 
         ws.onerror = (err) => {
+            updateConnectionStatus('error');
             window.ccModules?.showToast?.('WebSocket 连接异常', 'error', 5000);
             console.error('[WS] 错误:', err);
             if (!lastWsErrorNoted) {
@@ -553,41 +647,27 @@
 
     async function loadSessions() {
         if (!sessionSelect) return;
+        isLoadingSessions = true;
+        syncControlState();
         try {
             const sessions = await fetchJson('/api/sessions');
             sessionSelect.innerHTML = '';
 
             const names = Array.isArray(sessions) ? sessions.map(s => s.name) : [];
-            const urlSession = getSessionFromUrl();
-            const stored = getStoredSession();
+            const previousSession = currentSession;
+            const resolution = resolveSessionTarget({
+                urlSession: getSessionFromUrl(),
+                storedSession: getStoredSession(),
+                defaultSession,
+                currentSession,
+                sessions,
+            });
+            const recoveryMessage = buildRecoveryMessage(resolution);
 
-            // URL 明确指定 session 时，绝不自动切换，避免用户以为自己在操作 A 实际连到 B
-            if (!urlSession) {
-                // 先优先恢复 localStorage
-                if (!currentSession && stored) currentSession = stored;
-
-                // 若当前 session 不存在，按优先级回退：stored -> default -> attached -> first
-                const exists = currentSession && names.includes(currentSession);
-                if (!exists) {
-                    const attached = Array.isArray(sessions) ? sessions.find(s => s && s.attached) : null;
-                    const next =
-                        (stored && names.includes(stored) && stored) ||
-                        (defaultSession && names.includes(defaultSession) && defaultSession) ||
-                        (attached && attached.name) ||
-                        (names[0] || defaultSession);
-
-                    if (next && next !== currentSession) {
-                        currentSession = next;
-                        setSessionInUrl(currentSession);
-                        storeSession(currentSession);
-                        updateSessionUi();
-                        lastOutput = null;
-                        if (ws) connect();
-                    }
-                } else if (currentSession) {
-                    storeSession(currentSession);
-                }
+            if (resolution.sessionName) {
+                setCurrentSession(resolution.sessionName);
             }
+
             if (currentSession && !names.includes(currentSession)) {
                 const opt = document.createElement('option');
                 opt.value = currentSession;
@@ -602,20 +682,42 @@
                 sessionSelect.appendChild(opt);
             }
 
-            if (!currentSession) {
-                currentSession = names.includes(defaultSession) ? defaultSession : (names[0] || defaultSession);
-                setSessionInUrl(currentSession);
-                storeSession(currentSession);
+            if (resolution.pinned && resolution.missing && currentSession) {
+                const missingMessage = buildPinnedMissingMessage(currentSession);
+                if (lastPinnedMissingNotice !== currentSession) {
+                    lastPinnedMissingNotice = currentSession;
+                    announceStatus(missingMessage, 'error', 5000);
+                }
+            } else {
+                lastPinnedMissingNotice = null;
             }
 
             updateSessionUi();
+
+            if (recoveryMessage) {
+                if (ws && currentSession && currentSession !== previousSession) {
+                    showToast(recoveryMessage, 'info', 4500);
+                } else {
+                    announceStatus(recoveryMessage, 'info', 4500);
+                }
+            }
+
+            if (ws && currentSession && currentSession !== previousSession) {
+                beginSessionTransition(recoveryMessage || `正在恢复到会话: ${currentSession}`);
+                connect();
+            }
         } catch (e) {
-            showSystemNote(`无法加载会话列表: ${e.message}`);
+            announceStatus(`无法加载会话列表: ${e.message}`, 'error', 5000);
+        } finally {
+            isLoadingSessions = false;
+            syncControlState();
         }
     }
 
     async function loadProjects() {
         if (!projectSelect || !projectControl || !startProjectBtn) return;
+        isLoadingProjects = true;
+        syncControlState();
         try {
             const data = await fetchJson('/api/projects');
             const projects = data && Array.isArray(data.projects) ? data.projects : [];
@@ -637,9 +739,13 @@
 
             projectControl.hidden = false;
             startProjectBtn.hidden = false;
-        } catch {
+        } catch (e) {
             projectControl.hidden = true;
             startProjectBtn.hidden = true;
+            announceStatus(`无法加载项目列表: ${e.message || '请刷新后重试'}`, 'error', 5000);
+        } finally {
+            isLoadingProjects = false;
+            syncControlState();
         }
     }
 
@@ -652,17 +758,17 @@
         const projectName = selectedOption?.dataset?.projectName || selectedOption?.textContent || cwd;
         const sessionName = `claude-${slugifySessionName(projectName)}`;
 
+        isStartingProject = true;
+        syncControlState();
         try {
             const sessions = await fetchJson('/api/sessions');
             const names = Array.isArray(sessions) ? sessions.map(s => s.name) : [];
             if (names.includes(sessionName)) {
-                currentSession = sessionName;
-                setSessionInUrl(currentSession);
-                storeSession(currentSession);
-                updateSessionUi();
+                setCurrentSession(sessionName);
                 lastOutput = null;
+                beginSessionTransition(`正在切换到项目会话: ${sessionName}`);
                 connect();
-                showSystemNote(`已切换到会话: ${sessionName}`);
+                showToast(`已切换到会话: ${sessionName}`, 'success', 3000);
                 return;
             }
 
@@ -672,27 +778,26 @@
                 body: JSON.stringify({ name: sessionName, cwd })
             });
 
-            currentSession = sessionName;
-            setSessionInUrl(currentSession);
-            storeSession(currentSession);
-            updateSessionUi();
+            setCurrentSession(sessionName);
             lastOutput = null;
+            beginSessionTransition(`正在连接新的项目会话: ${sessionName}`);
             connect();
             await loadSessions();
-            showSystemNote(`已启动项目会话: ${sessionName}`);
+            showToast(`已启动项目会话: ${sessionName}`, 'success', 3500);
         } catch (e) {
             const msg = String(e.message || e || 'unknown error');
             if (msg.includes('already exists')) {
-                currentSession = sessionName;
-                setSessionInUrl(currentSession);
-                storeSession(currentSession);
-                updateSessionUi();
+                setCurrentSession(sessionName);
                 lastOutput = null;
+                beginSessionTransition(`正在切换到项目会话: ${sessionName}`);
                 connect();
-                showSystemNote(`已切换到会话: ${sessionName}`);
+                showToast(`已切换到会话: ${sessionName}`, 'success', 3000);
                 return;
             }
-            showSystemNote(`启动项目失败: ${msg}`);
+            announceStatus(`启动项目失败: ${msg}`, 'error', 5000);
+        } finally {
+            isStartingProject = false;
+            syncControlState();
         }
     }
 
@@ -700,37 +805,35 @@
      * 初始化
      */
     function init() {
-        currentSession = getSessionFromUrl() || getStoredSession() || defaultSession;
+        currentSession = getBootstrapSession({
+            urlSession: getSessionFromUrl(),
+            storedSession: getStoredSession(),
+        });
         if (currentSession) {
-            setSessionInUrl(currentSession);
-            storeSession(currentSession);
+            setCurrentSession(currentSession);
         }
 
         ensureTerminalView();
         bindInlineInput();
-        updateConnectionStatus(false);
+        updateConnectionStatus('offline');
+        syncControlState();
 
         // Bootstrap in order: config -> sessions/projects -> ws connect
         (async () => {
             await loadConfig();
-            if (!getSessionFromUrl()) {
-                // If URL didn't explicitly pin a session, update to server default if needed.
-                if (!getStoredSession() && defaultSession && currentSession !== defaultSession) {
-                    currentSession = defaultSession;
-                    setSessionInUrl(currentSession);
-                    storeSession(currentSession);
-                    updateSessionUi();
-                }
-            }
             await loadSessions();
             await loadProjects();
-            connect();
+            if (currentSession || defaultSession) {
+                connect();
+            } else {
+                updateConnectionStatus('error', '无可用会话');
+            }
         })();
 
         if (refreshSessionsBtn) {
             refreshSessionsBtn.addEventListener('click', () => {
-                loadSessions();
-                loadProjects();
+                void loadSessions();
+                void loadProjects();
             });
         }
 
@@ -738,12 +841,9 @@
             sessionSelect.addEventListener('change', () => {
                 const next = sessionSelect.value;
                 if (!next || next === currentSession) return;
-                currentSession = next;
-                setSessionInUrl(currentSession);
-                storeSession(currentSession);
-                updateSessionUi();
+                setCurrentSession(next);
                 lastOutput = null;
-                showSystemNote(`切换会话: ${currentSession}`);
+                beginSessionTransition(`正在切换到会话: ${currentSession}`);
                 connect();
             });
         }
