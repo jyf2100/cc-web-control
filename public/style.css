@@ -111,6 +111,12 @@ html, body {
     box-shadow: 0 0 0 3px rgba(147, 197, 253, 0.35);
 }
 
+.control-input:disabled {
+    color: #94a3b8;
+    background: #f8fafc;
+    cursor: not-allowed;
+}
+
 .btn {
     height: 28px;
     padding: 0 10px;
@@ -128,6 +134,12 @@ html, body {
 
 .btn:active {
     background: #f1f5f9;
+}
+
+.btn:disabled {
+    color: #94a3b8;
+    background: #f8fafc;
+    cursor: not-allowed;
 }
 
 .main {

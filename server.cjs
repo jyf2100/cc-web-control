@@ -17,6 +17,7 @@ const { WebSocketServer } = require('ws');
 const tmux = require('./tmux.cjs');
 const auth = require('./auth.cjs');
 const { buildClaudeLaunchCommand } = require('./claude_launch.cjs');
+const { createProjectSession } = require('./project_session_service.cjs');
 
 function hasFlag(flag) {
   return process.argv.includes(flag);
@@ -385,19 +386,19 @@ function startWebServer() {
       if (!name) return res.status(400).json({ error: 'Session name required' });
       if (!isValidSessionName(name)) return res.status(400).json({ error: 'Invalid session name' });
 
-      await tmux.createSession(name);
-      if (cwd) {
-        const normalizedCwd = normalizeProjectCwd(cwd);
-        const hasClaude = await isCommandAvailable('claude', ['--version']);
-        if (!hasClaude) {
-          res.status(503).json({ error: 'claude is not available on PATH' });
-          return;
-        }
-        await startClaudeInSession(name, normalizedCwd);
-      }
+      await createProjectSession({
+        sessionName: name,
+        cwd,
+        normalizeProjectCwd,
+        isCommandAvailable,
+        createSession: tmux.createSession,
+        startClaudeInSession,
+        killSession: tmux.killSession,
+      });
       res.status(201).json({ success: true });
     } catch (error) {
-      res.status(500).json({ success: false, error: error.message });
+      const statusCode = Number.isInteger(error?.statusCode) ? error.statusCode : 500;
+      res.status(statusCode).json({ success: false, error: error.message });
     }
   });
 

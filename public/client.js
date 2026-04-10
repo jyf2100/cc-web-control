@@ -34,6 +34,8 @@
     let currentSession = null;
     let disconnectNoted = false;
     let lastWsErrorNoted = false;
+    let refreshAction = null;
+    let startProjectAction = null;
     const STORAGE_KEY_LAST_SESSION = 'cc_web_last_session';
 
     function getStoredSession() {
@@ -551,7 +553,8 @@
         }
     }
 
-    async function loadSessions() {
+    async function loadSessions(options = {}) {
+        const notifyOnError = options.notifyOnError !== false;
         if (!sessionSelect) return;
         try {
             const sessions = await fetchJson('/api/sessions');
@@ -609,12 +612,18 @@
             }
 
             updateSessionUi();
+            return true;
         } catch (e) {
-            showSystemNote(`无法加载会话列表: ${e.message}`);
+            if (notifyOnError) {
+                window.ccModules?.showToast?.('无法加载会话列表', 'error', 4000);
+                showSystemNote(`无法加载会话列表: ${e.message}`);
+            }
+            return false;
         }
     }
 
-    async function loadProjects() {
+    async function loadProjects(options = {}) {
+        const notifyOnError = !!options.notifyOnError;
         if (!projectSelect || !projectControl || !startProjectBtn) return;
         try {
             const data = await fetchJson('/api/projects');
@@ -622,7 +631,7 @@
             if (!projects.length) {
                 projectControl.hidden = true;
                 startProjectBtn.hidden = true;
-                return;
+                return true;
             }
 
             projectSelect.innerHTML = '';
@@ -637,16 +646,27 @@
 
             projectControl.hidden = false;
             startProjectBtn.hidden = false;
-        } catch {
+            return true;
+        } catch (e) {
+            if (notifyOnError) {
+                window.ccModules?.showToast?.('无法加载项目列表', 'error', 4000);
+                showSystemNote(`无法加载项目列表: ${e.message}`);
+            }
             projectControl.hidden = true;
             startProjectBtn.hidden = true;
+            return false;
         }
     }
 
     async function startProjectSession() {
         if (!projectSelect) return;
+        if (startProjectAction && !startProjectAction.start()) return;
+
         const cwd = projectSelect.value;
-        if (!cwd) return;
+        if (!cwd) {
+            startProjectAction?.finish();
+            return;
+        }
 
         const selectedOption = projectSelect.options[projectSelect.selectedIndex];
         const projectName = selectedOption?.dataset?.projectName || selectedOption?.textContent || cwd;
@@ -662,6 +682,7 @@
                 updateSessionUi();
                 lastOutput = null;
                 connect();
+                window.ccModules?.showToast?.(`已切换到 ${sessionName}`, 'success', 2000);
                 showSystemNote(`已切换到会话: ${sessionName}`);
                 return;
             }
@@ -678,7 +699,8 @@
             updateSessionUi();
             lastOutput = null;
             connect();
-            await loadSessions();
+            await loadSessions({ notifyOnError: false });
+            window.ccModules?.showToast?.(`已启动 ${sessionName}`, 'success', 2500);
             showSystemNote(`已启动项目会话: ${sessionName}`);
         } catch (e) {
             const msg = String(e.message || e || 'unknown error');
@@ -689,10 +711,15 @@
                 updateSessionUi();
                 lastOutput = null;
                 connect();
+                await loadSessions({ notifyOnError: false });
+                window.ccModules?.showToast?.(`已切换到 ${sessionName}`, 'success', 2000);
                 showSystemNote(`已切换到会话: ${sessionName}`);
                 return;
             }
+            window.ccModules?.showToast?.(`启动项目失败: ${msg}`, 'error', 5000);
             showSystemNote(`启动项目失败: ${msg}`);
+        } finally {
+            startProjectAction?.finish();
         }
     }
 
@@ -709,6 +736,16 @@
         ensureTerminalView();
         bindInlineInput();
         updateConnectionStatus(false);
+        refreshAction = window.ccModules?.createPendingActionController?.(refreshSessionsBtn, {
+            idleLabel: '刷新',
+            pendingLabel: '刷新中...',
+            relatedControls: [sessionSelect, projectSelect, startProjectBtn],
+        }) || null;
+        startProjectAction = window.ccModules?.createPendingActionController?.(startProjectBtn, {
+            idleLabel: '启动',
+            pendingLabel: '启动中...',
+            relatedControls: [refreshSessionsBtn, sessionSelect, projectSelect],
+        }) || null;
 
         // Bootstrap in order: config -> sessions/projects -> ws connect
         (async () => {
@@ -728,9 +765,19 @@
         })();
 
         if (refreshSessionsBtn) {
-            refreshSessionsBtn.addEventListener('click', () => {
-                loadSessions();
-                loadProjects();
+            refreshSessionsBtn.addEventListener('click', async () => {
+                if (refreshAction && !refreshAction.start()) return;
+                try {
+                    const [sessionsOk, projectsOk] = await Promise.all([
+                        loadSessions({ notifyOnError: true }),
+                        loadProjects({ notifyOnError: true }),
+                    ]);
+                    if (sessionsOk && projectsOk) {
+                        window.ccModules?.showToast?.('会话与项目列表已刷新', 'success', 2000);
+                    }
+                } finally {
+                    refreshAction?.finish();
+                }
             });
         }
 

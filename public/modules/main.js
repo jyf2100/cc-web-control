@@ -6,6 +6,7 @@ import { MultiLineInput } from './multi_line_input.js';
 import { FONTS } from './fonts.js';
 import { FontScaler } from './font_scaler.js';
 import { CommandPalette } from './command_palette.js';
+import { createPendingActionController } from './pending_action.js';
 
 let terminalModel = null;
 let virtualScroll = null;
@@ -99,6 +100,7 @@ window.ccModules = {
     updateScrollTop,
     showToast,
     applyOptimalFontSize,
+    createPendingActionController,
     get terminalModel() { return terminalModel; },
     get virtualScroll() { return virtualScroll; },
     get toastManager() { return toastManager; },
