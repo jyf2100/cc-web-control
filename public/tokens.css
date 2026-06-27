@@ -14,7 +14,7 @@
   --brand: #d4a574;
   --brand-strong: #c08e54;
 
-  /* 状态色(5 状态徽章,浅深色共用,三重编码) */
+  /* 状态色(4 状态徽章:waiting/working/idle/errored;unknown 用虚线无专属色) */
   --waiting: #f59e0b;
   --working: #d4a574;
   --idle: #b8ad9a;
