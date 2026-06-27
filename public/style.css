@@ -423,3 +423,27 @@ html, body {
         font-size: 16px;
     }
 }
+
+/* 统一胶囊导航(控制台 + 看板共用样式,DRY 违反待 P3 components.css 合并) */
+.nav {
+    display: flex;
+    gap: 2px;
+    background: var(--surface2);
+    border-radius: var(--r-sm);
+    padding: 3px;
+}
+
+.nav-link {
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    text-decoration: none;
+    color: var(--muted);
+}
+
+.nav-link.cur {
+    background: var(--bg);
+    color: var(--text);
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
