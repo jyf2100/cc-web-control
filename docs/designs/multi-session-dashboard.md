@@ -16,7 +16,7 @@ Source design doc (office-hours): `~/.gstack/projects/jyf2100-cc-web-control/roc
 | 1 | capture-pane 启发式看板(原 v1) | M | SUPERSEDED | 评审中用户决定跳过启发式 throwaway,直上 JSONL(见"阶段决策") |
 | 2 | JSONL 状态看板(原 v2,现 day-1) | M-L | ACCEPTED (Phase 1) | 启发式是整个风险面且迟早到 JSONL;直跳省 throwaway,且 dashboard 不再 spawn 爆炸(性能反而更好) |
 | 3 | 推送通知(Approach C) | M | ACCEPTED (Phase 2) | 最贴"谁需要我现在出手"的反应式 job;升主动式指挥中心 |
-| 4 | 每会话 token/成本追踪 | S-M | ACCEPTED (Phase 1) | 同份 JSONL 顺手,fold 进 day-1 |
+| 4 | 每会话 token/成本追踪 | S-M | DEFERRED (Phase 2) | spike 准则 5 证伪:usage per-message,tail-only 算不准累计。Phase 2 用累加器 |
 | 5 | UX 微增:标题计数 + 排顶 + idle 时间戳 | S | ACCEPTED (Phase 1) | 直接服务核心 job(自动跳转改默认关) |
 
 ### 阶段决策(评审中反转,关键)
@@ -26,7 +26,7 @@ Source design doc (office-hours): `~/.gstack/projects/jyf2100-cc-web-control/roc
 
 **Phase 1(JSONL 状态看板 + 成本 + UX 微增,day-1):**
 - `/dashboard` 路由 + `public/dashboard.html` 视图
-- `GET /api/dashboard` REST 聚合端点,客户端 ~1s 轮询。响应 schema:`{ sessions: [{ name, status, lastLine, cost: { inputTokens, outputTokens, totalUsd } }] }`
+- `GET /api/dashboard` REST 聚合端点,客户端轮询(默认 2s,见 M7)。响应 schema:`{ sessions: [{ name, status, lastLine }] }`(cost 砍到 Phase 2,见 spike 准则 5)
 - **状态源 = JSONL 文件读(0 tmux spawn):** `~/.claude/projects/<cwd-dashes>/*.jsonl` 事件解析出 status(idle|working|waiting|errored)+ lastLine + cost
 - **[改动点]** `listSessions()`(server.cjs:129)扩 cwd:`#{session_name}|#{pane_current_path}|#{session_attached}`(改现有函数或加变体,**加字段别删字段**)
 - tmux↔JSONL 映射:realpath(pane_current_path)→ 分隔符替换为 `-` → 拼项目目录命中。cwd 非项目目录 → unknown,不报错
@@ -92,3 +92,40 @@ spike 任一准则不过 → 回退 capture-pane 启发式做状态。但 heuris
 - **Eng Review:** COMPLETE 2026-06-27。Step 0 范围挑战通过(范围精简,无缩减触发)。但实现层 NOT READY:外部声音抓到 M1/M2/M3 之外的 6 条 blocking(子目录污染、slug 碰撞、cwd 漂移、IO 并发预算、offset 失效、idle 阈值 / 字段未验证)。spike 从 3 准则扩到 5,加实现铁律 M4-M9。关卡 = spike(5 准则)必须先过才 build。
 - **Outside Voice(工程向):** ran(claude architect;codex 自定义 provider 404,fallback)。6 blocking 已 fold 进 spike / 铁律,cost 挂 spike 准则 5 验证(用户决定保留)。
 - **Design Review:** recommended(UI scope:列表 / 徽章 / 移动端),eng review 后建议跑。
+
+## Spike 实证结果(2026-06-27,go/no-go)
+
+5 准则全测完。**结论:GO,JSONL 路线可行**,带 2 条已知风险用 unknown 降级应对,cost 砍到 Phase 2。
+
+| 准则 | 结果 | 证据 |
+|---|---|---|
+| 1 end_turn→waiting + 写盘延迟 | ✅ 通过 | 当前会话 jsonl `mtime - last_ts` 延迟 **0.15s**(<1s 目标),end_turn 落盘 10 个确认持久化。dashboard 轮询能捕捉。stop_reason 分布:tool_use 314 / end_turn 10 / stop_sequence 1 |
+| 2 cwd→slug 映射 + 碰撞 | ⚠ 部分通过 | 脏 slug `-Users-roc-dailywork-----`(5 连字符)真实存在,非 ASCII 折叠机制确认。扫 19 个真实项目目录**未见碰撞**(各自独特)。残余风险用 unknown 降级应对 |
+| 3 cwd 漂移 | ⚠ 风险确认,需应对 | 实测 pane_current_path **0.7s** 跟随 shell cd。漂移真实。应对:实时映射,漂移时该会话 unknown,或服务端缓存 session→jsonl 首次匹配后固定 |
+| 4 时间戳字段 | ✅ 通过 | 字段 = `timestamp`,ISO8601 带毫秒 + Z(`2026-06-27T06:28:01.366Z`)。idle 阈值基于此派生,做成 `CC_WEB_IDLE_THRESHOLD_S`。事件 type:user/attachment/assistant/last-prompt/ai-title/mode/permission-mode |
+| 5 cost/usage | ❌ → 砍 cost | usage 在 `message.usage`,**per-message**(每条 assistant 各自消耗),非会话累计。tail-only 拿最后一条 ≠ 会话总成本。Phase 1 砍,留 Phase 2 累计 offset 累加器 |
+
+### status 判定规则表(idle|working|waiting|errored|unknown)
+
+读最新 jsonl 末尾事件(spike 钉死的字段):
+- **waiting**:最后一条 assistant 事件 `message.stop_reason == 'end_turn'`(0.15s 落盘,轮询能捕捉)
+- **working**:最后事件 `tool_use` / `stop_reason=='tool_use'`,timestamp 在 idle 阈值内(autonomous 循环判 working)
+- **idle**:最后事件 timestamp 距 now > `CC_WEB_IDLE_THRESHOLD_S`(默认 30s 起步,build 时用真实长任务样本校准)
+- **errored**:最后事件含 error 字段 / 异常 stop_reason(需解析真实 error 样本确认字段,build 时补)
+- **unknown**:cwd→slug miss / slug 碰撞 / cwd 漂移 / jsonl 解析错 → unknown + 日志,绝不 500
+
+### cost 决定(用户拍板:砍)
+
+Phase 1 **砍 cost 字段**。response schema 改为 `{ sessions: [{ name, status, lastLine }] }`。Scope Decisions 表第 4 行从 ACCEPTED Phase 1 改 DEFERRED Phase 2。理由:usage per-message,tail-only 数学上算不准累计,显示会撒谎的数字比不显示更糟(同类"状态不准摧毁核心价值"问题)。
+
+### heuristic 回退最小设计(M11,B 计划)
+
+spike 已 GO,heuristic 不启用。留设计防准则 2/3 在真实多会话下恶化:
+- **三态**:working(连续两次 capture-pane 内容不同)/ waiting(末行匹配 Claude TUI 提示符候选:`>` 空输入行、`❯`、`Do you want to`、Yes/No)/ idle-unknown(内容稳定无提示符)
+- **二态降级**(三态准确率 <80%):working(内容在变)/ idle(内容稳定),纯时间差,始终可派生
+- **errored**:heuristic 不判,留 JSONL
+- 定位:JSONL 是主路径,heuristic 仅作 JSONL 完全失效(tmux 挂、目录全 miss)的兜底显示
+
+### go 决定
+
+JSONL 路线 **GO**。命门(准则 1 实时 + 4 字段)通过。准则 2/3 风险用 unknown 降级 + 缓存映射应对。准则 5 砍 cost。下一步:按 M1-M9 铁律 build Phase 1。
