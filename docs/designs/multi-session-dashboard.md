@@ -91,7 +91,7 @@ spike 任一准则不过 → 回退 capture-pane 启发式做状态。但 heuris
 - **Outside Voice(战略向):** ran(claude fallback;headline refuted,secondary risks absorbed)
 - **Eng Review:** COMPLETE 2026-06-27。Step 0 范围挑战通过(范围精简,无缩减触发)。但实现层 NOT READY:外部声音抓到 M1/M2/M3 之外的 6 条 blocking(子目录污染、slug 碰撞、cwd 漂移、IO 并发预算、offset 失效、idle 阈值 / 字段未验证)。spike 从 3 准则扩到 5,加实现铁律 M4-M9。关卡 = spike(5 准则)必须先过才 build。
 - **Outside Voice(工程向):** ran(claude architect;codex 自定义 provider 404,fallback)。6 blocking 已 fold 进 spike / 铁律,cost 挂 spike 准则 5 验证(用户决定保留)。
-- **Design Review:** recommended(UI scope:列表 / 徽章 / 移动端),eng review 后建议跑。
+- **Design Review:** COMPLETE 2026-06-27(文字线框,聚焦真问题)。补 UI 决策:徽章 5 态 amber 色板(色盲三重编码:色+图标+文字)+ 列表行线框(桌面末行预览/手机 <640px 折叠)+ 5 态空错误文案 + title 计数 + App UI 规则对齐。评分 **4→9/10**,0 unresolved。见下"UI 设计决策"section。
 
 ## Spike 实证结果(2026-06-27,go/no-go)
 
@@ -129,3 +129,92 @@ spike 已 GO,heuristic 不启用。留设计防准则 2/3 在真实多会话下�
 ### go 决定
 
 JSONL 路线 **GO**。命门(准则 1 实时 + 4 字段)通过。准则 2/3 风险用 unknown 降级 + 缓存映射应对。准则 5 砍 cost。下一步:按 M1-M9 铁律 build Phase 1。
+
+## UI 设计决策(2026-06-27 design review,build 时必须遵守)
+
+`plan-design-review` 产出(文字线框模式,聚焦真问题)。补全设计文档原本只写功能、没定死"用户看到什么"的部分。色板/线框/文案/断点定死后 build 照此执行。
+
+### 视觉锚点(对齐现有 `public/index.html` + `style.css`)
+
+- **浅色主题**(非深色):底 `#ffffff`,字 `#1a1a1a`(style.css:16-17)。dashboard 必须浅色,与 index.html 一致。
+- 字体:系统栈 `-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto...`(style.css:14)。
+- 复用间距:行 padding `12px 20px`(同 header),gap `12px`。
+- 圆角:徽章 pill `12px`(复用 `.status`,style.css:70)。
+- **引入 CSS 变量**:现有 style.css 用硬编码色值,无 `:root` 变量。dashboard 新建 `dashboard.css` 时定义 `:root` 变量(`--color-waiting` 等),服务 dashboard 也给现有 UI 升级路径。**不强制**回改 index.html(scope 控制)。
+
+### 徽章色板(色盲安全 = 颜色 + 图标 + 文字三重编码)
+
+红/绿对色盲最难区分,**绝不只靠色**。每态独立图标 + 文字。
+
+| 状态 | 色值 | 图标 | 文案 | 排序权重 | 动画 |
+|---|---|---|---|---|---|
+| waiting | amber `#f59e0b` | ⏳ 沙漏 | 等待 | 0(顶) | 呼吸脉冲 |
+| errored | 红 `#ef4444` | ✕ | 出错 | 0(顶) | 无 |
+| working | 品牌 `#d4a574` | ◐ 转 | 进行中 | 1 | 无 |
+| idle | 灰 `#9ca3af` | ○ | 空闲 | 2 | 无 |
+| unknown | 虚线描边 `#ccc` 无填充 | ? | 未知 | 3 | 无 |
+
+- **绿 `#22c55e` 不用于状态**(留给 `.status.connected` 连接成功语义,style.css:75)。waiting 用 amber(语义"需你出手"= 注意,非"成功")。
+- **脉冲仅 waiting**,且 `@media (prefers-reduced-motion: reduce)` 关闭(无障碍)。
+- **对比度警告**:amber `#f59e0b` 在白底做小文字对比度不足(~2.9,< WCAG AA 4.5)。amber 徽章用**填充底 + 深字**(`#f59e0b` 底 + `#7c2d12` 深棕字)或**深 amber 边 + `#b45309` 字**。build 时用对比度工具验证 5 态文字 ≥4.5:1。
+
+### 列表行布局
+
+桌面(≥640px):
+```
+● 等待  cc-web-control              2m
+        ▸ 最后: "现在帮我重构 server.cjs"
+```
+- 行 1:徽章 pill + 会话名(`font-weight:600`) + idle 时间戳(右对齐,灰 `#666`,12px,同 `.status` style.css:67)
+- 行 2:末行预览 `lastLine`,缩进对齐会话名,灰 `#666`,`white-space:nowrap; text-overflow:ellipsis` 单行截断
+- 整行可点(`<a>`/`<button>`),`min-height:48px`(≥44px 触控),hover 底 `#f5f5f5`
+- 点行 → `?session=X` → 现有单会话全控
+- 排序:排序权重升序(waiting/errored 0 → unknown 3),同级按时间戳倒序(最新在上)
+- idle 时间戳派生:`now - 末事件 timestamp`(准则 4 钉死的 ISO8601 字段),<60s "刚刚",<60m "Nm",否则 "Nh"
+
+移动端(<640px):
+- 末行预览 `display:none` 折叠
+- 行 `min-height:48px`,会话名 `text-overflow:ellipsis`
+- 三件套:徽章 + 名字 + 时间戳
+- header 标题计数并入标题文字
+
+### 空状态 / 错误状态文案(温度 + 动作,设计原则 1)
+
+| 场景 | 用户看到 | 主动作 |
+|---|---|---|
+| 无会话(tmux 0 sessions) | "还没有会话。开一个 Claude 会话,这里自动出现。" | 文字引导(不报错) |
+| tmux 没起(tmuxOk=false) | "tmux 没起来或没装。装好再刷新。" | 刷新按钮 |
+| 全 unknown(都 cwd miss) | "看不到会话状态,可能是目录没匹配上。" | 提示看 debug 日志 |
+| 首次 loading | 骨架行 / "加载会话…" | — |
+| 单会话 unknown | 该行徽章 `?` + "未知",其余正常 | 点进去仍可用 |
+
+绝不 500、绝不空白(M3)。unknown 是特性不是 bug。
+
+### 标题 / favicon 计数
+
+- **`document.title`**:waiting>0 → `(N 等待) CC Remote`,N=0 → `CC Remote`。纯 JS,Phase 1。
+- **favicon 动态徽章**(canvas 画 N 角标):**Phase 2**(避免 canvas/favicon API 复杂度)。Phase 1 只 title 计数。
+
+### App UI 规则对齐
+
+这页是 **App UI**(数据密集工具列表),非营销页:
+- 单一职责:列表只做"看状态 + 点进去",不塞其他
+- 不用卡片网格,**行 IS 交互单元**(AI slop 规则:cards earn existence,这里行够)
+- copy 是工具语言(等待/进行中/空闲/出错/未知),非 mood/brand
+- 无装饰阴影、无渐变、无装饰图标(设计原则 8 减法默认)
+
+### 5-10 会话密度
+
+5-10 会话(中),列表为主,**不强制虚拟滚动**(已定)。行高 48px,10 行 = 480px,手机一屏可滚完。>20 会话才考虑虚拟滚动(留 TODO)。
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | CLEAR | SELECTIVE EXPANSION, 3 proposed / 3 accepted / 2 deferred |
+| Outside Voice | `/codex review` | Independent 2nd opinion | 1 | issues_found | 战略向(claude fallback);headline refuted, secondary risks absorbed |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR (PLAN) | complete-not-ready → spike GO;M1-M9 铁律 + spike 5 准则全过 |
+| Design Review | `/plan-design-review` | UI/UX gaps | 1 | CLEAR | score 4→9/10, 8 decisions, 0 unresolved |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
+
+- **VERDICT:** CEO + ENG + DESIGN CLEARED。spike GO(5 准则),UI 决策定死。**ready to build Phase 1**(按 M1-M9 铁律 + "UI 设计决策" section 执行)。
