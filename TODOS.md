@@ -28,6 +28,18 @@ Items surfaced by `/plan-ceo-review` on 2026-06-27 (multi-session dashboard revi
 **Priority:** P3
 **Depends on:** Phase 1 JSONL status reader
 
+### Component class sharing across pages
+
+**What:** Extract shared component classes (`.btn`, `.btn.brand`, `.card`, `.badge`) out of page-specific CSS into a shared `components.css` (or fold into `tokens.css`), so the three pages (index / dashboard / login) don't each redefine the same button/card/badge look. Currently `.btn` lives in style.css, `.badge` in dashboard.css, `.btn.brand` duplicated in the mockups.
+
+**Why:** The ui-redesign ships a single tokens.css (colors/type/radius/spacing) shared by all three pages, but component-level classes are still per-page. Once tokens land, the remaining duplication is component classes. Sharing them is the natural Phase 2 cleanup to finish "one unified site."
+
+**Context:** Surfaced by /plan-eng-review on 2026-06-27 (ui-redesign spec review, commit 373a57c). Deliberately deferred from Phase 1 of the redesign to keep the tokens.css diff focused. After tokens.css lands, audit `.btn` / `.card` / `.badge` across the three stylesheets and consolidate. Note the client.js DOM locklist constrains class names that JS toggles (connected, terminal-*, welcome-message), those must stay even when consolidated.
+
+**Effort:** S (human S, CC S)
+**Priority:** P3
+**Depends on:** ui-redesign tokens.css landing
+
 ## Completed
 
 (none yet)
