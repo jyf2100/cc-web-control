@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CC 看板</title>
+    <link rel="icon" href="logo.png">
+    <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+    <div id="app">
+        <header class="header">
+            <div class="logo">
+                <img class="app-logo" src="logo.png" alt="Roc-CC" width="24" height="24" onerror="this.hidden=true;">
+                <span id="title">CC 看板</span>
+            </div>
+            <div class="header-actions">
+                <a class="link" href="/">主控制台</a>
+            </div>
+        </header>
+        <main class="main">
+            <ul id="sessionList" class="session-list" aria-label="会话列表"></ul>
+            <div id="stateMessage" class="state-message" hidden></div>
+        </main>
+    </div>
+    <script src="dashboard.js"></script>
+</body>
+</html>

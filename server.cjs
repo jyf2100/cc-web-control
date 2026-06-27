@@ -17,6 +17,7 @@ const { WebSocketServer } = require('ws');
 const tmux = require('./tmux.cjs');
 const auth = require('./auth.cjs');
 const { buildClaudeLaunchCommand } = require('./claude_launch.cjs');
+const { getDashboardCache, buildDashboardPayload } = require('./dashboard_cache.cjs');
 
 function hasFlag(flag) {
   return process.argv.includes(flag);
@@ -126,7 +127,7 @@ async function listSessions() {
   try {
     const util = require('util');
     const execAsync = util.promisify(require('child_process').exec);
-    const { stdout } = await execAsync('tmux list-sessions -F "#{session_name}|#{session_attached}|#{session_created}" 2>/dev/null || echo ""');
+    const { stdout } = await execAsync('tmux list-sessions -F "#{session_name}|#{session_attached}|#{session_created}|#{pane_current_path}" 2>/dev/null || echo ""');
 
     if (!stdout.trim()) return [];
 
@@ -135,13 +136,14 @@ async function listSessions() {
       .split('\n')
       .filter(line => line)
       .map(line => {
-        const [name, attached, created] = line.split('|');
+        const [name, attached, created, cwd] = line.split('|');
         const createdEpoch = Number.parseInt(created, 10);
         return {
           name,
           attached: Number.parseInt(attached, 10) > 0,
           createdEpoch: Number.isFinite(createdEpoch) ? createdEpoch : null,
           created: Number.isFinite(createdEpoch) ? new Date(createdEpoch * 1000).toLocaleString() : null,
+          cwd: cwd || null, // pane_current_path,供看板解析会话状态
         };
       });
   } catch (error) {
@@ -334,6 +336,35 @@ function startWebServer() {
       res.json(sessions);
     } catch (error) {
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // 多会话看板:聚合 tmux 会话 + 状态缓存(M3 从不 500,M7 轮询,M9 tmux 探测缓存)
+  const dashboardCache = getDashboardCache({
+    intervalMs: Number.parseInt(process.env.CC_WEB_DASHBOARD_INTERVAL_MS || '', 10) || 2000,
+  });
+  dashboardCache.start();
+
+  let _tmuxOkCache = null;
+  let _tmuxOkAt = 0;
+  async function tmuxAvailable() {
+    const now = Date.now();
+    if (_tmuxOkCache !== null && now - _tmuxOkAt < 60000) return _tmuxOkCache;
+    _tmuxOkCache = await isCommandAvailable('tmux');
+    _tmuxOkAt = now;
+    return _tmuxOkCache;
+  }
+
+  app.get('/api/dashboard', async (req, res) => {
+    try {
+      const sessions = await listSessions();
+      dashboardCache.setSessions(sessions);
+      dashboardCache.refresh();
+      const tmuxOk = await tmuxAvailable();
+      res.json(buildDashboardPayload(sessions, dashboardCache.getSnapshots(), tmuxOk));
+    } catch (error) {
+      // M3:绝不 500,降级返回空 payload
+      res.json({ sessions: [], tmuxOk: false });
     }
   });
 
