@@ -1,0 +1,47 @@
+/**
+ * cc-web-control 设计令牌(单一事实来源)
+ * 方向 A 琥珀精修。三页共用。浅色默认 + 深色跟随系统。
+ */
+
+:root {
+  /* 颜色(浅色,默认) */
+  --bg: #ffffff;
+  --surface: #faf7f2;
+  --surface2: #f3ece0;
+  --border: #ece2d1;
+  --text: #1a1a1a;
+  --muted: #8a7f6f;
+  --brand: #d4a574;
+  --brand-strong: #c08e54;
+
+  /* 状态色(5 状态徽章,浅深色共用,三重编码) */
+  --waiting: #f59e0b;
+  --working: #d4a574;
+  --idle: #b8ad9a;
+  --errored: #ef4444;
+
+  /* 字体 */
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'SF Mono', ui-monospace, Menlo, monospace;
+
+  /* 圆角 */
+  --r: 12px;
+  --r-sm: 8px;
+  --r-lg: 14px;
+
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* 颜色(深色,暖调,替换原 style.css 冷蓝暗色) */
+    --bg: #1c1815;
+    --surface: #251f1a;
+    --surface2: #2e2620;
+    --border: #3d342b;
+    --text: #f2ebe0;
+    --muted: #a89b88;
+    --brand: #d4a574;
+    --brand-strong: #e6b785;
+  }
+}
