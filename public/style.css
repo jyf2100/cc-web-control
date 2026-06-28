@@ -183,6 +183,10 @@ html, body {
 }
 
 .terminal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
     padding: 10px 14px;
     background: var(--surface2);
     border-bottom: 1px solid var(--border);
@@ -190,6 +194,62 @@ html, body {
     color: var(--muted);
     font-weight: 600;
     letter-spacing: 0.2px;
+}
+
+.terminal-header-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 移动端止损按钮：默认隐藏，窄屏显示（物理键盘已可直发 Esc/Ctrl+C） */
+.stop-controls {
+    display: none;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.stop-btn {
+    height: 24px;
+    padding: 0 8px;
+    font-size: 11px;
+}
+
+/* 快捷回复条：终端出现 y/n / continue? 等待时浮现，置顶于输入框上方 */
+.quick-reply {
+    display: flex;
+    gap: 8px;
+    padding: 8px 14px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+}
+
+.quick-reply-btn {
+    height: 30px;
+    padding: 0 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.quick-reply-btn:hover {
+    background: var(--surface);
+}
+
+.quick-reply-btn:active {
+    background: var(--surface2);
+}
+
+/* 窄屏（移动端 / 平板竖屏）显示止损按钮，桌面端靠物理键盘 */
+@media (max-width: 768px) {
+    .stop-controls {
+        display: flex;
+    }
 }
 
 .terminal-content {

@@ -334,8 +334,10 @@ function startWebServer() {
     // Allow login + health check + public PWA assets (favicon/logo/manifest).
     // manifest.json 必须公开:iOS 添加主屏 / standalone 启动时不带 cookie 抓取它,
     // 被拦截则 iOS 不识别为 PWA,打开仍是 Safari 而非全屏 app。
+    // tokens.css 必须公开:它是公开登录页 login.html 唯一依赖的样式表,
+    // 被拦截则登录页退化成无样式的浏览器默认渲染(看起来像「另一个登录界面」)。
     // These do not grant access to tmux control and help avoid confusing stale icons in browsers.
-    if (p === '/login' || p === '/healthz' || p === '/logo.png' || p === '/favicon.ico' || p === '/manifest.json') return next();
+    if (p === '/login' || p === '/healthz' || p === '/logo.png' || p === '/favicon.ico' || p === '/manifest.json' || p === '/tokens.css' || p === '/icon-192.png' || p === '/icon-512.png' || p === '/apple-touch-icon.png') return next();
     const ok = auth.isAuthorized(
       { cookieHeader: req.headers.cookie, authorizationHeader: req.headers.authorization },
       AUTH_TOKEN

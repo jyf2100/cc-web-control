@@ -162,7 +162,25 @@
 
         const terminalHeader = document.createElement('div');
         terminalHeader.className = 'terminal-header';
-        terminalHeader.textContent = currentSession ? `Session: ${currentSession}` : 'Roc-CC Remote Control';
+
+        const headerTitle = document.createElement('span');
+        headerTitle.className = 'terminal-header-title';
+        headerTitle.textContent = currentSession ? `Session: ${currentSession}` : 'Roc-CC Remote Control';
+        terminalHeader.appendChild(headerTitle);
+
+        // 移动端止损：Esc / Ctrl+C 一键发送（桌面端隐藏，物理键盘已可直发）
+        const stopControls = document.createElement('div');
+        stopControls.className = 'stop-controls';
+        const mkStop = (label, keyData) => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'btn stop-btn';
+            b.textContent = label;
+            b.addEventListener('click', () => sendBatch([{ type: 'key', data: keyData }]));
+            return b;
+        };
+        stopControls.append(mkStop('Esc', 'Escape'), mkStop('Ctrl+C', 'C-c'));
+        terminalHeader.appendChild(stopControls);
 
         const terminalContent = document.createElement('pre');
         terminalContent.className = 'terminal-content';
@@ -204,6 +222,57 @@
         }
 
         return { contentEl: terminalContentEl, inputEl: terminalInputEl, viewEl: terminalViewEl };
+    }
+
+    /**
+     * 快捷回复：终端出现 y/n / continue? 等待输入时，给出 Yes/No/Continue 一键回复。
+     * 仅扫描尾部 500 字，避免历史噪音；切会话时 hideQuickReply 清掉残留按钮。
+     */
+    let quickReplyBar = null;
+    function shouldShowQuickReply(text) {
+        const src = String(text || '');
+        const tail = src.slice(-500).toLowerCase();
+        if (!tail.trim()) return false;
+        return /y\/n|\[y\/n\]|yes\/no|\(y\/n\)|continue\?/.test(tail)
+            || /\?\s*$/.test(src.trim());
+    }
+    function hideQuickReply() {
+        if (quickReplyBar) {
+            quickReplyBar.remove();
+            quickReplyBar = null;
+        }
+    }
+    function showQuickReply() {
+        if (quickReplyBar) return;
+        const inputRow = document.querySelector('.terminal-input-row');
+        if (!inputRow || !inputRow.parentElement) return;
+
+        const bar = document.createElement('div');
+        bar.className = 'quick-reply';
+        const mk = (label, accent, actions) => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'quick-reply-btn';
+            b.textContent = label;
+            b.style.borderColor = accent;
+            b.addEventListener('click', () => {
+                sendBatch(actions);
+                hideQuickReply();
+            });
+            return b;
+        };
+        bar.append(
+            mk('Yes', 'var(--brand)', [{ type: 'key', data: 'C-u' }, { type: 'input', data: 'y', enter: true }]),
+            mk('No', 'var(--border)', [{ type: 'key', data: 'C-u' }, { type: 'input', data: 'n', enter: true }]),
+            mk('Continue', 'var(--brand-strong)', [{ type: 'key', data: 'Enter' }])
+        );
+
+        inputRow.parentElement.insertBefore(bar, inputRow);
+        quickReplyBar = bar;
+    }
+    function updateQuickReply() {
+        if (shouldShowQuickReply(lastOutput)) showQuickReply();
+        else hideQuickReply();
     }
 
     /**
@@ -326,6 +395,17 @@
         inputEl.addEventListener('compositionend', () => {
             composing = false;
             scheduleSlashSync();
+        });
+        // 粘贴多行提示：tmux 按行处理，换行会变成逐行 Enter，提前告知用户
+        inputEl.addEventListener('paste', (e) => {
+            const data = (e.clipboardData || window.clipboardData)?.getData('text');
+            if (data && data.indexOf('\n') !== -1) {
+                window.ccModules?.showToast?.(
+                    '粘贴内容含换行，将按行逐条发送（每个换行触发一次回车）',
+                    'info',
+                    4000
+                );
+            }
         });
         inputEl.addEventListener('input', () => {
             scheduleSlashSync();
@@ -502,6 +582,7 @@
 
                 lastOutput = output;
                 renderTerminal(output);
+                updateQuickReply();
             } catch (e) {
                 console.error('[WS] 解析失败:', e);
             }
@@ -544,7 +625,10 @@
 
     function updateSessionUi() {
         if (terminalHeaderEl) {
-            terminalHeaderEl.textContent = currentSession ? `Session: ${currentSession}` : 'Roc-CC Remote Control';
+            const titleEl = terminalHeaderEl.querySelector('.terminal-header-title');
+            if (titleEl) {
+                titleEl.textContent = currentSession ? `Session: ${currentSession}` : 'Roc-CC Remote Control';
+            }
         }
         if (sessionSelect && currentSession) {
             sessionSelect.value = currentSession;
@@ -582,6 +666,7 @@
                         storeSession(currentSession);
                         updateSessionUi();
                         lastOutput = null;
+                        hideQuickReply();
                         if (ws) connect();
                     }
                 } else if (currentSession) {
@@ -661,6 +746,7 @@
                 storeSession(currentSession);
                 updateSessionUi();
                 lastOutput = null;
+                hideQuickReply();
                 connect();
                 showSystemNote(`已切换到会话: ${sessionName}`);
                 return;
@@ -677,6 +763,7 @@
             storeSession(currentSession);
             updateSessionUi();
             lastOutput = null;
+            hideQuickReply();
             connect();
             await loadSessions();
             showSystemNote(`已启动项目会话: ${sessionName}`);
@@ -688,6 +775,7 @@
                 storeSession(currentSession);
                 updateSessionUi();
                 lastOutput = null;
+                hideQuickReply();
                 connect();
                 showSystemNote(`已切换到会话: ${sessionName}`);
                 return;
@@ -743,6 +831,7 @@
                 storeSession(currentSession);
                 updateSessionUi();
                 lastOutput = null;
+                hideQuickReply();
                 showSystemNote(`切换会话: ${currentSession}`);
                 connect();
             });
