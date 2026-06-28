@@ -39,11 +39,12 @@
                         <select id="sessionSelect" class="control-input"></select>
                     </label>
                     <button id="refreshSessions" class="btn" type="button">刷新</button>
-                    <label id="projectControl" class="control" hidden>
+                    <label id="projectControl" class="control">
                         <span class="control-label">Project</span>
                         <select id="projectSelect" class="control-input"></select>
                     </label>
-                    <button id="startProject" class="btn" type="button" hidden>启动</button>
+                    <p id="projectsEmpty" class="projects-empty" hidden></p>
+                    <button id="startProject" class="btn" type="button">启动</button>
                 </div>
                 <span id="connectionStatus" class="status">未连接</span>
                 <nav class="nav">
@@ -72,6 +73,7 @@
 
     <script src="terminal_cleaner.cjs"></script>
     <script src="tmux_actions.cjs"></script>
+    <script src="projectsView.cjs"></script>
     <script src="client.js"></script>
     <script type="module" src="modules/main.js"></script>
 </body>

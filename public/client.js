@@ -701,14 +701,30 @@
 
     async function loadProjects() {
         if (!projectSelect || !projectControl || !startProjectBtn) return;
+        const projectsEmptyEl = document.getElementById('projectsEmpty');
+        const applyView = (view) => {
+            projectControl.hidden = !view.showSelect;
+            startProjectBtn.hidden = !view.showButton;
+            if (projectsEmptyEl) {
+                if (view.emptyHint) {
+                    projectsEmptyEl.textContent = view.emptyHint;
+                    projectsEmptyEl.hidden = false;
+                } else {
+                    projectsEmptyEl.textContent = '';
+                    projectsEmptyEl.hidden = true;
+                }
+            }
+        };
         try {
             const data = await fetchJson('/api/projects');
             const projects = data && Array.isArray(data.projects) ? data.projects : [];
-            if (!projects.length) {
-                projectControl.hidden = true;
-                startProjectBtn.hidden = true;
-                return;
-            }
+            const hasRoots = Boolean(data && Array.isArray(data.roots) && data.roots.length > 0);
+            const viewFn = (typeof ProjectsView !== 'undefined' && ProjectsView.projectsView) || null;
+            const view = viewFn
+                ? viewFn({ projects, hasRoots })
+                : { showSelect: projects.length > 0, showButton: projects.length > 0, emptyHint: '' };
+            applyView(view);
+            if (!projects.length) return;
 
             projectSelect.innerHTML = '';
             for (const p of projects) {
@@ -719,12 +735,12 @@
                 opt.textContent = p.root ? `${p.name} (${p.root})` : p.name;
                 projectSelect.appendChild(opt);
             }
-
-            projectControl.hidden = false;
-            startProjectBtn.hidden = false;
         } catch {
-            projectControl.hidden = true;
-            startProjectBtn.hidden = true;
+            const viewFn = (typeof ProjectsView !== 'undefined' && ProjectsView.projectsView) || null;
+            const view = viewFn
+                ? viewFn({ projects: [], hasRoots: false })
+                : { showSelect: false, showButton: false, emptyHint: '' };
+            applyView(view);
         }
     }
 
