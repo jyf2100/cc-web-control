@@ -19,7 +19,7 @@ const auth = require('./auth.cjs');
 const { buildClaudeLaunchCommand } = require('./claude_launch.cjs');
 const { getDashboardCache, buildDashboardPayload } = require('./dashboard_cache.cjs');
 const { cwdToSlug } = require('./dashboard_slug.cjs');
-const { readBinding, deleteBinding } = require('./dashboard_binding.cjs');
+const { readBinding, deleteBinding, migrateStaleBindings } = require('./dashboard_binding.cjs');
 const { shouldContinue } = require('./claude_session.cjs');
 const { createRateLimiter } = require('./rate_limit.cjs');
 
@@ -463,8 +463,9 @@ function startWebServer() {
           res.status(503).json({ error: 'claude is not available on PATH' });
           return;
         }
-        // web 创建会话强制新建独立 agent(不 -c 恢复最近),配合 wrapper 绑定实现看板精确定位
-        await startClaudeInSession(name, normalizedCwd, true);
+        // web 选项目创建会话:startClaudeInSession 内部走 shouldContinue 续接优先
+        // (有历史 → claude -c;无历史 → claude 新建)。不再 forceNew 预生成 UUID。
+        await startClaudeInSession(name, normalizedCwd);
       }
       res.status(201).json({ success: true });
     } catch (error) {
@@ -695,6 +696,17 @@ function startWebServer() {
 }
 
 // 启动
+// 一次性迁移:旧流程写的绑定(sid 指向已不存在的 jsonl)会让 listSessions readBinding
+// 回填陈旧 sid,看板错位。新流程不再写绑定,迁移后目录自然不再增长。与 tmux 无关,两种模式都跑。
+try {
+  const removed = migrateStaleBindings();
+  if (removed.length > 0) {
+    console.log(`[Init] 清理 ${removed.length} 个陈旧会话绑定:${removed.map((r) => r.tmuxName).join(', ')}`);
+  }
+} catch (err) {
+  console.error('[Init] 旧绑定迁移失败(非致命):', err.message);
+}
+
 if (WEB_ONLY) {
   console.log('[Init] 已设置 --web-only / CC_WEB_WEB_ONLY=1，仅启动 Web 服务（不创建/附加 tmux 会话）');
   startWebServer();

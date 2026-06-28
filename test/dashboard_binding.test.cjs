@@ -4,7 +4,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 
-const { readBinding, writeBinding, deleteBinding, createSessionBinding } = require('../dashboard_binding.cjs');
+const { readBinding, writeBinding, deleteBinding, migrateStaleBindings } = require('../dashboard_binding.cjs');
+const { cwdToSlug } = require('../dashboard_slug.cjs');
 
 // 绑定路径约定:<projectsDir>/<slug>/.cc-web-bindings/<tmuxName>,内容为单行 sessionId。
 // 用 tmpDir 注入 projectsDir,绝不碰真实 ~/.claude/projects。
@@ -70,20 +71,70 @@ test('writeBinding 幂等创建嵌套目录', () => {
   } finally { rm(base); }
 });
 
-test('createSessionBinding:生成有效 UUID 且 readBinding 一致', () => {
-  const base = tmpDir();
+test('migrateStaleBindings: 删除 sid 在 slug 目录下无同名 jsonl 的陈旧绑定', () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-bind-'));
   try {
-    const result = createSessionBinding({ cwd: '/Users/roc/proj', sessionName: 'sess-x', projectsDir: base });
-    assert.ok(result, '应返回绑定结果');
-    assert.equal(result.slug, SLUG);
-    // UUID v4 格式(crypto.randomUUID 输出)
-    assert.match(result.sessionId, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
-    // 写入后 readBinding 应回读到同一 sessionId
-    assert.equal(readBinding(result.slug, 'sess-x', base), result.sessionId);
-  } finally { rm(base); }
+    const cwd = '/Users/roc/workspace/proj-stale';
+    const slug = cwdToSlug(cwd);
+    const tmuxName = 'claude-proj-stale';
+    const slugDir = path.join(base, slug);
+    fs.mkdirSync(slugDir, { recursive: true });
+    fs.writeFileSync(path.join(slugDir, 'other-uuid-2222.jsonl'), '{}\n');
+    writeBinding(slug, tmuxName, 'dead-uuid-1111', base);
+    assert.equal(readBinding(slug, tmuxName, base), 'dead-uuid-1111');
+
+    const removed = migrateStaleBindings(base);
+
+    assert.equal(removed.length, 1);
+    assert.equal(removed[0].tmuxName, tmuxName);
+    assert.equal(readBinding(slug, tmuxName, base), null);
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
 });
 
-test('createSessionBinding:cwd 缺失 → null(不写绑定)', () => {
-  assert.equal(createSessionBinding({ cwd: '', sessionName: 's', projectsDir: tmpDir() }), null);
-  assert.equal(createSessionBinding({ cwd: null, sessionName: 's', projectsDir: tmpDir() }), null);
+test('migrateStaleBindings: 保留 sid 有同名 jsonl 的有效绑定', () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-bind-'));
+  try {
+    const slug = cwdToSlug('/Users/roc/workspace/proj-live');
+    const tmuxName = 'claude-proj-live';
+    const slugDir = path.join(base, slug);
+    fs.mkdirSync(slugDir, { recursive: true });
+    fs.writeFileSync(path.join(slugDir, 'live-uuid-3333.jsonl'), '{}\n');
+    writeBinding(slug, tmuxName, 'live-uuid-3333', base);
+
+    const removed = migrateStaleBindings(base);
+
+    assert.deepEqual(removed, []);
+    assert.equal(readBinding(slug, tmuxName, base), 'live-uuid-3333');
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test('migrateStaleBindings: slug 目录不存在 → 删绑定', () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-bind-'));
+  try {
+    const slug = cwdToSlug('/Users/roc/workspace/proj-gone');
+    writeBinding(slug, 'claude-proj-gone', 'orphan-uuid-4444', base);
+
+    const removed = migrateStaleBindings(base);
+
+    assert.equal(removed.length, 1);
+    assert.equal(readBinding(slug, 'claude-proj-gone', base), null);
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test('migrateStaleBindings: 空 baseDir → 返回 [] 不抛', () => {
+  assert.deepEqual(migrateStaleBindings('/no/such/base'), []);
+});
+
+test('dashboard_binding.cjs: 不再导出 createSessionBinding', () => {
+  const mod = require('../dashboard_binding.cjs');
+  assert.equal(typeof mod.createSessionBinding, 'undefined');
+  assert.equal(typeof mod.migrateStaleBindings, 'function');
+  assert.equal(typeof mod.readBinding, 'function');
+  assert.equal(typeof mod.deleteBinding, 'function');
 });
