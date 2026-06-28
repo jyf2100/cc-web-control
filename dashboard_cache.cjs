@@ -9,6 +9,7 @@
  */
 
 const fs = require('fs');
+const path = require('path');
 const { readTailEvents } = require('./dashboard_tail.cjs');
 const { resolveProjectDir, listProjectJsonls } = require('./dashboard_slug.cjs');
 const { parseStatus } = require('./dashboard_parse.cjs');
@@ -80,8 +81,17 @@ class DashboardCache {
         ? resolveProjectDir(session.cwd, this.projectsDir)
         : resolveProjectDir(session.cwd);
       if (!dir) return unknown;
-      const latest = latestJsonlByMtime(listProjectJsonls(dir));
-      if (!latest) return unknown;
+      // 有 claudeSessionId 绑定 → 精确定位该 jsonl(消除同 cwd 多 session 都取 mtime 最新)
+      // 无绑定 → 降级 mtime 最新(向后兼容老 session / 非 wrapper 启动的 claude)
+      let latest;
+      if (session.claudeSessionId) {
+        const bound = path.join(dir, session.claudeSessionId + '.jsonl');
+        latest = fs.existsSync(bound) ? bound : null;
+        if (!latest) return unknown;
+      } else {
+        latest = latestJsonlByMtime(listProjectJsonls(dir));
+        if (!latest) return unknown;
+      }
       const parsed = parseStatus(readTailEvents(latest), nowMs, this.idleThresholdS);
       return { ...parsed, cachedAt: nowMs };
     } catch {

@@ -125,6 +125,52 @@ test('buildDashboardPayload 合并 session + snapshot,缺失 → unknown', () =>
   assert.equal(b.lastLine, '');
 });
 
+test('_compute 有 claudeSessionId → 精确定位该 jsonl(不取 mtime 最新)', () => {
+  const base = tmpDir();
+  try {
+    const slugDir = makeSlugDir(base, '/Users/roc/proj');
+    writeJsonl(slugDir, 'target.jsonl', [endTurn('我是 target 的状态')]);
+    writeJsonl(slugDir, 'other.jsonl', [toolUse('Bash')]);
+    const later = new Date(Date.now() + 10000);
+    fs.utimesSync(path.join(slugDir, 'other.jsonl'), later, later);
+    const cache = new DashboardCache({ projectsDir: base, intervalMs: 999999 });
+    cache.setSessions([{ name: 's1', cwd: '/Users/roc/proj', claudeSessionId: 'target' }]);
+    cache.refresh();
+    const snap = cache.getSnapshots()[0];
+    assert.equal(snap.status, 'waiting');
+    assert.equal(snap.lastLine, '我是 target 的状态');
+  } finally { rm(base); }
+});
+
+test('_compute 有 claudeSessionId 但文件不存在 → unknown', () => {
+  const base = tmpDir();
+  try {
+    const slugDir = makeSlugDir(base, '/Users/roc/proj');
+    writeJsonl(slugDir, 'other.jsonl', [toolUse('Bash')]);
+    const cache = new DashboardCache({ projectsDir: base, intervalMs: 999999 });
+    cache.setSessions([{ name: 's1', cwd: '/Users/roc/proj', claudeSessionId: 'target' }]);
+    cache.refresh();
+    assert.equal(cache.getSnapshots()[0].status, 'unknown');
+  } finally { rm(base); }
+});
+
+test('_compute 无 claudeSessionId → 降级 mtime 最新', () => {
+  const base = tmpDir();
+  try {
+    const slugDir = makeSlugDir(base, '/Users/roc/proj');
+    writeJsonl(slugDir, 'old.jsonl', [endTurn('old')]);
+    writeJsonl(slugDir, 'new.jsonl', [toolUse('Bash')]);
+    const later = new Date(Date.now() + 10000);
+    fs.utimesSync(path.join(slugDir, 'new.jsonl'), later, later);
+    const cache = new DashboardCache({ projectsDir: base, intervalMs: 999999 });
+    cache.setSessions([{ name: 's1', cwd: '/Users/roc/proj' }]);
+    cache.refresh();
+    const snap = cache.getSnapshots()[0];
+    assert.equal(snap.status, 'working');
+    assert.equal(snap.lastLine, '[tool: Bash]');
+  } finally { rm(base); }
+});
+
 test('buildDashboardPayload 空 sessions / undefined snapshots 安全', () => {
   const p1 = buildDashboardPayload([], [], false);
   assert.equal(p1.tmuxOk, false);
