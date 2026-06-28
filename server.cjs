@@ -19,7 +19,8 @@ const auth = require('./auth.cjs');
 const { buildClaudeLaunchCommand } = require('./claude_launch.cjs');
 const { getDashboardCache, buildDashboardPayload } = require('./dashboard_cache.cjs');
 const { cwdToSlug } = require('./dashboard_slug.cjs');
-const { readBinding, createSessionBinding, deleteBinding } = require('./dashboard_binding.cjs');
+const { readBinding, deleteBinding } = require('./dashboard_binding.cjs');
+const { shouldContinue } = require('./claude_session.cjs');
 const { createRateLimiter } = require('./rate_limit.cjs');
 
 // 登录速率限制:默认 5 次/15 分钟(可经环境变量调整),防爆破
@@ -122,25 +123,25 @@ function normalizeProjectCwd(cwdInput) {
   return real;
 }
 
-async function startClaudeInSession(sessionName, cwd, forceNew = false) {
+/**
+ * 在 tmux 会话内启动 claude。
+ * @param {string} sessionName
+ * @param {string} cwd
+ * @param {object} [opts]
+ * @param {boolean} [opts.useClaudeContinue] 服务启动 DEFAULT_SESSION 沿用 CLAUDE_CONTINUE;
+ *   web 路径不传 → 走 shouldContinue(cwd) 续接优先(范围限定)。
+ */
+async function startClaudeInSession(sessionName, cwd, opts = {}) {
   const escapedCwd = shellEscapeForDoubleQuotes(cwd);
-  await tmux.sendKeys(sessionName, `cd "${escapedCwd}"`);
-  // forceNew=true:web 主动创建会话 → 预生成 UUID 作为 claude session id,
-  //   writeBinding 立即绑定 + claude --session-id 让 jsonl 文件名 = 该 UUID,
-  //   看板精确定位各自状态(彻底消除同 cwd 多会话串台)。
-  //   不带 -c,强制新建独立 agent(否则 CLAUDE_CONTINUE=1 时都恢复同一最近会话)。
-  // forceNew=false:服务启动 DEFAULT_SESSION,沿用 CLAUDE_CONTINUE 续接最近会话(不绑定,看板降级 mtime)。
-  let continueConversation = !forceNew && CLAUDE_CONTINUE;
-  if (forceNew) {
-    const binding = createSessionBinding({ cwd, sessionName });
-    if (binding) {
-      const escapedSid = shellEscapeForDoubleQuotes(binding.sessionId);
-      await tmux.sendKeys(sessionName, `export CC_WEB_CLAUDE_SESSION_ID="${escapedSid}"`);
-    }
-    continueConversation = false;
-  }
-  const cmd = buildClaudeLaunchCommand({ wrapperPath: CLAUDE_WRAPPER, continueConversation });
-  await tmux.sendKeys(sessionName, cmd);
+  // web 路径(默认):shouldContinue 判断 —— 有历史会话 → -c 续接;无 → 纯新建。
+  //   不再预生成 UUID / writeBinding,看板走 mtime 降级(test/dashboard_cache.test.cjs:157 已覆盖)。
+  // DEFAULT_SESSION 路径(useClaudeContinue=true):沿用 CLAUDE_CONTINUE,行为不变。
+  const continueConversation = opts.useClaudeContinue
+    ? CLAUDE_CONTINUE
+    : shouldContinue(cwd);
+  // cd 与 claude 启动合并为单条命令,消除慢盘 / direnv hook 下 cd 未生效就发 claude 的时序竞态
+  const launch = buildClaudeLaunchCommand({ wrapperPath: CLAUDE_WRAPPER, continueConversation });
+  await tmux.sendKeys(sessionName, `cd "${escapedCwd}" && ${launch}`);
 }
 
 /**
@@ -210,7 +211,7 @@ async function initAndAttachSession() {
         return true;
       }
 
-      await startClaudeInSession(DEFAULT_SESSION, cwd);
+      await startClaudeInSession(DEFAULT_SESSION, cwd, { useClaudeContinue: true });
 
       console.log(`[Init] Claude Code 已在 ${cwd} 启动`);
     } else {
