@@ -1,0 +1,19 @@
+{
+  "name": "Roc-CC Remote Control",
+  "short_name": "Roc-CC",
+  "description": "通过网页远程控制本地 Claude Code 会话",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1c1815",
+  "theme_color": "#1c1815",
+  "icons": [
+    {
+      "src": "logo.png",
+      "sizes": "144x162",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

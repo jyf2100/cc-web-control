@@ -22,14 +22,15 @@ html, body {
 #app {
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    height: 100vh;      /* 旧浏览器兜底 */
+    height: 100dvh;     /* iOS 15.4+ 动态视口 */
 }
 
 .header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 20px;
+    padding: max(12px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
     background-color: var(--surface);
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
@@ -101,10 +102,16 @@ html, body {
     background-color: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--r-sm);
+    cursor: pointer;
 }
 
 .session-row:hover {
     border-color: var(--brand);
+}
+
+.session-row:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
 }
 
 /* 徽章 5 状态(琥珀优先注意,三重编码:背景色 + 图标 + 文字)。浅色配色保留,深色模式待 Phase 2 polish */

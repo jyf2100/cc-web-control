@@ -9,6 +9,24 @@
     var stateMsg = document.getElementById('stateMessage');
     var titleEl = document.getElementById('title');
 
+    // 点击/回车会话卡片 → 跳转控制台并自动选中该会话(控制台 init 读 ?session 参数连接 ws)
+    function goToSession(name) {
+        if (!name) return;
+        window.location.href = '/?session=' + encodeURIComponent(name);
+    }
+    list.addEventListener('click', function (e) {
+        var row = e.target.closest ? e.target.closest('.session-row') : null;
+        if (!row) return;
+        goToSession(row.getAttribute('data-session'));
+    });
+    list.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        var row = e.target.closest ? e.target.closest('.session-row') : null;
+        if (!row) return;
+        e.preventDefault();
+        goToSession(row.getAttribute('data-session'));
+    });
+
     // 状态权重:等待/错误置顶(需注意),其次工作中,再空闲,未知最后
     var STATUS_WEIGHT = { waiting: 0, errored: 0, working: 1, idle: 2, unknown: 3 };
     var STATUS_LABEL = {
@@ -85,7 +103,7 @@
             var preview = s.lastLine
                 ? '<span class="arrow">▸ 最后:</span><span class="text">' + escapeHtml(s.lastLine) + '</span>'
                 : '';
-            return '<li class="session-row">'
+            return '<li class="session-row" data-session="' + escapeHtml(s.name) + '" tabindex="0" role="button" aria-label="进入会话 ' + escapeHtml(s.name) + '">'
                 + '<span class="badge badge--' + escapeHtml(s.status) + '"><span class="badge-dot">' + icon + '</span>' + escapeHtml(status) + '</span>'
                 + '<div class="session-main">'
                 + '<span class="session-name">' + escapeHtml(s.name) + '</span>'
@@ -114,10 +132,22 @@
         return true;
     }
 
+    var polling = true;
+
     async function loop() {
+        if (!polling) return;
         var ok = await poll();
-        if (ok) setTimeout(loop, POLL_MS);
+        if (ok && polling) setTimeout(loop, POLL_MS);
     }
+
+    document.addEventListener('visibilitychange', function () {
+        if (document.hidden) {
+            polling = false; // 后台暂停,省电 + 避免 fetch 堆积
+        } else if (!polling) {
+            polling = true;
+            loop(); // 回前台立即刷新一次再恢复轮询
+        }
+    });
 
     loop();
 })();

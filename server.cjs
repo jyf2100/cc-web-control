@@ -18,6 +18,15 @@ const tmux = require('./tmux.cjs');
 const auth = require('./auth.cjs');
 const { buildClaudeLaunchCommand } = require('./claude_launch.cjs');
 const { getDashboardCache, buildDashboardPayload } = require('./dashboard_cache.cjs');
+const { cwdToSlug } = require('./dashboard_slug.cjs');
+const { readBinding, createSessionBinding, deleteBinding } = require('./dashboard_binding.cjs');
+const { createRateLimiter } = require('./rate_limit.cjs');
+
+// 登录速率限制:默认 5 次/15 分钟(可经环境变量调整),防爆破
+const loginRateLimiter = createRateLimiter({
+  max: Number.parseInt(process.env.CC_WEB_LOGIN_MAX || '', 10) || 5,
+  windowMs: Number.parseInt(process.env.CC_WEB_LOGIN_WINDOW_MS || '', 10) || 15 * 60 * 1000,
+});
 
 function hasFlag(flag) {
   return process.argv.includes(flag);
@@ -113,10 +122,24 @@ function normalizeProjectCwd(cwdInput) {
   return real;
 }
 
-async function startClaudeInSession(sessionName, cwd) {
+async function startClaudeInSession(sessionName, cwd, forceNew = false) {
   const escapedCwd = shellEscapeForDoubleQuotes(cwd);
   await tmux.sendKeys(sessionName, `cd "${escapedCwd}"`);
-  const cmd = buildClaudeLaunchCommand({ wrapperPath: CLAUDE_WRAPPER, continueConversation: CLAUDE_CONTINUE });
+  // forceNew=true:web 主动创建会话 → 预生成 UUID 作为 claude session id,
+  //   writeBinding 立即绑定 + claude --session-id 让 jsonl 文件名 = 该 UUID,
+  //   看板精确定位各自状态(彻底消除同 cwd 多会话串台)。
+  //   不带 -c,强制新建独立 agent(否则 CLAUDE_CONTINUE=1 时都恢复同一最近会话)。
+  // forceNew=false:服务启动 DEFAULT_SESSION,沿用 CLAUDE_CONTINUE 续接最近会话(不绑定,看板降级 mtime)。
+  let continueConversation = !forceNew && CLAUDE_CONTINUE;
+  if (forceNew) {
+    const binding = createSessionBinding({ cwd, sessionName });
+    if (binding) {
+      const escapedSid = shellEscapeForDoubleQuotes(binding.sessionId);
+      await tmux.sendKeys(sessionName, `export CC_WEB_CLAUDE_SESSION_ID="${escapedSid}"`);
+    }
+    continueConversation = false;
+  }
+  const cmd = buildClaudeLaunchCommand({ wrapperPath: CLAUDE_WRAPPER, continueConversation });
   await tmux.sendKeys(sessionName, cmd);
 }
 
@@ -138,12 +161,16 @@ async function listSessions() {
       .map(line => {
         const [name, attached, created, cwd] = line.split('|');
         const createdEpoch = Number.parseInt(created, 10);
+        // 回填 claudeSessionId:wrapper 启动时写入的绑定文件(无绑定 → undefined,_compute 降级 mtime)
+        const slug = cwd ? cwdToSlug(cwd) : null;
+        const claudeSessionId = slug ? (readBinding(slug, name) || undefined) : undefined;
         return {
           name,
           attached: Number.parseInt(attached, 10) > 0,
           createdEpoch: Number.isFinite(createdEpoch) ? createdEpoch : null,
           created: Number.isFinite(createdEpoch) ? new Date(createdEpoch * 1000).toLocaleString() : null,
           cwd: cwd || null, // pane_current_path,供看板解析会话状态
+          claudeSessionId,
         };
       });
   } catch (error) {
@@ -260,6 +287,12 @@ function startWebServer() {
       res.redirect('/');
       return;
     }
+    const { limited, retryAfterMs } = loginRateLimiter.check(req.ip);
+    if (limited) {
+      res.set('Retry-After', String(Math.ceil(retryAfterMs / 1000)));
+      res.status(429).type('text/plain').send('Too many login attempts, try again later');
+      return;
+    }
     if (!requireSameOriginForUnsafeMethods(req, res)) return;
 
     const token = typeof req.body?.token === 'string' ? req.body.token : '';
@@ -272,6 +305,7 @@ function startWebServer() {
       res.status(401).type('text/plain').send('Invalid token');
       return;
     }
+    loginRateLimiter.reset(req.ip); // 合法用户,清空该 IP 计数
 
     const secure = req.secure || String(req.get('x-forwarded-proto') || '').toLowerCase().startsWith('https');
     res.cookie('cc_web_auth', token, {
@@ -297,9 +331,11 @@ function startWebServer() {
   const requireAuth = (req, res, next) => {
     if (!AUTH_TOKEN) return next();
     const p = req.path || '/';
-    // Allow login + health check + public favicon/logo.
+    // Allow login + health check + public PWA assets (favicon/logo/manifest).
+    // manifest.json 必须公开:iOS 添加主屏 / standalone 启动时不带 cookie 抓取它,
+    // 被拦截则 iOS 不识别为 PWA,打开仍是 Safari 而非全屏 app。
     // These do not grant access to tmux control and help avoid confusing stale icons in browsers.
-    if (p === '/login' || p === '/healthz' || p === '/logo.png' || p === '/favicon.ico') return next();
+    if (p === '/login' || p === '/healthz' || p === '/logo.png' || p === '/favicon.ico' || p === '/manifest.json') return next();
     const ok = auth.isAuthorized(
       { cookieHeader: req.headers.cookie, authorizationHeader: req.headers.authorization },
       AUTH_TOKEN
@@ -424,7 +460,8 @@ function startWebServer() {
           res.status(503).json({ error: 'claude is not available on PATH' });
           return;
         }
-        await startClaudeInSession(name, normalizedCwd);
+        // web 创建会话强制新建独立 agent(不 -c 恢复最近),配合 wrapper 绑定实现看板精确定位
+        await startClaudeInSession(name, normalizedCwd, true);
       }
       res.status(201).json({ success: true });
     } catch (error) {
@@ -435,7 +472,15 @@ function startWebServer() {
   app.delete('/api/sessions/:name', async (req, res) => {
     try {
       if (!requireSameOriginForUnsafeMethods(req, res)) return;
-      await tmux.killSession(req.params.name);
+      const name = req.params.name;
+      // kill 前取 cwd → slug,清理绑定文件(否则同名会话复用会读到旧 sid,定位错 jsonl)
+      const sessions = await listSessions();
+      const target = sessions.find((s) => s.name === name);
+      await tmux.killSession(name);
+      if (target && target.cwd) {
+        const slug = cwdToSlug(target.cwd);
+        if (slug) deleteBinding(slug, name);
+      }
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
