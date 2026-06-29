@@ -702,6 +702,12 @@
     async function loadProjects() {
         if (!projectSelect || !projectControl || !startProjectBtn) return;
         const projectsEmptyEl = document.getElementById('projectsEmpty');
+        const resolveView = ({ projects, hasRoots }) => {
+            const fn = (typeof ProjectsView !== 'undefined' && ProjectsView.projectsView) || null;
+            return fn
+                ? fn({ projects, hasRoots })
+                : { showSelect: projects.length > 0, showButton: projects.length > 0, emptyHint: '' };
+        };
         const applyView = (view) => {
             projectControl.hidden = !view.showSelect;
             startProjectBtn.hidden = !view.showButton;
@@ -719,11 +725,7 @@
             const data = await fetchJson('/api/projects');
             const projects = data && Array.isArray(data.projects) ? data.projects : [];
             const hasRoots = Boolean(data && Array.isArray(data.roots) && data.roots.length > 0);
-            const viewFn = (typeof ProjectsView !== 'undefined' && ProjectsView.projectsView) || null;
-            const view = viewFn
-                ? viewFn({ projects, hasRoots })
-                : { showSelect: projects.length > 0, showButton: projects.length > 0, emptyHint: '' };
-            applyView(view);
+            applyView(resolveView({ projects, hasRoots }));
             if (!projects.length) return;
 
             projectSelect.innerHTML = '';
@@ -736,11 +738,7 @@
                 projectSelect.appendChild(opt);
             }
         } catch {
-            const viewFn = (typeof ProjectsView !== 'undefined' && ProjectsView.projectsView) || null;
-            const view = viewFn
-                ? viewFn({ projects: [], hasRoots: false })
-                : { showSelect: false, showButton: false, emptyHint: '' };
-            applyView(view);
+            applyView(resolveView({ projects: [], hasRoots: false }));
         }
     }
 
