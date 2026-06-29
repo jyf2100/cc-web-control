@@ -115,7 +115,7 @@ html, body {
     box-shadow: 0 0 0 3px rgba(212, 165, 116, 0.35);
 }
 
-/* 桌面端 Session 下拉框缩小(label 已隐藏),Project 升为主入口 */
+/* 桌面端 Session 下拉框缩小,Project 升为主入口 */
 #sessionSelect.control-input {
     max-width: 140px;
 }
