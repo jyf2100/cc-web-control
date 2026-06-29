@@ -19,3 +19,15 @@ test('detectDeadState: 输入非法 → 安全降级不提示', () => {
   assert.equal(out.shouldHint, false);
   assert.equal(out.hint, '');
 });
+
+test('detectDeadState: claudeSessionId 为空字符串 → 不提示(假值等同无绑定)', () => {
+  const out = detectDeadState({ name: 'claude-foo', claudeSessionId: '' });
+  assert.equal(out.shouldHint, false);
+  assert.equal(out.hint, '');
+});
+
+test('detectDeadState: 数组输入 → 安全降级不提示', () => {
+  const out = detectDeadState([{ name: 'x', claudeSessionId: 'abc' }]);
+  assert.equal(out.shouldHint, false);
+  assert.equal(out.hint, '');
+});

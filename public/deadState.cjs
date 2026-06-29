@@ -17,7 +17,7 @@
 
   function detectDeadState(entry) {
     const safe = entry && typeof entry === 'object' ? entry : {};
-    if (!Boolean(safe.claudeSessionId)) {
+    if (!safe.claudeSessionId) {
       return { shouldHint: false, hint: '' };
     }
     return { shouldHint: true, hint: DEAD_HINT };
