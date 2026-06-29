@@ -763,6 +763,12 @@
                 hideQuickReply();
                 connect();
                 showSystemNote(`已切换到会话: ${sessionName}`);
+                const entry = Array.isArray(sessions) ? sessions.find((s) => s && s.name === sessionName) : null;
+                const detect = (typeof DeadState !== 'undefined' && DeadState.detectDeadState) || null;
+                if (detect && entry) {
+                    const dead = detect({ name: entry.name, claudeSessionId: entry.claudeSessionId });
+                    if (dead.shouldHint) showSystemNote(dead.hint);
+                }
                 return;
             }
 
