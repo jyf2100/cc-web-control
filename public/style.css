@@ -115,6 +115,22 @@ html, body {
     box-shadow: 0 0 0 3px rgba(212, 165, 116, 0.35);
 }
 
+/* 桌面端 Session 下拉框缩小(label 已隐藏),Project 升为主入口 */
+#sessionSelect.control-input {
+    max-width: 140px;
+}
+
+#refreshSessions.btn {
+    padding: 0 8px;
+}
+
+/* 空状态提示:无项目或未配置根目录时显示,融入控件区 */
+.projects-empty {
+    margin: 6px 0;
+    font-size: 12px;
+    color: var(--muted);
+}
+
 .btn {
     height: 28px;
     padding: 0 10px;
@@ -454,6 +470,12 @@ html, body {
     }
 
     .control-label {
+        display: none;
+    }
+
+    /* 窄屏收起 Session 下拉框及刷新按钮,只露 Project + 启动 */
+    #sessionSelect.control-input,
+    #refreshSessions.btn {
         display: none;
     }
 
