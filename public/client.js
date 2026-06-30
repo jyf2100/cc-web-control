@@ -844,17 +844,52 @@
 
         if (sessionSelect) {
             sessionSelect.addEventListener('change', () => {
-                const next = sessionSelect.value;
-                if (!next || next === currentSession) return;
-                currentSession = next;
-                setSessionInUrl(currentSession);
-                storeSession(currentSession);
-                updateSessionUi();
-                lastOutput = null;
-                hideQuickReply();
-                showSystemNote(`切换会话: ${currentSession}`);
-                connect();
+                const target = sessionSelect.value;
+                const switchSession = (typeof SessionSwitch !== 'undefined' && SessionSwitch.switchSession) || null;
+                if (switchSession) {
+                    switchSession({ target, current: currentSession }, {
+                        setUrl: setSessionInUrl, store: storeSession, updateUi: updateSessionUi,
+                        syncProject: syncProjectSelect, clearOutput: () => { lastOutput = null; },
+                        hideQuickReply, connect, note: showSystemNote,
+                    });
+                    currentSession = target;
+                } else {
+                    if (!target || target === currentSession) return;
+                    currentSession = target;
+                    setSessionInUrl(currentSession); storeSession(currentSession); updateSessionUi();
+                    syncProjectSelect(); lastOutput = null; hideQuickReply();
+                    showSystemNote(`切换会话: ${currentSession}`); connect();
+                }
             });
+        }
+
+        // === 切换 sheet 装配(spec §7.1)===
+        const switchTrigger = document.getElementById('switchToggle');
+        if (switchTrigger && typeof SwitchSheet !== 'undefined' && SwitchSheet.createSwitchSheet) {
+            switchTrigger.setAttribute('aria-haspopup', 'dialog');
+            switchTrigger.setAttribute('aria-expanded', 'false');
+            let sheetHandle = null;
+            const rebuildSheet = () => {
+                if (sheetHandle) { sheetHandle.destroy(); sheetHandle = null; }
+                const items = SwitchSheet.buildSessionItems(cachedSessions, currentSession);
+                sheetHandle = SwitchSheet.createSwitchSheet({
+                    trigger: switchTrigger, items,
+                    onPick: (name) => {
+                        const switchSession = (typeof SessionSwitch !== 'undefined' && SessionSwitch.switchSession) || null;
+                        if (switchSession) {
+                            switchSession(
+                                { target: name, current: currentSession },
+                                { setUrl: setSessionInUrl, store: storeSession, updateUi: updateSessionUi,
+                                  syncProject: syncProjectSelect, clearOutput: () => { lastOutput = null; },
+                                  hideQuickReply, connect, note: showSystemNote }
+                            );
+                            currentSession = name;
+                        }
+                        if (sheetHandle) sheetHandle.close();
+                    },
+                });
+            };
+            switchTrigger.addEventListener('click', () => { rebuildSheet(); if (sheetHandle) sheetHandle.open(); });
         }
 
         if (startProjectBtn) {

@@ -303,3 +303,27 @@ html, body {
 .nav-link:hover { color: var(--fg); }
 .nav-link.cur { background: var(--bg); color: var(--fg); font-weight: 600; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06); }
 .nav-link:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+
+/* === 切换 sheet(spec §7.1 底部抽屉)=== */
+.switch-sheet-backdrop { position: fixed; inset: 0; background: rgba(38, 37, 30, 0.35); z-index: 1000; border: none; }
+.switch-sheet {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 1001;
+    background: var(--bg-2); border-top: 1px solid var(--border-2); border-radius: var(--r) var(--r) 0 0;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.12);
+    padding: 8px 16px calc(16px + env(safe-area-inset-bottom));
+    max-height: 70vh; overflow-y: auto; animation: sheetUp 0.25s ease both;
+}
+@keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.switch-sheet-handle { width: 36px; height: 4px; border-radius: var(--r-pill); background: var(--border-2); margin: 0 auto 12px; }
+.switch-sheet-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.switch-sheet-btn {
+    width: 100%; min-height: 44px; padding: 0 14px; display: flex; align-items: center; gap: 8px;
+    border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); color: var(--fg);
+    font-family: var(--mono); font-size: 13px; text-align: left; cursor: pointer;
+}
+.switch-sheet-btn:disabled, .switch-sheet-item--current .switch-sheet-btn {
+    background: var(--accent-bg); border-color: var(--accent-dim); color: var(--accent-2); font-weight: 600;
+}
+.switch-sheet-btn:not(:disabled):active { background: var(--surface-2); }
+.switch-sheet-btn:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .switch-sheet { animation: none; } }
