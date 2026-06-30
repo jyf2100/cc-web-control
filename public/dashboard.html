@@ -20,19 +20,26 @@
                 <img class="app-logo" src="logo.png" alt="Roc-CC" width="24" height="24" onerror="this.hidden=true;">
                 <span id="title">CC 看板</span>
             </div>
-            <div class="header-actions">
-                <nav class="nav">
-                    <a class="nav-link" href="/">控制台</a>
-                    <a class="nav-link cur" href="/dashboard.html">看板</a>
-                    <a class="nav-link" href="/login">登录</a>
-                </nav>
-            </div>
         </header>
         <main class="main">
+            <h1 class="visually-hidden">CC 看板</h1>
             <ul id="sessionList" class="session-list" aria-label="会话列表"></ul>
             <div id="stateMessage" class="state-message" hidden></div>
         </main>
+
+        <nav class="bottom-tabbar" aria-label="主导航">
+            <a class="tab" href="/"><span class="tab-icon" aria-hidden="true">▤</span><span class="tab-label">控制台</span></a>
+            <a class="tab tab--active" href="/dashboard.html" aria-current="page"><span class="tab-icon" aria-hidden="true">◫</span><span class="tab-label">看板</span></a>
+            <button class="tab" type="button" id="switchTab" aria-haspopup="dialog" aria-expanded="false"><span class="tab-icon" aria-hidden="true">⇄</span><span class="tab-label">切换</span></button>
+        </nav>
     </div>
+    <script>
+        // 看板页「切换」tab:写跨页标志后跳控制台,由控制台 init 检测并打开抽屉
+        document.getElementById('switchTab').addEventListener('click', () => {
+            sessionStorage.setItem('openSwitchSheet', '1');
+            window.location.href = '/';
+        });
+    </script>
     <script src="dashboard_render.cjs"></script>
     <script src="dashboard.js"></script>
 </body>
