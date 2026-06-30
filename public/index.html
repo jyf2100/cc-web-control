@@ -15,59 +15,62 @@
 </head>
 <body>
     <div id="app">
-        <!-- 顶部导航 -->
-        <header class="header">
-            <div class="brand-row">
-                <span class="brand" aria-label="Roc-CC Remote Control">
-                    <span class="brand-mark brand-mark--sm" aria-hidden="true"></span>
-                    <span class="brand-name">Roc-CC</span>
-                    <span class="brand-ver">v2.4</span>
-                </span>
-                <span id="liveIndicator" class="live-dot" role="status" aria-live="polite">
-                    <span class="live-dot-pulse" aria-hidden="true"></span>
-                    <span class="live-dot-text">未连接</span>
-                </span>
-            </div>
-            <div class="meta-bar" role="group" aria-label="会话信息">
-                <span class="meta-label">project</span>
-                <span id="metaProject" class="meta-val">—</span>
-                <span class="meta-sep" aria-hidden="true">·</span>
-                <span class="meta-label">s</span><span id="metaSession" class="meta-val">—</span>
-                <button id="switchToggle" class="swap-btn" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="switchSheet">切换 <span aria-hidden="true">⌄</span></button>
-            </div>
-            <nav class="nav" aria-label="主导航">
-                <a class="nav-link cur" href="/" aria-current="page">控制台</a>
-                <a class="nav-link" href="/dashboard.html">看板</a>
-                <a class="nav-link" href="/login">登录</a>
-            </nav>
+        <!-- 控制台卡片容器:header + main 同宽对齐,治「空挂」 -->
+        <div class="console-card">
+            <!-- 顶部导航:桌面单行等高 -->
+            <header class="header header--single">
+                <div class="header-left">
+                    <span class="brand" aria-label="Roc-CC Remote Control">
+                        <span class="brand-mark brand-mark--sm" aria-hidden="true"></span>
+                        <span class="brand-name">Roc-CC</span>
+                    </span>
+                    <span id="liveIndicator" class="live-dot" role="status" aria-live="polite">
+                        <span class="live-dot-pulse" aria-hidden="true"></span>
+                        <span class="live-dot-text">未连接</span>
+                    </span>
+                    <span class="meta-inline" role="group" aria-label="会话信息">
+                        <span class="meta-label">project</span>
+                        <span id="metaProject" class="meta-val">—</span>
+                        <span class="meta-sep" aria-hidden="true">·</span>
+                        <span class="meta-label">s</span><span id="metaSession" class="meta-val">—</span>
+                    </span>
+                </div>
+                <div class="header-right">
+                    <div class="header-actions" id="desktopControls">
+                        <div class="controls">
+                            <label class="control"><span class="control-label">Session</span><select id="sessionSelect" class="control-input"></select></label>
+                            <button id="refreshSessions" class="btn" type="button">刷新</button>
+                            <label id="projectControl" class="control"><span class="control-label">Project</span><select id="projectSelect" class="control-input"></select></label>
+                            <p id="projectsEmpty" class="projects-empty" hidden></p>
+                            <button id="startProject" class="btn" type="button">启动</button>
+                        </div>
+                    </div>
+                    <nav class="nav" aria-label="主导航">
+                        <a class="nav-link cur" href="/" aria-current="page">控制台</a>
+                        <a class="nav-link" href="/dashboard.html">看板</a>
+                        <a class="nav-link nav-link--login" href="/login">登录</a>
+                    </nav>
+                    <button id="switchToggle" class="swap-btn" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="switchSheet">切换 <span aria-hidden="true">⌄</span></button>
+                </div>
+            </header>
             <!-- 切换 sheet 容器(switch_sheet.cjs createSwitchSheet 创建 backdrop+sheet 挂 body;此 #switchSheet 仅作 aria-controls 锚点) -->
             <div id="switchSheet" hidden></div>
-            <div class="header-actions" id="desktopControls">
-                <div class="controls">
-                    <label class="control"><span class="control-label">Session</span><select id="sessionSelect" class="control-input"></select></label>
-                    <button id="refreshSessions" class="btn" type="button">刷新</button>
-                    <label id="projectControl" class="control"><span class="control-label">Project</span><select id="projectSelect" class="control-input"></select></label>
-                    <p id="projectsEmpty" class="projects-empty" hidden></p>
-                    <button id="startProject" class="btn" type="button">启动</button>
-                </div>
-            </div>
-        </header>
-
-        <!-- 主内容区 -->
-        <main class="main">
-            <!-- 对话区域 -->
-            <div id="chatContainer" class="chat-container">
-                <div id="messages" class="messages">
-                    <div class="welcome-message">
-                        <p class="eyebrow">[ ready ] · <span class="eyebrow-id">s:0n</span></p>
-                        <h2>Roc-CC Remote Control</h2>
-                        <p>终端输出会实时镜像，直接在终端面板底部输入并回车发送</p>
+            <!-- 主内容区 -->
+            <main class="main">
+                <!-- 对话区域 -->
+                <div id="chatContainer" class="chat-container">
+                    <div id="messages" class="messages">
+                        <div class="welcome-message">
+                            <p class="eyebrow">[ ready ] · <span class="eyebrow-id">s:0n</span></p>
+                            <h2>Roc-CC Remote Control</h2>
+                            <p>终端输出会实时镜像，直接在终端面板底部输入并回车发送</p>
+                        </div>
                     </div>
                 </div>
-            </div>
-            <!-- Toast 通知容器 -->
-            <div id="toast-container" aria-label="通知" aria-live="polite" role="status"></div>
-        </main>
+                <!-- Toast 通知容器 -->
+                <div id="toast-container" aria-label="通知" aria-live="polite" role="status"></div>
+            </main>
+        </div>
     </div>
 
     <script src="terminal_cleaner.cjs"></script>

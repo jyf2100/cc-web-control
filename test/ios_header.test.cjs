@@ -8,12 +8,12 @@ const readCss = () => fs.readFileSync(`${P}/style.css`, 'utf8');
 const readClient = () => fs.readFileSync(`${P}/client.js`, 'utf8');
 const readMulti = () => fs.readFileSync(`${P}/modules/multi_line_input.js`, 'utf8');
 
-test('index.html header: brand-row + brand-mark--sm + brand-name + brand-ver', () => {
+test('index.html header: brand 区 + brand-mark--sm + brand-name,无 brand-ver', () => {
     const h = readHtml();
-    assert.ok(h.includes('class="brand-row"'));
+    assert.ok(h.includes('class="brand"') || h.includes('class="header-left"'), 'header 有 brand 区');
     assert.ok(h.includes('class="brand-mark brand-mark--sm"'));
     assert.ok(h.includes('class="brand-name"'));
-    assert.ok(h.includes('class="brand-ver"'));
+    assert.ok(!h.includes('class="brand-ver"'), 'brand-ver v2.4 应删除');
 });
 
 test('index.html header: live-dot role=status + aria-live polite + pulse + text', () => {
@@ -25,12 +25,11 @@ test('index.html header: live-dot role=status + aria-live polite + pulse + text'
     assert.ok(h.includes('class="live-dot-text"'));
 });
 
-test('index.html header: meta-bar role=group + labels + metaProject/metaSession + sep', () => {
+test('index.html header: project/session meta 元素齐全(metaProject/metaSession/meta-label/meta-sep)', () => {
     const h = readHtml();
-    assert.ok(h.includes('class="meta-bar" role="group"'));
-    assert.ok(h.includes('class="meta-label"'));
     assert.ok(h.includes('id="metaProject"'));
     assert.ok(h.includes('id="metaSession"'));
+    assert.ok(h.includes('class="meta-label"'));
     assert.ok(h.includes('class="meta-sep"'));
 });
 
@@ -185,4 +184,49 @@ test('client.js: cachedProjects 缓存 + switch_sheet 注入 projects/onLaunch',
     // onLaunch 应写回 projectSelect.value 并复用 startProjectSession
     assert.ok(/onLaunch[\s\S]*projectSelect\.value\s*=/.test(js), 'onLaunch 应写回 projectSelect.value');
     assert.ok(/onLaunch[\s\S]*startProjectSession\(\)/.test(js), 'onLaunch 应复用 startProjectSession');
+});
+
+test('index.html: .console-card 卡片包裹 header + main', () => {
+    const h = readHtml();
+    assert.ok(h.includes('class="console-card"'), '应有 .console-card 包裹容器');
+    const cardStart = h.indexOf('class="console-card"');
+    const cardOpen = h.lastIndexOf('<div', cardStart);
+    const headerIdx = h.indexOf('<header', cardStart);
+    const mainIdx = h.indexOf('class="main"', cardStart);
+    assert.ok(headerIdx > cardOpen, 'header 在 console-card 内');
+    assert.ok(mainIdx > cardOpen, 'main 在 console-card 内');
+});
+
+test('index.html header: 单行结构 header-left + header-right', () => {
+    const h = readHtml();
+    assert.ok(h.includes('class="header-left"'));
+    assert.ok(h.includes('class="header-right"'));
+});
+
+test('style.css: .console-card 限宽 1100 + 阴影 + 圆角', () => {
+    const css = readCss();
+    const block = css.match(/\.console-card\s*\{[^}]*\}/);
+    assert.ok(block, '应有 .console-card 规则');
+    assert.ok(/max-width:\s*1100px/.test(block[0]));
+    assert.ok(/box-shadow:\s*var\(--shadow-card\)/.test(block[0]));
+    assert.ok(/border-radius:\s*var\(--r\)/.test(block[0]));
+});
+
+test('style.css: header 单行 flex-direction row', () => {
+    const css = readCss();
+    const block = css.match(/\.header\s*\{[^}]*\}/);
+    assert.ok(block && /flex-direction:\s*row/.test(block[0]), 'header 应为单行(row)');
+});
+
+test('style.css: .terminal-view 去外框(无 border,纳入卡片)', () => {
+    const css = readCss();
+    const block = css.match(/\.terminal-view\s*\{[^}]*\}/);
+    assert.ok(block && /border:\s*none/.test(block[0]), 'terminal-view 应 border:none(卡片已有边框)');
+});
+
+test('style.css: welcome-message p 去 serif(用 sans)', () => {
+    const css = readCss();
+    const block = css.match(/\.welcome-message\s+p\s*\{[^}]*\}/);
+    assert.ok(block && /font-family:\s*var\(--sans\)/.test(block[0]), 'welcome p 应用 sans(终端页字体收敛)');
+    assert.ok(block && !/var\(--serif\)/.test(block[0]), 'welcome p 不应再用 serif');
 });

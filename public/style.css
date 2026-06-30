@@ -28,41 +28,52 @@ html, body {
     min-height: 0;
 }
 
-/* ── header:brand 行 + meta bar 两行结构(375px 重排) ── */
-.header {
-    display: flex; flex-direction: column; flex-shrink: 0;
-    padding: max(8px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left));
-    background-color: var(--surface); border-bottom: 1px solid var(--border);
+/* ── 控制台卡片容器:header+main 同宽对齐,治「空挂」── */
+.console-card {
+    width: 100%;
+    max-width: 1100px;
+    margin: 0 auto;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    box-shadow: var(--shadow-card);
+    overflow: hidden;
 }
-.brand-row {
-    display: flex; align-items: center; justify-content: space-between;
-    gap: 10px; padding: 4px 0 8px;
-}
-.logo {
-    display: flex; align-items: center; gap: 9px;
-    font-size: 16px; font-weight: 600; letter-spacing: -0.015em; color: var(--fg);
-}
-.logo .app-logo { display: none; }   /* logo.png 不再 UI 内显示,brand mark ◇ 替代 */
-.logo .brand-mark, .logo svg { color: var(--accent); }
-.header-actions { display: flex; align-items: center; gap: 12px; }
 
-/* meta bar:mono 11px,label(--fg-3)+val(--fg)+sep(--border-2) */
-.meta-bar {
-    display: flex; align-items: center; gap: 8px; padding: 8px 0;
-    border-top: 1px solid var(--border);
-    font-family: var(--mono); font-size: 11px; color: var(--fg-2); overflow: hidden;
+/* ── header:桌面单行等高(治「高高低低」);移动/中屏折叠见 Task 6 断点 ── */
+.header {
+    display: flex; flex-direction: row; align-items: center; justify-content: space-between;
+    gap: 12px; flex-shrink: 0;
+    padding: 8px max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left));
+    padding-top: max(8px, env(safe-area-inset-top));
+    background-color: var(--surface-2); border-bottom: 1px solid var(--border);
 }
-.meta-bar .meta-label { color: var(--fg-3); flex-shrink: 0; }
-.meta-bar .meta-val { color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-#metaProject.meta-val { flex: 1; }
-.meta-bar .meta-sep { color: var(--border-2); flex-shrink: 0; }
-.meta-bar .swap-btn {
-    margin-left: auto; flex-shrink: 0; min-height: 44px; padding: 0 12px;
+.header-left, .header-right { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.brand { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; font-size: 15px; font-weight: 600; color: var(--fg); }
+.brand-name { letter-spacing: -0.015em; }
+.header-actions { display: flex; align-items: center; gap: 8px; }
+
+/* meta:并入单行的等高 mono 信息行(WCAG:meta-label 用 fg-2 达 AA,守 tokens 契约) */
+.meta-inline {
+    display: inline-flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden;
+    font-family: var(--mono); font-size: 11px; color: var(--fg-2);
+}
+.meta-inline .meta-label { color: var(--fg-2); flex-shrink: 0; }
+.meta-inline .meta-val { color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.meta-inline .meta-sep { color: var(--border-2); flex-shrink: 0; }
+
+/* swap-btn(切换抽屉入口):移入 header-right,断点显隐见 Task 6 */
+.swap-btn {
+    flex-shrink: 0; min-height: 44px; padding: 0 12px;
     border: 1px solid var(--accent-dim); border-radius: var(--r-pill);
     background: var(--accent-bg); color: var(--accent-2);
     font-family: var(--mono); font-size: 11px; cursor: pointer;
 }
-.meta-bar .swap-btn:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+.swap-btn:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
 
 /* live 点 */
 .live-dot { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; color: var(--accent-2); }
@@ -139,8 +150,8 @@ html, body {
 }
 
 .messages {
-    max-width: 1100px;
-    margin: 0 auto;
+    flex: 1;
+    margin: 0;
     padding: 20px;
 }
 
@@ -148,14 +159,14 @@ html, body {
 .welcome-message .eyebrow { display: block; margin-bottom: 12px; }
 .welcome-message h2 { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; color: var(--fg); margin-bottom: 12px; }
 .welcome-message p {
-    font-family: var(--serif); font-size: 15px; line-height: 1.65; color: var(--fg-2);
+    font-family: var(--sans); font-size: 14px; line-height: 1.6; color: var(--fg-2);
     max-width: 340px; margin: 0 auto;
 }
 
 .terminal-view {
-    width: 100%; border: 1px solid var(--border); border-radius: var(--r); overflow: hidden;
+    width: 100%; border: none; border-radius: 0; overflow: hidden;
     background-color: var(--surface); display: flex; flex-direction: column;
-    min-height: 420px; max-height: calc(100dvh - 130px);
+    flex: 1; min-height: 0;
 }
 .terminal-header {
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
