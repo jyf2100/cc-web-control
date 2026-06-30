@@ -1,221 +1,80 @@
 /**
- * CC 看板样式(独立于终端控制台,消费 tokens.css 令牌)
+ * CC 看板样式(editorial 重设计,消费 tokens.css 令牌 + 组件区)。
+ * 设计依据:2026-06-29-ios-editorial-redesign-design.md §7.2 / §6。
+ * 注:.nav/.nav-link 本文件保留(dashboard.html 不引 style.css,合并会裸奔)。
  */
-
 @import url('tokens.css');
 
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
+* { margin: 0; padding: 0; box-sizing: border-box; }
 html, body {
-    width: 100%;
-    height: 100%;
-    font-family: var(--sans);
-    font-size: 14px;
-    background-color: var(--bg);
-    color: var(--fg);
+    width: 100%; height: 100%; font-family: var(--sans); font-size: 14px;
+    background-color: var(--bg); color: var(--fg);
 }
-
-#app {
-    display: flex;
-    flex-direction: column;
-    height: 100vh;      /* 旧浏览器兜底 */
-    height: 100dvh;     /* iOS 15.4+ 动态视口 */
-}
+#app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
 
 .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    display: flex; justify-content: space-between; align-items: center;
     padding: max(12px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
-    background-color: var(--surface);
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
+    background-color: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0;
 }
+.logo { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 600; color: var(--fg); }
+.logo .app-logo { width: 24px; height: 24px; border-radius: 6px; object-fit: cover; }
+.header-actions { display: flex; align-items: center; gap: 12px; }
 
-.logo {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 16px;
-    font-weight: 600;
-}
-
-.logo .app-logo {
-    width: 24px;
-    height: 24px;
-    border-radius: 6px;
-    object-fit: cover;
-}
-
-.header-actions {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-/* 统一胶囊导航(与 style.css 共用,DRY 违反待 P3 components.css 合并) */
-.nav {
-    display: flex;
-    gap: 2px;
-    background: var(--surface-2);
-    border-radius: var(--r-sm);
-    padding: 3px;
-}
-
+/* nav 保留(单一来源在本文件,触摸 44pt + :focus-visible) */
+.nav { display: flex; gap: 2px; background: var(--surface-2); border-radius: var(--r-pill); padding: 3px; }
 .nav-link {
-    font-size: 12px;
-    padding: 6px 12px;
-    border-radius: 6px;
-    text-decoration: none;
-    color: var(--fg-2);
+    font-size: 12px; min-height: 44px; padding: 6px 14px; border-radius: var(--r-pill);
+    text-decoration: none; color: var(--fg-2); display: inline-flex; align-items: center;
+}
+.nav-link.cur { background: var(--bg); color: var(--fg); font-weight: 600; }
+.nav-link:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+
+.main { flex: 1; overflow-y: auto; padding: 16px 20px; }
+.session-list { list-style: none; display: flex; flex-direction: column; gap: 9px; }
+
+/* 会话卡片:§7.2:210 + §6:172 */
+.session {
+    position: relative; display: flex; align-items: center; gap: 11px; padding: 13px 14px;
+    background-color: var(--surface); border: 1px solid var(--border); border-radius: var(--r);
+    min-height: 44px; cursor: pointer; transition: border-color 0.15s ease;
+}
+.session:hover { border-color: var(--border-2); }
+.session:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+.session:active { background-color: var(--surface-2); }
+
+/* waiting 高亮:§7.2:212(--accent-bg 轻底 + inset 3px 左边框 var(--waiting)) */
+.session.waiting {
+    background-color: var(--accent-bg); border-color: var(--accent-dim);
+    box-shadow: inset 3px 0 0 var(--waiting);
 }
 
-.nav-link.cur {
-    background: var(--bg);
-    color: var(--fg);
-    font-weight: 600;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+/* .s-dot 几何在 tokens.css 组件区;此处仅 waiting 脉冲(自带 reduced-motion 降级,§9:254) */
+.session.waiting .s-dot--waiting {
+    background: var(--waiting); box-shadow: 0 0 0 4px rgba(192, 133, 50, 0.15);
+    animation: dash-dot-pulse 1.6s ease-in-out infinite;
 }
+@keyframes dash-dot-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+@media (prefers-reduced-motion: reduce) { .session.waiting .s-dot--waiting { animation: none; } }
 
-.main {
-    flex: 1;
-    overflow-y: auto;
-    padding: 16px 20px;
+.s-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.s-name {
+    font-family: var(--sans); font-weight: 600; font-size: 14px; color: var(--fg);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-
-.session-list {
-    list-style: none;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+.s-meta {
+    font-family: var(--mono); font-size: 11px; color: var(--fg-3);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.s-status { flex-shrink: 0; }
+.s-id { font-family: var(--mono); font-size: 10px; color: var(--fg-3); flex-shrink: 0; }
 
-.session-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 14px;
-    background-color: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r-sm);
-    cursor: pointer;
-}
+/* 空状态:§7.2:214 serif lede + eyebrow */
+.state-message { padding: 56px 24px; text-align: center; }
+.state-message .eyebrow { margin-bottom: 14px; }
+.state-message .lede { font-family: var(--serif); font-size: 14.5px; line-height: 1.65; color: var(--fg-2); }
 
-.session-row:hover {
-    border-color: var(--accent-2);
-}
-
-.session-row:focus-visible {
-    outline: 2px solid var(--accent-2);
-    outline-offset: 2px;
-}
-
-/* 徽章 5 状态(琥珀优先注意,三重编码:背景色 + 图标 + 文字)。badge 大色块将由状态点方案取代(见 spec §6/§7.2) */
-.badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    font-weight: 600;
-    padding: 4px 10px;
-    border-radius: 12px;
-    white-space: nowrap;
-    flex-shrink: 0;
-}
-
-.badge--waiting { background-color: #fef3c7; color: #7c2d12; }
-.badge--errored { background-color: #fee2e2; color: #991b1b; }
-.badge--working { background-color: #faf0e3; color: #7a5a3a; }
-.badge--idle    { background-color: #f3f4f6; color: #4b5563; }
-.badge--unknown { background-color: transparent; color: #9ca3af; border: 1px dashed #ccc; }
-
-/* waiting 脉冲优先注意,尊重 reduced-motion */
-.badge--waiting .badge-dot {
-    animation: dash-pulse 1.6s ease-in-out infinite;
-}
-
-@keyframes dash-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.35; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .badge--waiting .badge-dot {
-        animation: none;
-    }
-}
-
-.session-main {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-    flex: 1;
-}
-
-.session-name {
-    font-weight: 600;
-    font-size: 14px;
-    color: var(--fg);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.session-meta {
-    font-size: 12px;
-    color: var(--fg-2);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.session-preview {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-    flex: 2;
-    color: var(--fg-2);
-    font-size: 13px;
-    overflow: hidden;
-}
-
-.session-preview .arrow {
-    color: var(--fg-2);
-    flex-shrink: 0;
-}
-
-.session-preview .text {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.state-message {
-    padding: 40px 20px;
-    text-align: center;
-    color: var(--fg-2);
-    font-size: 14px;
-}
-
-.state-message strong {
-    display: block;
-    color: var(--fg);
-    font-size: 16px;
-    margin-bottom: 6px;
-}
-
-/* 移动端 <640px:折叠末行预览,行可换行 */
 @media (max-width: 640px) {
-    .session-preview {
-        display: none;
-    }
-    .session-row {
-        flex-wrap: wrap;
-    }
+    .s-id { display: none; }
+    .session { flex-wrap: wrap; }
 }
