@@ -43,3 +43,62 @@
   color-scheme: light;
 }
 /* 纯浅色:不提供深色 media 查询(见 spec §方向) */
+
+/* ============================================================
+ * 组件区(三页共用,靠 style.css / dashboard.css 的 @import tokens.css 自动带载)
+ * 设计依据:spec §6。零 HTML 改动。
+ * ============================================================ */
+
+/* brand mark:◇ 旋转方块,::before 描边(--accent-2 达 AA)+ ::after 实心(--accent 装饰) */
+.brand-mark { position: relative; display: inline-block; flex-shrink: 0; }
+.brand-mark--sm { width: 16px; height: 16px; }
+.brand-mark--md { width: 24px; height: 24px; }
+.brand-mark--lg { width: 30px; height: 30px; }
+.brand-mark::before {
+  content: ''; position: absolute; inset: 0;
+  border: 1.5px solid var(--accent-2); transform: rotate(45deg);
+}
+.brand-mark--md::before { border-width: 2px; }
+.brand-mark--lg::before { border-width: 2.75px; }
+.brand-mark::after {
+  content: ''; position: absolute; inset: 4px;
+  background: var(--accent); transform: rotate(45deg);
+}
+
+/* 按钮 */
+.btn-primary {
+  min-height: 44px; padding: 0 16px;
+  border: 1px solid var(--accent-2); border-radius: var(--r);
+  background: var(--accent-2); color: #ffffff;
+  font-family: var(--sans); font-size: 14px; cursor: pointer;
+}
+.btn-primary:hover { filter: brightness(1.05); }
+.btn-primary:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+.btn-ghost {
+  min-height: 44px; padding: 0 14px;
+  border: 1px solid var(--accent-dim); border-radius: var(--r);
+  background: transparent; color: var(--accent-2);
+  font-family: var(--sans); font-size: 14px; cursor: pointer;
+}
+.btn-ghost:hover { background: var(--accent-bg); }
+.btn-ghost:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+
+/* 状态点系统(spec §6 双编码):.s-dot 色点(冗余)+ .s-status 文字(主通道) */
+.s-dot {
+  width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; background: var(--idle);
+}
+.s-dot--waiting { background: var(--waiting); }
+.s-dot--working { background: var(--working); }
+.s-dot--errored { background: var(--errored); }
+.s-dot--idle    { background: var(--idle); }
+.s-dot--unknown { background: transparent; border: 1px dashed var(--fg-3); }
+.s-status {
+  font-family: var(--mono); font-size: 10px; color: var(--fg-2); /* 不染色,文字靠内容承载语义 */
+  letter-spacing: 0.02em; flex-shrink: 0;
+}
+
+/* eyebrow:mono · --accent-2(达 AA,非 --accent)· letter-spacing */
+.eyebrow {
+  font-family: var(--mono); font-size: 11px; color: var(--accent-2);
+  letter-spacing: 0.04em; text-transform: lowercase;
+}
