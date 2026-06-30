@@ -1,5 +1,7 @@
 # iOS 手机支持 设计文档
 
+> ⚠️ **部分作废:** 本 spec 中的「badge 深色变体」与「深色 badge/waiting 视觉」MVP-1 项,已被 [`2026-06-29-ios-editorial-redesign-design.md`](./2026-06-29-ios-editorial-redesign-design.md) **砍深色 + 废 badge** 双重取代,在此声明作废。其余 iOS 适配项(viewport/safe-area/PWA/止损键/快速回复)仍有效。
+
 > **状态:** 已评审修订(工程/设计/产品三方评审,7/10、6/10、6/10)。实施计划见 `docs/superpowers/plans/2026-06-28-ios-mobile-support.md`,已按评审重排为 MVP-0/1/2,修 4 硬伤,纳入 4 个真需求(快捷回复、Esc/Ctrl+C 止损、等待 title 提示、WS 退避)。
 
 ## 背景与目标

@@ -1,14 +1,10 @@
 /**
  * 多会话看板:tmux 会话名 ↔ claude JSONL sessionId 绑定(M9)
  *
- * 背景:同 cwd 的多个 tmux 会话都跑 claude 时,看板无法只靠 mtime
- * 区分各自状态(都指向同目录最新 jsonl)。解决方案:startClaudeInSession
- * 在 forceNew 时预生成 UUID(createSessionBinding),既 writeBinding 写绑定文件,
- * 又通过 CC_WEB_CLAUDE_SESSION_ID 让 claude --session-id 用同一 UUID,
- * 于是 jsonl 文件名 = 该 UUID,listSessions 回填后看板精确定位。
- *
- * 旧方案曾用 wrapper 后台子 shell 监听新 jsonl 文件名,但真实环境该后台进程
- * 不可靠(未捕获),故改为 node 端预生成 + claude --session-id,彻底消除时序竞态。
+ * 历史:旧流程曾由 startClaudeInSession 在 forceNew 时预生成 UUID 并写绑定,
+ * 让 jsonl 文件名 = 该 UUID,listSessions 回填后看板精确定位。新流程(Task 3)
+ * 改走续接优先(shouldContinue),不再预生成/写绑定;遗留的陈旧绑定由
+ * migrateStaleBindings 在启动时一次性清理(sid 在 slug 目录下无同名 jsonl 即删)。
  *
  * 所有操作容错:失败不抛(看板降级 unknown/mtime,详见 dashboard_cache)。
  */
@@ -16,8 +12,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const crypto = require('crypto');
-const { cwdToSlug } = require('./dashboard_slug.cjs');
+const { cwdToSlug, listProjectJsonls } = require('./dashboard_slug.cjs');
 
 const DEFAULT_PROJECTS_DIR = path.join(os.homedir(), '.claude', 'projects');
 const BINDING_DIRNAME = '.cc-web-bindings';
@@ -58,16 +53,46 @@ function deleteBinding(slug, tmuxName, projectsDir) {
 }
 
 /**
- * 为新建的 tmux 会话预生成 claude session id 并写绑定。
- * 返回 { slug, sessionId } 供调用方 export 给 wrapper(claude --session-id)。
- * cwd 无效或无 sessionName → 返回 null(不写绑定,看板降级 mtime)。
+ * 启动时一次性迁移:扫描 <projectsDir>/<slug>/.cc-web-bindings/ 下所有绑定文件,
+ * 校验其 sid 在该 slug 目录顶层是否有同名 <sid>.jsonl,无则删除。
+ * 陈旧 sid 会让 listSessions readBinding 回填错误,看板错位。新流程不再写绑定。
+ * @param {string} [projectsDir] 默认 ~/.claude/projects;测试传 tmpDir 隔离
+ * @returns {Array<{slug:string, tmuxName:string, sid:string}>} 被删绑定(日志用)
  */
-function createSessionBinding({ cwd, sessionName, projectsDir } = {}) {
-  const slug = cwd ? cwdToSlug(cwd) : null;
-  if (!slug || !sessionName) return null;
-  const sessionId = crypto.randomUUID();
-  writeBinding(slug, sessionName, sessionId, projectsDir);
-  return { slug, sessionId };
+function migrateStaleBindings(projectsDir = DEFAULT_PROJECTS_DIR) {
+  const removed = [];
+  let slugs;
+  try {
+    slugs = fs.readdirSync(projectsDir, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && !e.name.startsWith('.'));
+  } catch {
+    return removed;
+  }
+  for (const slugEntry of slugs) {
+    const slug = slugEntry.name;
+    const slugDir = path.join(projectsDir, slug);
+    const bindingDir = path.join(slugDir, BINDING_DIRNAME);
+    let bindingNames;
+    try {
+      bindingNames = fs.readdirSync(bindingDir, { withFileTypes: true })
+        .filter((e) => e.isFile())
+        .map((e) => e.name);
+    } catch {
+      continue;
+    }
+    if (bindingNames.length === 0) continue;
+    const jsonlSet = new Set(
+      listProjectJsonls(slugDir).map((f) => path.basename(f))
+    );
+    for (const tmuxName of bindingNames) {
+      const sid = readBinding(slug, tmuxName, projectsDir);
+      if (!sid) continue;
+      if (jsonlSet.has(`${sid}.jsonl`)) continue;
+      deleteBinding(slug, tmuxName, projectsDir);
+      removed.push({ slug, tmuxName, sid });
+    }
+  }
+  return removed;
 }
 
-module.exports = { readBinding, writeBinding, deleteBinding, createSessionBinding, BINDING_DIRNAME };
+module.exports = { readBinding, writeBinding, deleteBinding, migrateStaleBindings, BINDING_DIRNAME };

@@ -10,98 +10,69 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Roc-CC">
-  <meta name="theme-color" content="#1c1815">
+  <meta name="theme-color" content="#f2f1ed">
   <link rel="stylesheet" href="tokens.css">
   <style>
-    /* 极简登录页样式,消费 tokens.css 令牌(方向 A 琥珀精修) */
     * { box-sizing: border-box; }
     body {
-      margin: 0;
-      min-height: 100vh;
-      min-height: 100dvh;
-      display: grid;
-      place-items: center;
-      padding: 24px;
-      font-family: var(--font);
-      background-color: var(--bg);
-      color: var(--text);
+      margin: 0; min-height: 100vh; min-height: 100dvh;
+      display: grid; place-items: center; padding: 24px;
+      padding-left: max(24px, env(safe-area-inset-left));
+      padding-right: max(24px, env(safe-area-inset-right));
+      padding-bottom: max(24px, env(safe-area-inset-bottom));
+      font-family: var(--sans); background-color: var(--bg); color: var(--fg);
+      -webkit-font-smoothing: antialiased;
     }
-    .logo-mark {
-      width: 44px;
-      height: 44px;
-      border-radius: var(--r);
-      background: var(--brand);
-      color: #ffffff;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-family: var(--mono);
-      font-weight: 700;
-      font-size: 18px;
-      margin: 0 auto 18px;
+    .login-card { width: 100%; max-width: 330px; text-align: left; }
+    .l-eyebrow { font-family: var(--mono); font-size: 11px; color: var(--accent-2); letter-spacing: 0.04em; margin: 0 0 14px; }
+    .brand-row { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+    .brand-name { font-size: 16px; font-weight: 600; letter-spacing: -0.015em; color: var(--fg); }
+    .brand-ver { font-family: var(--mono); font-size: 10px; color: var(--fg-3); margin-left: 2px; }
+    h1 { margin: 0 0 10px; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; color: var(--fg); }
+    .lede { font-family: var(--serif); font-size: 14.5px; line-height: 1.65; color: var(--fg-2); margin: 0 0 24px; }
+    .field-label { display: block; font-family: var(--mono); font-size: 10px; color: var(--fg-3); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 7px; }
+    .token-input {
+      width: 100%; padding: 12px 14px; font-family: var(--mono); font-size: 16px;
+      background-color: var(--surface); border: 1px solid var(--border-2); border-radius: var(--r);
+      color: var(--fg); letter-spacing: 0.06em; transition: box-shadow .15s ease, border-color .15s ease;
     }
-    .card {
-      width: 100%;
-      max-width: 440px;
-      padding: 32px 28px;
-      background-color: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--r-lg);
-    }
-    h1 { margin: 0 0 8px; font-size: 18px; font-weight: 600; color: var(--text); }
-    p { margin: 8px 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
-    label { display: block; margin-top: 16px; font-size: 13px; color: var(--muted); }
-    input {
-      width: 100%;
-      margin-top: 6px;
-      padding: 10px 12px;
-      border-radius: var(--r-sm);
-      border: 1px solid var(--border);
-      background-color: var(--bg);
-      color: var(--text);
-      font-size: 14px;
-      font-family: var(--font);
-      outline: none;
-    }
-    input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(212, 165, 116, 0.35); }
-    .row { margin-top: 18px; }
-    button {
-      width: 100%;
-      padding: 11px 12px;
-      border: none;
-      border-radius: var(--r-sm);
-      background: var(--brand);
-      color: #ffffff;
-      font-size: 14px;
-      font-weight: 600;
-      font-family: var(--font);
-      cursor: pointer;
-    }
-    button:hover { background: var(--brand-strong); }
-    .hint { font-size: 12px; }
-    .error { margin-top: 12px; font-size: 13px; color: var(--errored); }
-    @media (max-width: 480px) {
-      .card { padding: 24px 18px; }
-    }
+    .token-input::placeholder { color: var(--fg-3); }
+    .token-input:focus { border-color: var(--accent-dim); box-shadow: 0 0 0 3px var(--accent-dim); }
+    .token-input:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+    .login-actions { display: flex; gap: 8px; margin-top: 14px; }
+    .login-actions .btn-primary { flex: 1; }
+    .btn-ghost[aria-disabled="true"] { opacity: 0.45; pointer-events: none; }
+    .l-hint { margin: 22px 0 0; font-family: var(--mono); font-size: 10.5px; line-height: 1.7; color: var(--fg-3); }
+    .l-hint .k { color: var(--fg-2); }
+    @media (max-width: 480px) { .login-card { max-width: 100%; } }
   </style>
 </head>
 <body>
-  <div class="card">
-    <div class="logo-mark">cc</div>
-    <h1>Roc-CC Remote Control 登录</h1>
-    <p class="hint">此页面需要 <code>CC_WEB_AUTH_TOKEN</code>。请输入 token 以继续。</p>
-
-    <form method="POST" action="/login">
+  <main class="login-card">
+    <p class="l-eyebrow">[ login ] · v2.4</p>
+    <div class="brand-row">
+      <span class="brand-mark brand-mark--lg" aria-hidden="true"></span>
+      <span class="brand-name">Roc-CC</span>
+      <span class="brand-ver">v2.4</span>
+    </div>
+    <h1>Roc-CC Remote Control</h1>
+    <p class="lede">输入访问 token,连接你的 Claude Code 会话。</p>
+    <form method="POST" action="/login" novalidate>
       <input id="next" name="next" type="hidden" value="/" />
-      <label for="token">Token</label>
-      <input id="token" name="token" type="password" autocomplete="current-password" required />
-      <div class="row">
-        <button type="submit">登录</button>
+      <label class="field-label" for="token">access token</label>
+      <input id="token" name="token" class="token-input" type="password"
+        autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"
+        inputmode="text" enterkeyhint="go" placeholder="粘贴或输入 token" required />
+      <div class="login-actions">
+        <button class="btn-primary" type="submit">登录</button>
+        <button class="btn-ghost" id="pasteBtn" type="button" aria-label="从剪贴板粘贴 token">粘贴 token</button>
       </div>
     </form>
-
-    <p class="hint">注意：该服务可远程控制 tmux/Claude Code，请仅在可信设备与网络中使用，并妥善保管 token。</p>
-  </div>
+    <p class="l-hint">
+      <span class="k">CC_WEB_AUTH_TOKEN</span> · 此服务可远程控制 tmux / Claude Code,<br>
+      仅在可信设备与网络使用,妥善保管 token。
+    </p>
+  </main>
   <script>
     (function () {
       try {
@@ -111,7 +82,21 @@
           var el = document.getElementById('next');
           if (el) el.value = next;
         }
-      } catch {}
+      } catch (e) {}
+      var pasteBtn = document.getElementById('pasteBtn');
+      var tokenInput = document.getElementById('token');
+      if (pasteBtn && tokenInput) {
+        pasteBtn.addEventListener('click', function () {
+          if (!navigator.clipboard || typeof navigator.clipboard.readText !== 'function') {
+            pasteBtn.setAttribute('aria-disabled', 'true');
+            return;
+          }
+          navigator.clipboard.readText().then(function (text) {
+            var val = (text || '').trim();
+            if (val) { tokenInput.value = val; tokenInput.focus(); }
+          }).catch(function () { /* 静默:权限被拒或非安全上下文,用户手动粘贴 */ });
+        });
+      }
     })();
   </script>
 </body>

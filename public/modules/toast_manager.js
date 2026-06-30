@@ -34,8 +34,8 @@ export class ToastManager {
 
         const el = document.createElement('div');
         el.className = `toast toast-${type}`;
-        el.setAttribute('role', 'alert');
-        el.setAttribute('aria-live', 'assertive');
+        el.setAttribute('role', type === 'error' ? 'alert' : 'status');
+        el.setAttribute('aria-live', type === 'error' ? 'assertive' : 'polite');
         el.style.top = `${top}px`;
         el.style.width = `${this.#toastWidth}px`;
         el.style.height = `${height}px`;
