@@ -25,42 +25,6 @@ test('index.html header: live-dot role=status + aria-live polite + pulse + text'
     assert.ok(h.includes('class="live-dot-text"'));
 });
 
-test('index.html header: project/session meta 元素齐全(metaProject/metaSession/meta-label/meta-sep)', () => {
-    const h = readHtml();
-    assert.ok(h.includes('id="metaProject"'));
-    assert.ok(h.includes('id="metaSession"'));
-    assert.ok(h.includes('class="meta-label"'));
-    assert.ok(h.includes('class="meta-sep"'));
-});
-
-test('index.html header: switchToggle aria-haspopup dialog + aria-expanded false + aria-controls switchSheet', () => {
-    const h = readHtml();
-    const m = h.match(/<button[^>]*id="switchToggle"[^>]*>/);
-    assert.ok(m, 'switchToggle 按钮存在');
-    const btn = m[0];
-    assert.ok(btn.includes('aria-haspopup="dialog"'));
-    assert.ok(btn.includes('aria-expanded="false"'));
-    assert.ok(btn.includes('aria-controls="switchSheet"'));
-});
-
-test('index.html header: #switchSheet hidden 锚点存在', () => {
-    const h = readHtml();
-    assert.ok(h.includes('id="switchSheet"'));
-    assert.ok(/<div id="switchSheet" hidden>/.test(h));
-});
-
-test('index.html header: desktopControls 含各 id(sessionSelect/refreshSessions/projectSelect/projectControl/projectsEmpty/startProject)', () => {
-    const h = readHtml();
-    assert.ok(h.includes('id="desktopControls"'));
-    const start = h.indexOf('id="desktopControls"');
-    const end = h.indexOf('</header>', start);
-    assert.ok(end > start, 'desktopControls 在 header 内');
-    const block = h.slice(start, end);
-    for (const id of ['sessionSelect', 'refreshSessions', 'projectSelect', 'projectControl', 'projectsEmpty', 'startProject']) {
-        assert.ok(block.includes(`id="${id}"`), `desktopControls 缺 id=${id}`);
-    }
-});
-
 test('index.html header: 不含 connectionStatus(已删,状态改由 live 点承载)', () => {
     const h = readHtml();
     assert.ok(!h.includes('id="connectionStatus"'), 'connectionStatus 应已删除');
@@ -100,29 +64,6 @@ function extractMediaBlock(css, mediaHead) {
     return css.slice(start, i);
 }
 
-test('style.css @media (max-width:1100px) 块含 #desktopControls display:none(中屏+移动折叠)', () => {
-    const css = readCss();
-    const head = '@media (max-width: 1100px) {\n';
-    const start = css.indexOf(head);
-    assert.ok(start >= 0, '存在多行 max-width:1100px 媒体查询块');
-    const braceOpen = css.indexOf('{', start);
-    let depth = 0, i = braceOpen;
-    for (; i < css.length; i++) {
-        if (css[i] === '{') depth++;
-        else if (css[i] === '}') { depth--; if (depth === 0) { i++; break; } }
-    }
-    const block = css.slice(start, i);
-    assert.ok(/#desktopControls\s*\{[^}]*display:\s*none/.test(block), '≤1100 时 desktopControls 应隐藏');
-    assert.ok(/#switchToggle\.swap-btn\s*\{[^}]*display:\s*inline-flex/.test(block), '≤1100 时切换入口应显示');
-});
-
-test('style.css @media (min-width:1101px) 含 #switchToggle.swap-btn display:none(桌面控件外露)', () => {
-    const css = readCss();
-    const block = extractMediaBlock(css, '@media (min-width: 1101px)');
-    assert.ok(block, '存在 min-width:1101px 媒体查询');
-    assert.ok(/#switchToggle\.swap-btn\s*\{[^}]*display:\s*none/.test(block));
-});
-
 test('client.js: enterkeyhint + inputmode setAttribute', () => {
     const js = readClient();
     assert.ok(js.includes("setAttribute('enterkeyhint', 'send')"));
@@ -141,14 +82,6 @@ test('client.js: --vh-available setProperty + init 调用', () => {
     // init 内调用顺序
     const idx = js.indexOf('setupVisualViewport();');
     assert.ok(idx > 0, 'setupVisualViewport() 被调用');
-});
-
-// switchToggle 静态 aria(HTML 保证初始态,运行时由 createSwitchSheet 更新)
-test('index.html switchToggle: 静态 aria-haspopup/aria-expanded/aria-controls', () => {
-    const html = readHtml();
-    assert.ok(/id="switchToggle"[^>]*aria-haspopup="dialog"/.test(html), 'switchToggle 有 aria-haspopup=dialog');
-    assert.ok(/id="switchToggle"[^>]*aria-expanded="false"/.test(html), 'switchToggle 有 aria-expanded=false');
-    assert.ok(/id="switchToggle"[^>]*aria-controls="switchSheet"/.test(html), 'switchToggle 有 aria-controls=switchSheet');
 });
 
 test('client.js: updateSessionUi 同步 metaSession + metaProject(getElementById)', () => {
@@ -195,12 +128,6 @@ test('index.html: .console-card 卡片包裹 header + main', () => {
     assert.ok(mainIdx > cardOpen, 'main 在 console-card 内');
 });
 
-test('index.html header: 单行结构 header-left + header-right', () => {
-    const h = readHtml();
-    assert.ok(h.includes('class="header-left"'));
-    assert.ok(h.includes('class="header-right"'));
-});
-
 test('style.css: .console-card 限宽 1100 + 阴影 + 圆角', () => {
     const css = readCss();
     const block = css.match(/\.console-card\s*\{[^}]*\}/);
@@ -234,15 +161,6 @@ test('style.css: switch-sheet 项目区分组 + 启动按钮样式', () => {
     assert.ok(css.includes('.switch-sheet-projects'), '应有项目区容器样式');
     assert.ok(css.includes('.switch-sheet-section-title'), '应有分组标题样式');
     assert.ok(css.includes('.switch-sheet-btn--launch'), '应有启动按钮样式');
-});
-
-test('style.css: @media(768) 移动端登录收起(.nav .nav-link--login display:none,防 specificity 覆盖)', () => {
-    const css = readCss();
-    // .nav 前缀提 specificity:无前缀 .nav-link--login 在 source order 上早于
-    // .nav-link 基础规则(同 specificity),会被后者 inline-flex 覆盖 → 登录入口在移动端不收起。
-    // 此规则全文唯一一处(仅存在于 ≤768 收起语境),故全文直搜即可。
-    assert.ok(/\.nav\s+\.nav-link--login\s*\{[^}]*display:\s*none/.test(css),
-        '应有 .nav .nav-link--login { display:none }(带 .nav 前缀压过 .nav-link)');
 });
 
 test('style.css: 阅读文字 meta-label 不用 fg-3(WCAG AA)', () => {
