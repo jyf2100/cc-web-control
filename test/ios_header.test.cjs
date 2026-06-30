@@ -252,3 +252,62 @@ test('style.css: 阅读文字 meta-label 不用 fg-3(WCAG AA)', () => {
     assert.ok(!/var\(--fg-3\)/.test(block[0]), 'meta-label 不应用 fg-3(禁承载阅读文字)');
     assert.ok(/var\(--fg-2\)/.test(block[0]), 'meta-label 应用 fg-2(达 AA)');
 });
+
+// === 底部 tab 重构契约(2026-06-30 spec)===
+
+test('index.html header: 只有 header-left(无 header-right)', () => {
+    const h = readHtml();
+    assert.ok(h.includes('class="header-left"'), '应有 header-left');
+    assert.ok(!h.includes('class="header-right"'), 'header-right 应已删除(控件入抽屉)');
+});
+
+test('index.html header: 极简 session meta 只含 s(无 metaProject/meta-sep)', () => {
+    const h = readHtml();
+    assert.ok(h.includes('id="metaSession"'), '极简 session 标识 metaSession 存在');
+    assert.ok(h.includes('class="meta-label"'), 'meta-label 存在');
+    assert.ok(!h.includes('id="metaProject"'), 'header 不应再有 metaProject(project 入抽屉)');
+    assert.ok(!h.includes('class="meta-sep"'), 'header 不应再有 meta-sep(只剩 s)');
+});
+
+test('index.html: 无 #desktopControls / nav / #switchToggle / refreshSessions / 登录', () => {
+    const h = readHtml();
+    assert.ok(!h.includes('id="desktopControls"'), 'desktopControls 应已删除');
+    assert.ok(!h.includes('class="nav"'), 'header nav 应已删除(导航下沉底部 tab)');
+    assert.ok(!h.includes('id="switchToggle"'), 'switchToggle 应已删除(改 #switchTab)');
+    assert.ok(!h.includes('id="refreshSessions"'), 'refreshSessions 应已删除(onOpen 刷新)');
+    assert.ok(!/class="nav-link--login"/.test(h), '登录 nav-link 应已删除');
+});
+
+test('index.html: 隐藏 #stateCarriers 含原控件 id(不含 refreshSessions)', () => {
+    const h = readHtml();
+    const m = h.match(/<div id="stateCarriers" hidden>[\s\S]*?<\/div>/);
+    assert.ok(m, '应有 <div id="stateCarriers" hidden>');
+    const block = m[0];
+    for (const id of ['sessionSelect', 'projectSelect', 'projectControl', 'projectsEmpty', 'startProject']) {
+        assert.ok(block.includes(`id="${id}"`), `#stateCarriers 应含 id=${id}(client.js 守卫依赖)`);
+    }
+    assert.ok(!block.includes('id="refreshSessions"'), '#stateCarriers 不应含 refreshSessions(已删)');
+});
+
+test('index.html: 无 #switchSheet 空锚点(改由 switch_sheet.cjs 动态挂 id)', () => {
+    const h = readHtml();
+    assert.ok(!/<div id="switchSheet" hidden>/.test(h), '#switchSheet 空锚点应已删除');
+    assert.ok(!/id="switchSheet"/.test(h), 'index.html 不应再有 switchSheet(switch_sheet.cjs 动态创建)');
+});
+
+test('index.html: <main> 内有 visually-hidden <h1>', () => {
+    const h = readHtml();
+    assert.ok(/<h1 class="visually-hidden">/.test(h), 'main 应有 visually-hidden h1(建立大纲)');
+});
+
+test('index.html: .bottom-tabbar 三项(控制台 active + 看板 + #switchTab button)', () => {
+    const h = readHtml();
+    assert.ok(h.includes('class="bottom-tabbar"'), '应有 .bottom-tabbar');
+    assert.ok(/class="tab tab--active"[^>]*href="\/"[^>]*aria-current="page"/.test(h), '控制台 tab=active + aria-current');
+    assert.ok(/class="tab"[^>]*href="\/dashboard\.html"/.test(h), '看板 tab');
+    const m = h.match(/<button[^>]*id="switchTab"[^>]*>/);
+    assert.ok(m, 'switchTab 按钮存在');
+    assert.ok(m[0].includes('aria-haspopup="dialog"'), 'switchTab aria-haspopup=dialog');
+    assert.ok(m[0].includes('aria-expanded="false"'), 'switchTab aria-expanded=false');
+    assert.ok(m[0].includes('aria-controls="switchSheet"'), 'switchTab aria-controls=switchSheet');
+});
