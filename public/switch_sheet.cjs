@@ -68,6 +68,8 @@
     const trigger = opts && opts.trigger;
     const onPick = (opts && typeof opts.onPick === 'function') ? opts.onPick : () => {};
     const items = (opts && Array.isArray(opts.items)) ? opts.items : [];
+    const onLaunch = (opts && typeof opts.onLaunch === 'function') ? opts.onLaunch : () => {};
+    const projects = (opts && Array.isArray(opts.projects)) ? opts.projects : [];
 
     const backdrop = doc.createElement('div');
     backdrop.className = 'switch-sheet-backdrop'; backdrop.hidden = true; backdrop.setAttribute('aria-hidden', 'true');
@@ -91,6 +93,33 @@
       li.appendChild(btn); list.appendChild(li);
     });
     sheet.appendChild(list);
+    // 项目区(移动/中屏折叠后在此启动项目,复用桌面 buildProjectItems 的 isCurrent 高亮)
+    if (projects.length) {
+      const projWrap = doc.createElement('div');
+      projWrap.className = 'switch-sheet-projects';
+      const projTitle = doc.createElement('p');
+      projTitle.className = 'switch-sheet-section-title';
+      projTitle.textContent = '项目';            // textContent 防 HTML 注入
+      projWrap.appendChild(projTitle);
+      const projList = doc.createElement('ul');
+      projList.className = 'switch-sheet-list';
+      projList.setAttribute('role', 'list');
+      projects.forEach((pj) => {
+        const li = doc.createElement('li');
+        li.className = 'switch-sheet-item' + (pj.isCurrent ? ' switch-sheet-item--current' : '');
+        const btn = doc.createElement('button');
+        btn.type = 'button';
+        btn.className = 'switch-sheet-btn switch-sheet-btn--launch';
+        btn.setAttribute('aria-current', pj.isCurrent ? 'true' : 'false');
+        btn.textContent = pj.label;
+        if (pj.isCurrent) btn.disabled = true;
+        btn.addEventListener('click', () => { onLaunch(pj.path); });
+        li.appendChild(btn);
+        projList.appendChild(li);
+      });
+      projWrap.appendChild(projList);
+      sheet.appendChild(projWrap);
+    }
     doc.body.appendChild(backdrop); doc.body.appendChild(sheet);
 
     let openState = false, savedOverflow = '', lastFocused = null;

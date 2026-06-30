@@ -1,5 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
+const fs = require('node:fs');
 const { handleTabTrap, shouldCloseOnKey, buildSessionItems, buildProjectItems } = require('../public/switch_sheet.cjs');
 
 test('handleTabTrap 末项 Tab 跳首', () => {
@@ -52,4 +53,12 @@ test('buildProjectItems 渲染 label(root 带后缀)+ isCurrent(去尾斜杠匹�
 test('buildProjectItems 非法降级', () => {
   assert.deepEqual(buildProjectItems(null, 'x'), []);
   assert.equal(buildProjectItems([{ path: '/p', name: 'p' }, { bad: 1 }, 'x' ], '/p').length, 1);
+});
+test('createSwitchSheet 源码契约:支持 projects 渲染 + onLaunch 回调', () => {
+  const src = fs.readFileSync('public/switch_sheet.cjs', 'utf8');
+  assert.ok(src.includes('onLaunch'), 'createSwitchSheet 应接受 onLaunch 回调');
+  assert.ok(src.includes('switch-sheet-projects'), '应有项目区容器 .switch-sheet-projects');
+  assert.ok(src.includes('switch-sheet-section-title'), '项目区应有分组标题');
+  assert.ok(/projects\.forEach/.test(src), '应遍历 projects 渲染项目项');
+  assert.ok(/onLaunch\(/.test(src), '项目项点击应调用 onLaunch(path)');
 });
