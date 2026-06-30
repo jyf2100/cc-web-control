@@ -249,12 +249,12 @@
 
         const bar = document.createElement('div');
         bar.className = 'quick-reply';
-        const mk = (label, accent, actions) => {
+        const mk = (label, variant, actions) => {
             const b = document.createElement('button');
             b.type = 'button';
-            b.className = 'quick-reply-btn';
+            b.className = 'quick-reply-btn' + (variant === 'primary' ? ' quick-reply-btn--primary' : '');
             b.textContent = label;
-            b.style.borderColor = accent;
+            b.setAttribute('aria-label', `快捷回复 ${label}`);
             b.addEventListener('click', () => {
                 sendBatch(actions);
                 hideQuickReply();
@@ -262,9 +262,9 @@
             return b;
         };
         bar.append(
-            mk('Yes', 'var(--accent-2)', [{ type: 'key', data: 'C-u' }, { type: 'input', data: 'y', enter: true }]),
-            mk('No', 'var(--border-2)', [{ type: 'key', data: 'C-u' }, { type: 'input', data: 'n', enter: true }]),
-            mk('Continue', 'var(--accent-2)', [{ type: 'key', data: 'Enter' }])
+            mk('Yes', 'primary', [{ type: 'key', data: 'C-u' }, { type: 'input', data: 'y', enter: true }]),
+            mk('No', 'secondary', [{ type: 'key', data: 'C-u' }, { type: 'input', data: 'n', enter: true }]),
+            mk('Continue', 'secondary', [{ type: 'key', data: 'Enter' }])
         );
 
         inputRow.parentElement.insertBefore(bar, inputRow);
