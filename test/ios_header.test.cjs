@@ -175,3 +175,14 @@ test('multi_line_input.js: 读 visualViewport 高度', () => {
     assert.ok(js.includes('window.visualViewport'), 'multi_line_input 应读 visualViewport');
     assert.ok(!/maxHeight\s*=\s*`calc\(100vh/.test(js), '不应再用 100vh');
 });
+
+test('client.js: cachedProjects 缓存 + switch_sheet 注入 projects/onLaunch', () => {
+    const js = readClient();
+    assert.ok(/let\s+cachedProjects\b/.test(js), '应有模块级 cachedProjects');
+    assert.ok(js.includes('SwitchSheet.buildProjectItems'), 'rebuildSheet 应构建项目项');
+    assert.ok(js.includes('projects: projectItems'), 'createSwitchSheet 应传入 projects');
+    assert.ok(/onLaunch\s*:/.test(js), 'createSwitchSheet 应注入 onLaunch');
+    // onLaunch 应写回 projectSelect.value 并复用 startProjectSession
+    assert.ok(/onLaunch[\s\S]*projectSelect\.value\s*=/.test(js), 'onLaunch 应写回 projectSelect.value');
+    assert.ok(/onLaunch[\s\S]*startProjectSession\(\)/.test(js), 'onLaunch 应复用 startProjectSession');
+});

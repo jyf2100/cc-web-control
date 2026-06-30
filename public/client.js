@@ -36,6 +36,8 @@
     let currentSession = null;
     // 最近一次 /api/sessions 结果,供 syncProjectSelect 把 project 下拉框回填到当前 agent 的 cwd
     let cachedSessions = [];
+    // 最近一次 /api/projects 的项目列表,供切换抽屉渲染项目区 + 启动入口
+    let cachedProjects = [];
     let disconnectNoted = false;
     let lastWsErrorNoted = false;
     const STORAGE_KEY_LAST_SESSION = 'cc_web_last_session';
@@ -787,6 +789,7 @@
         try {
             const data = await fetchJson('/api/projects');
             const projects = data && Array.isArray(data.projects) ? data.projects : [];
+            cachedProjects = projects;
             const hasRoots = Boolean(data && Array.isArray(data.roots) && data.roots.length > 0);
             applyView(resolveView({ projects, hasRoots }));
             if (!projects.length) return;
@@ -941,8 +944,11 @@
             const rebuildSheet = () => {
                 if (sheetHandle) { sheetHandle.destroy(); sheetHandle = null; }
                 const items = SwitchSheet.buildSessionItems(cachedSessions, currentSession);
+                const curEntry = Array.isArray(cachedSessions) ? cachedSessions.find(s => s && s.name === currentSession) : null;
+                const projectItems = SwitchSheet.buildProjectItems(cachedProjects, curEntry && curEntry.cwd);
                 sheetHandle = SwitchSheet.createSwitchSheet({
                     trigger: switchTrigger, items,
+                    projects: projectItems,
                     onPick: (name) => {
                         const switchSession = (typeof SessionSwitch !== 'undefined' && SessionSwitch.switchSession) || null;
                         if (switchSession) {
@@ -955,6 +961,11 @@
                             currentSession = name;
                         }
                         if (sheetHandle) sheetHandle.close();
+                    },
+                    onLaunch: (cwd) => {
+                        if (sheetHandle) sheetHandle.close();
+                        if (projectSelect) projectSelect.value = cwd;
+                        startProjectSession();
                     },
                 });
             };
