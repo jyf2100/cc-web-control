@@ -1,47 +1,45 @@
 /**
  * cc-web-control 设计令牌(单一事实来源)
- * 方向 A 琥珀精修。三页共用。浅色默认 + 深色跟随系统。
+ * 方向:editorial 开发者工具风(暖灰米 + 暖橙)。三页共用。纯浅色。
+ * 语义分工:--accent 仅填色/装饰;--accent-2 用于所有文字/图标/按钮底(达 WCAG AA)。
  */
-
 :root {
-  /* 颜色(浅色,默认) */
-  --bg: #ffffff;
-  --surface: #faf7f2;
-  --surface2: #f3ece0;
-  --border: #ece2d1;
-  --text: #1a1a1a;
-  --muted: #8a7f6f;
-  --brand: #d4a574;
-  --brand-strong: #c08e54;
+  /* 暖灰米底 */
+  --bg: #f2f1ed;
+  --bg-2: #f7f7f4;
+  /* surface 层级 */
+  --surface: #ebeae5;
+  --surface-2: #e3e2dc;
+  --surface-3: #d9d8d1;
+  /* 暖黑前景 + alpha 派生层级 */
+  --fg: #26251e;
+  --fg-2: rgba(38,37,30,0.70);   /* 次文字 ~5.4:1 达 AA;承载真实信息 */
+  --fg-3: rgba(38,37,30,0.35);   /* 仅装饰:placeholder/分隔符;禁止承载需阅读文字 */
+  --fg-4: rgba(38,37,30,0.18);   /* 仅边框 */
+  /* 边框:alpha 低调分隔 */
+  --border: rgba(38,37,30,0.1);
+  --border-2: rgba(38,37,30,0.2);
+  /* 暖橙强调:双语义分工(达 WCAG AA) */
+  --accent: #d9651a;     /* 仅大面积填色/装饰图形,不用于小号文字/图标 */
+  --accent-2: #b54e0e;   /* 文字/图标/按钮底/focus outline 语义色(白字 5.17:1、on bg 4.58:1 达 AA) */
+  --accent-bg: rgba(217,101,26,0.08);
+  --accent-dim: rgba(217,101,26,0.25);
+  /* 状态色谱:状态点用(与品牌暖橙拉开色相,避免与 CTA 语义混淆) */
+  --waiting: #c08532;    /* 偏黄琥珀,区别于 accent 的 CTA 暖橙 */
+  --working: #1f8a65;
+  --idle: rgba(38,37,30,0.3);
+  --errored: #c01a4b;    /* 偏紫玫红,增大与暖橙色相差 */
+  --success: #1f8a65;   /* 与 --working 同值:状态语义分离,色相统一,二者不并列出现 */
+  /* 字体三栈 */
+  --sans: system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Helvetica, Arial, sans-serif;
+  --mono: 'SF Mono', 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+  --serif: Georgia, 'Palatino Linotype', 'Book Antiqua', 'Iowan Old Style', 'Source Han Serif SC', 'Noto Serif SC', serif;
+  /* 圆角分层 */
+  --r-xs: 3px;     /* mono 小标签/eyebrow chip 近直角 */
+  --r-sm: 6px;     /* 卡片 */
+  --r: 10px;       /* 主容器 */
+  --r-pill: 9999px;
 
-  /* 状态色(4 状态徽章:waiting/working/idle/errored;unknown 用虚线无专属色) */
-  --waiting: #f59e0b;
-  --working: #d4a574;
-  --idle: #b8ad9a;
-  --errored: #ef4444;
-
-  /* 字体 */
-  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --mono: 'SF Mono', ui-monospace, Menlo, monospace;
-
-  /* 圆角 */
-  --r: 12px;
-  --r-sm: 8px;
-  --r-lg: 14px;
-
-  color-scheme: light dark;
+  color-scheme: light;
 }
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* 颜色(深色,暖调,替换原 style.css 冷蓝暗色) */
-    --bg: #1c1815;
-    --surface: #251f1a;
-    --surface2: #2e2620;
-    --border: #3d342b;
-    --text: #f2ebe0;
-    --muted: #a89b88;
-    --brand: #d4a574;
-    --brand-strong: #e6b785;
-  }
-}
+/* 纯浅色:不提供深色 media 查询(见 spec §方向) */

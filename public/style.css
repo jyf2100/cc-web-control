@@ -14,10 +14,10 @@
 html, body {
     width: 100%;
     height: 100%;
-    font-family: var(--font);
+    font-family: var(--sans);
     font-size: 14px;
     background-color: var(--bg);
-    color: var(--text);
+    color: var(--fg);
     overflow: hidden;
 }
 
@@ -50,7 +50,7 @@ html, body {
     gap: 10px;
     font-size: 16px;
     font-weight: 600;
-    color: var(--text);
+    color: var(--fg);
 }
 
 .logo .app-logo {
@@ -63,14 +63,14 @@ html, body {
 
 .logo svg,
 .logo .app-logo {
-    color: var(--brand);
+    color: var(--accent-2);
 }
 
 .status {
     font-size: 12px;
-    color: var(--muted);
+    color: var(--fg-2);
     padding: 4px 10px;
-    background-color: var(--surface2);
+    background-color: var(--surface-2);
     border-radius: 12px;
     border: 1px solid var(--border);
 }
@@ -78,7 +78,7 @@ html, body {
 .status.connected {
     color: var(--working);
     border-color: var(--working);
-    background-color: var(--surface2);
+    background-color: var(--surface-2);
 }
 
 .controls {
@@ -93,7 +93,7 @@ html, body {
     align-items: center;
     gap: 6px;
     font-size: 12px;
-    color: var(--muted);
+    color: var(--fg-2);
 }
 
 .control-label {
@@ -106,13 +106,13 @@ html, body {
     border: 1px solid var(--border);
     border-radius: 8px;
     background: var(--bg);
-    color: var(--text);
+    color: var(--fg);
     outline: none;
 }
 
 .control-input:focus {
-    border-color: var(--brand);
-    box-shadow: 0 0 0 3px rgba(212, 165, 116, 0.35);
+    border-color: var(--accent-2);
+    box-shadow: 0 0 0 3px var(--accent-dim);
 }
 
 /* 桌面端 Session 下拉框缩小,Project 升为主入口 */
@@ -128,7 +128,7 @@ html, body {
 .projects-empty {
     margin: 6px 0;
     font-size: 12px;
-    color: var(--muted);
+    color: var(--fg-2);
 }
 
 .btn {
@@ -137,7 +137,7 @@ html, body {
     border: 1px solid var(--border);
     border-radius: 8px;
     background: var(--bg);
-    color: var(--text);
+    color: var(--fg);
     font-size: 12px;
     cursor: pointer;
 }
@@ -147,7 +147,7 @@ html, body {
 }
 
 .btn:active {
-    background: var(--surface2);
+    background: var(--surface-2);
 }
 
 .main {
@@ -172,13 +172,13 @@ html, body {
 .welcome-message {
     text-align: center;
     padding: 60px 20px;
-    color: var(--muted);
+    color: var(--fg-2);
 }
 
 .welcome-message h2 {
     font-size: 28px;
     font-weight: 600;
-    color: var(--text);
+    color: var(--fg);
     margin-bottom: 12px;
 }
 
@@ -204,10 +204,10 @@ html, body {
     justify-content: space-between;
     gap: 8px;
     padding: 10px 14px;
-    background: var(--surface2);
+    background: var(--surface-2);
     border-bottom: 1px solid var(--border);
     font-size: 12px;
-    color: var(--muted);
+    color: var(--fg-2);
     font-weight: 600;
     letter-spacing: 0.2px;
 }
@@ -238,7 +238,7 @@ html, body {
     display: flex;
     gap: 8px;
     padding: 8px 14px;
-    background: var(--surface2);
+    background: var(--surface-2);
     border-bottom: 1px solid var(--border);
 }
 
@@ -248,7 +248,7 @@ html, body {
     border: 1px solid var(--border);
     border-radius: 8px;
     background: var(--bg);
-    color: var(--text);
+    color: var(--fg);
     font-size: 13px;
     cursor: pointer;
 }
@@ -258,7 +258,7 @@ html, body {
 }
 
 .quick-reply-btn:active {
-    background: var(--surface2);
+    background: var(--surface-2);
 }
 
 /* 窄屏（移动端 / 平板竖屏）显示止损按钮，桌面端靠物理键盘 */
@@ -277,7 +277,7 @@ html, body {
     font-family: var(--mono);
     font-size: 13px;
     line-height: 1.5;
-    color: var(--text);
+    color: var(--fg);
     background-color: var(--surface);
     flex: 1;
 }
@@ -288,13 +288,13 @@ html, body {
     gap: 10px;
     padding: 10px 14px;
     border-top: 1px solid var(--border);
-    background: var(--surface2);
+    background: var(--surface-2);
 }
 
 .terminal-prompt {
     font-family: var(--mono);
     font-size: 14px;
-    color: var(--muted);
+    color: var(--fg-2);
     user-select: none;
 }
 
@@ -306,16 +306,16 @@ html, body {
     font-family: var(--mono);
     font-size: 14px;
     line-height: 1.5;
-    color: var(--text);
+    color: var(--fg);
     padding: 0;
 }
 
 .terminal-inline-input::placeholder {
-    color: var(--muted);
+    color: var(--fg-2);
 }
 
 .terminal-inline-input:disabled {
-    color: var(--muted);
+    color: var(--fg-2);
     cursor: not-allowed;
 }
 
@@ -327,7 +327,7 @@ html, body {
     font-family: var(--mono);
     font-size: 14px;
     line-height: 1.5;
-    color: var(--text);
+    color: var(--fg);
     padding: 0;
     resize: none;
     overflow: hidden;
@@ -335,11 +335,11 @@ html, body {
 }
 
 .terminal-inline-textarea::placeholder {
-    color: var(--muted);
+    color: var(--fg-2);
 }
 
 .terminal-inline-textarea:disabled {
-    color: var(--muted);
+    color: var(--fg-2);
     cursor: not-allowed;
 }
 
@@ -380,7 +380,7 @@ html, body {
     padding: 10px 14px;
     border-radius: 8px;
     font-size: 14px;
-    font-family: var(--font);
+    font-family: var(--sans);
     line-height: 20px;
     max-width: 320px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
@@ -434,7 +434,7 @@ html, body {
     padding: 8px 14px;
     font-family: var(--mono);
     font-size: 13px;
-    color: var(--text);
+    color: var(--fg);
     cursor: pointer;
     white-space: nowrap;
     overflow: hidden;
@@ -446,22 +446,12 @@ html, body {
 
 .palette-item:hover,
 .palette-item.selected {
-    background-color: var(--surface2);
+    background-color: var(--surface-2);
 }
 
 .palette-item.selected {
-    background-color: var(--surface2);
-    color: var(--brand-strong);
-}
-
-/* 深色模式:令牌经 tokens.css 自动切换,这里只保留令牌覆盖不到的 shadow */
-@media (prefers-color-scheme: dark) {
-    .toast {
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-    }
-    .command-palette {
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-    }
+    background-color: var(--surface-2);
+    color: var(--accent-2);
 }
 
 @media (max-width: 768px) {
@@ -511,7 +501,7 @@ html, body {
 .nav {
     display: flex;
     gap: 2px;
-    background: var(--surface2);
+    background: var(--surface-2);
     border-radius: var(--r-sm);
     padding: 3px;
 }
@@ -521,12 +511,12 @@ html, body {
     padding: 6px 12px;
     border-radius: 6px;
     text-decoration: none;
-    color: var(--muted);
+    color: var(--fg-2);
 }
 
 .nav-link.cur {
     background: var(--bg);
-    color: var(--text);
+    color: var(--fg);
     font-weight: 600;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }

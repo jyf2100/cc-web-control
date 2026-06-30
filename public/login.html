@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Roc-CC">
-  <meta name="theme-color" content="#1c1815">
+  <meta name="theme-color" content="#f2f1ed">
   <link rel="stylesheet" href="tokens.css">
   <style>
     /* 极简登录页样式,消费 tokens.css 令牌(方向 A 琥珀精修) */
@@ -22,15 +22,15 @@
       display: grid;
       place-items: center;
       padding: 24px;
-      font-family: var(--font);
+      font-family: var(--sans);
       background-color: var(--bg);
-      color: var(--text);
+      color: var(--fg);
     }
     .logo-mark {
       width: 44px;
       height: 44px;
       border-radius: var(--r);
-      background: var(--brand);
+      background: var(--accent);
       color: #ffffff;
       display: flex;
       align-items: center;
@@ -46,11 +46,11 @@
       padding: 32px 28px;
       background-color: var(--surface);
       border: 1px solid var(--border);
-      border-radius: var(--r-lg);
+      border-radius: var(--r);
     }
-    h1 { margin: 0 0 8px; font-size: 18px; font-weight: 600; color: var(--text); }
-    p { margin: 8px 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
-    label { display: block; margin-top: 16px; font-size: 13px; color: var(--muted); }
+    h1 { margin: 0 0 8px; font-size: 18px; font-weight: 600; color: var(--fg); }
+    p { margin: 8px 0; font-size: 13px; line-height: 1.5; color: var(--fg-2); }
+    label { display: block; margin-top: 16px; font-size: 13px; color: var(--fg-2); }
     input {
       width: 100%;
       margin-top: 6px;
@@ -58,26 +58,29 @@
       border-radius: var(--r-sm);
       border: 1px solid var(--border);
       background-color: var(--bg);
-      color: var(--text);
+      color: var(--fg);
       font-size: 14px;
-      font-family: var(--font);
+      font-family: var(--sans);
       outline: none;
     }
-    input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(212, 165, 116, 0.35); }
+    input:focus { border-color: var(--accent-2); box-shadow: 0 0 0 3px var(--accent-dim); }
     .row { margin-top: 18px; }
     button {
       width: 100%;
       padding: 11px 12px;
       border: none;
       border-radius: var(--r-sm);
-      background: var(--brand);
+      background: var(--accent-2);
       color: #ffffff;
       font-size: 14px;
       font-weight: 600;
-      font-family: var(--font);
+      font-family: var(--sans);
       cursor: pointer;
     }
-    button:hover { background: var(--brand-strong); }
+    button:hover {
+      background: var(--accent-2);
+      filter: brightness(0.92);
+    }
     .hint { font-size: 12px; }
     .error { margin-top: 12px; font-size: 13px; color: var(--errored); }
     @media (max-width: 480px) {

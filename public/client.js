@@ -262,9 +262,9 @@
             return b;
         };
         bar.append(
-            mk('Yes', 'var(--brand)', [{ type: 'key', data: 'C-u' }, { type: 'input', data: 'y', enter: true }]),
-            mk('No', 'var(--border)', [{ type: 'key', data: 'C-u' }, { type: 'input', data: 'n', enter: true }]),
-            mk('Continue', 'var(--brand-strong)', [{ type: 'key', data: 'Enter' }])
+            mk('Yes', 'var(--accent-2)', [{ type: 'key', data: 'C-u' }, { type: 'input', data: 'y', enter: true }]),
+            mk('No', 'var(--border-2)', [{ type: 'key', data: 'C-u' }, { type: 'input', data: 'n', enter: true }]),
+            mk('Continue', 'var(--accent-2)', [{ type: 'key', data: 'Enter' }])
         );
 
         inputRow.parentElement.insertBefore(bar, inputRow);
