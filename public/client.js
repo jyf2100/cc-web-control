@@ -164,21 +164,10 @@
         const apply = () => {
             app.style.setProperty('--vh-available', `${Math.round(vv.height)}px`);
         };
+        // 单页 init 一次,#app 常驻,监听无需 removeEventListener cleanup
         vv.addEventListener('resize', apply);
         vv.addEventListener('scroll', apply);
         apply();
-    }
-
-    /**
-     * switch_sheet.cjs createSwitchSheet 在 Task 4 接入时已设 aria;
-     * 这里仅做幂等兜底,确保 switchToggle 的 aria-haspopup/aria-expanded 就位。
-     */
-    function setupSwitchSheet() {
-        const toggle = document.getElementById('switchToggle');
-        if (toggle) {
-            toggle.setAttribute('aria-haspopup', 'dialog');
-            toggle.setAttribute('aria-expanded', 'false');
-        }
     }
 
     /**
@@ -569,7 +558,7 @@
             requestAnimationFrame(() => {
                 try {
                     inputEl.scrollIntoView({ block: 'end', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
-                } catch (e) {}
+                } catch (e) { /* scrollIntoView 浏览器兼容回退,非关键路径,忽略 */ }
             });
         };
 
@@ -895,7 +884,6 @@
 
         ensureTerminalView();
         setupVisualViewport();
-        setupSwitchSheet();
         bindInlineInput();
         updateConnectionStatus(false);
 

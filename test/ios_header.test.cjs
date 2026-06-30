@@ -132,10 +132,10 @@ test('client.js: enterkeyhint + inputmode setAttribute', () => {
     assert.ok(js.includes("setAttribute('inputmode', 'text')"));
 });
 
-test('client.js: setupVisualViewport + setupSwitchSheet 函数定义', () => {
+test('client.js: setupVisualViewport 函数定义(不含已删的 setupSwitchSheet 死代码)', () => {
     const js = readClient();
     assert.ok(/function\s+setupVisualViewport\s*\(/.test(js));
-    assert.ok(/function\s+setupSwitchSheet\s*\(/.test(js));
+    assert.ok(!/function\s+setupSwitchSheet\s*\(/.test(js), 'setupSwitchSheet 死代码应已删除');
 });
 
 test('client.js: --vh-available setProperty + init 调用', () => {
@@ -144,7 +144,14 @@ test('client.js: --vh-available setProperty + init 调用', () => {
     // init 内调用顺序
     const idx = js.indexOf('setupVisualViewport();');
     assert.ok(idx > 0, 'setupVisualViewport() 被调用');
-    assert.ok(js.includes('setupSwitchSheet();'), 'setupSwitchSheet() 被调用');
+});
+
+// switchToggle 静态 aria(HTML 保证初始态,运行时由 createSwitchSheet 更新)
+test('index.html switchToggle: 静态 aria-haspopup/aria-expanded/aria-controls', () => {
+    const html = readHtml();
+    assert.ok(/id="switchToggle"[^>]*aria-haspopup="dialog"/.test(html), 'switchToggle 有 aria-haspopup=dialog');
+    assert.ok(/id="switchToggle"[^>]*aria-expanded="false"/.test(html), 'switchToggle 有 aria-expanded=false');
+    assert.ok(/id="switchToggle"[^>]*aria-controls="switchSheet"/.test(html), 'switchToggle 有 aria-controls=switchSheet');
 });
 
 test('client.js: updateSessionUi 同步 metaSession + metaProject(getElementById)', () => {
