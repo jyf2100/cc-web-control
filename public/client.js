@@ -13,6 +13,8 @@
 
     // DOM 元素
     const messagesEl = document.getElementById('messages');
+    // 可能 null:Task 7 已把 #connectionStatus 从 header 删除,状态改由 live 点承载;
+    // 保留该 const 仅作防御性判空(updateConnectionStatus 内已覆盖)。
     const connectionStatus = document.getElementById('connectionStatus');
     const chatContainer = document.getElementById('chatContainer');
     const sessionSelect = document.getElementById('sessionSelect');
@@ -32,6 +34,8 @@
     let terminalViewEl = null;
     let terminalHeaderEl = null;
     let currentSession = null;
+    // 最近一次 /api/sessions 结果,供 syncProjectSelect 把 project 下拉框回填到当前 agent 的 cwd
+    let cachedSessions = [];
     let disconnectNoted = false;
     let lastWsErrorNoted = false;
     const STORAGE_KEY_LAST_SESSION = 'cc_web_last_session';
@@ -140,10 +144,41 @@
      * 更新连接状态
      */
     function updateConnectionStatus(connected) {
-        if (!connectionStatus) return;
-        connectionStatus.textContent = connected ? '已连接' : '未连接';
-        connectionStatus.classList.toggle('connected', connected);
+        if (connectionStatus) {
+            connectionStatus.textContent = connected ? '已连接' : '未连接';
+            connectionStatus.classList.toggle('connected', connected);
+        }
+        const liveText = document.querySelector('.live-dot-text');
+        if (liveText) liveText.textContent = connected ? 'live' : '未连接';
         if (terminalInputEl) terminalInputEl.disabled = !connected;
+    }
+
+    /**
+     * 监听 visualViewport,把实际可用高度写入 --vh-available,
+     * 供 #app height 与 multi_line_input 同步消费(iOS 软键盘弹出时正确收缩)。
+     */
+    function setupVisualViewport() {
+        const vv = window.visualViewport;
+        const app = document.getElementById('app');
+        if (!vv || !app) return;
+        const apply = () => {
+            app.style.setProperty('--vh-available', `${Math.round(vv.height)}px`);
+        };
+        vv.addEventListener('resize', apply);
+        vv.addEventListener('scroll', apply);
+        apply();
+    }
+
+    /**
+     * switch_sheet.cjs createSwitchSheet 在 Task 4 接入时已设 aria;
+     * 这里仅做幂等兜底,确保 switchToggle 的 aria-haspopup/aria-expanded 就位。
+     */
+    function setupSwitchSheet() {
+        const toggle = document.getElementById('switchToggle');
+        if (toggle) {
+            toggle.setAttribute('aria-haspopup', 'dialog');
+            toggle.setAttribute('aria-expanded', 'false');
+        }
     }
 
     /**
@@ -201,6 +236,8 @@
         inlineInput.autocorrect = 'off';
         inlineInput.autocapitalize = 'off';
         inlineInput.spellcheck = false;
+        inlineInput.setAttribute('enterkeyhint', 'send');
+        inlineInput.setAttribute('inputmode', 'text');
 
         inputRow.appendChild(prompt);
         inputRow.appendChild(inlineInput);
@@ -524,9 +561,16 @@
         });
 
         // 点击终端任意区域都能回到输入焦点，移动端更容易触发键盘
+        const prefersReducedMotion = () =>
+            window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         const focusInput = () => {
             if (!isConnected || inputEl.disabled) return;
             inputEl.focus({ preventScroll: true });
+            requestAnimationFrame(() => {
+                try {
+                    inputEl.scrollIntoView({ block: 'end', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+                } catch (e) {}
+            });
         };
 
         contentEl.addEventListener('click', focusInput);
@@ -626,12 +670,40 @@
     function updateSessionUi() {
         if (terminalHeaderEl) {
             const titleEl = terminalHeaderEl.querySelector('.terminal-header-title');
-            if (titleEl) {
-                titleEl.textContent = currentSession ? `Session: ${currentSession}` : 'Roc-CC Remote Control';
-            }
+            if (titleEl) titleEl.textContent = currentSession ? `Session: ${currentSession}` : 'Roc-CC Remote Control';
         }
-        if (sessionSelect && currentSession) {
-            sessionSelect.value = currentSession;
+        const metaSession = document.getElementById('metaSession');
+        if (metaSession) {
+            metaSession.textContent = currentSession
+                ? (currentSession.replace(/[^0-9]/g, '').padStart(2, '0') || '—') : '—';
+        }
+        const metaProject = document.getElementById('metaProject');
+        if (metaProject) {
+            const entry = Array.isArray(cachedSessions) ? cachedSessions.find(s => s && s.name === currentSession) : null;
+            metaProject.textContent = (entry && entry.cwd) ? entry.cwd : '—';
+        }
+        if (sessionSelect && currentSession) sessionSelect.value = currentSession;
+    }
+
+    /**
+     * 切到某 agent 后,把 project 下拉框回填到该 agent 绑定的项目路径(cwd)。
+     * 后端 /api/sessions 返回每个 session 的 cwd;不回填则切 agent 时 project 下拉框
+     * 停在加载默认的第一个项目,与该 agent 实际跑的项目(claude -c 续接)错位。
+     * 仅当 cwd 命中 project 下拉框已知项目时回填,避免设不存在的 value 导致下拉框空白。
+     */
+    function syncProjectSelect() {
+        if (!projectSelect || !currentSession || !Array.isArray(cachedSessions)) return;
+        const entry = cachedSessions.find((s) => s && s.name === currentSession);
+        if (!entry || !entry.cwd) return;
+        // 归一化比较:/api/projects 的 opt.value 与 /api/sessions 的 entry.cwd 可能尾斜杠不一,
+        // 严格 === 会漏匹配导致回填失败。去尾斜杠后比较,且设 opt.value(下拉框实有值)避免空白。
+        const normPath = (v) => String(v).replace(/[/\\]+$/, '');
+        const target = normPath(entry.cwd);
+        for (const opt of projectSelect.options) {
+            if (normPath(opt.value) === target) {
+                projectSelect.value = opt.value;
+                return;
+            }
         }
     }
 
@@ -639,6 +711,7 @@
         if (!sessionSelect) return;
         try {
             const sessions = await fetchJson('/api/sessions');
+            cachedSessions = Array.isArray(sessions) ? sessions : [];
             sessionSelect.innerHTML = '';
 
             const names = Array.isArray(sessions) ? sessions.map(s => s.name) : [];
@@ -694,6 +767,7 @@
             }
 
             updateSessionUi();
+            syncProjectSelect();
         } catch (e) {
             showSystemNote(`无法加载会话列表: ${e.message}`);
         }
@@ -737,6 +811,8 @@
                 opt.textContent = p.root ? `${p.name} (${p.root})` : p.name;
                 projectSelect.appendChild(opt);
             }
+            // options 就绪后,把 project 下拉框对齐当前 agent 的项目路径
+            syncProjectSelect();
         } catch {
             applyView(resolveView({ projects: [], hasRoots: false }));
         }
@@ -753,6 +829,9 @@
 
         try {
             const sessions = await fetchJson('/api/sessions');
+            // 回写 cachedSessions:此分支(已存在 / catch already exists)不走 loadSessions,
+            // 不回写则缓存停在旧值,后续 syncProjectSelect 拿不到最新 cwd,切回该 agent 时 project 下拉框错位。
+            cachedSessions = Array.isArray(sessions) ? sessions : [];
             const names = Array.isArray(sessions) ? sessions.map(s => s.name) : [];
             if (names.includes(sessionName)) {
                 currentSession = sessionName;
@@ -815,6 +894,8 @@
         }
 
         ensureTerminalView();
+        setupVisualViewport();
+        setupSwitchSheet();
         bindInlineInput();
         updateConnectionStatus(false);
 

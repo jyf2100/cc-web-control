@@ -60,8 +60,12 @@ export class MultiLineInput {
         const expandedHeight = Math.max(LINE_HEIGHT_INPUT, height);
         this.#textarea.style.height = `${expandedHeight}px`;
 
-        // Simultaneously shrink terminal viewport to prevent layout flash
+        // Simultaneously shrink terminal viewport to prevent layout flash.
+        // 读 visualViewport 高度(iOS 软键盘弹出时收缩),回退 innerHeight。
+        const vh = (window.visualViewport && window.visualViewport.height)
+            ? window.visualViewport.height
+            : window.innerHeight;
         const totalInputHeight = HEADER_HEIGHT + INPUT_ROW_BASE + expandedHeight - LINE_HEIGHT_INPUT;
-        this.#terminalView.style.maxHeight = `calc(100vh - ${totalInputHeight}px)`;
+        this.#terminalView.style.maxHeight = `calc(${vh}px - ${totalInputHeight}px)`;
     }
 }

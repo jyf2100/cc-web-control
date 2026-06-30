@@ -22,10 +22,10 @@ html, body {
 }
 
 #app {
-    display: flex;
-    flex-direction: column;
-    height: 100vh;      /* 旧浏览器兜底 */
-    height: 100dvh;     /* iOS 15.4+ 动态视口,键盘弹出时正确收缩 */
+    display: flex; flex-direction: column;
+    height: 100vh; height: 100dvh;
+    height: var(--vh-available, 100dvh);
+    min-height: 0;
 }
 
 /* ── header:brand 行 + meta bar 两行结构(375px 重排) ── */
@@ -292,6 +292,7 @@ html, body {
     .terminal-content { padding: 10px; font-size: 12px; }
     .terminal-input-row { padding: 10px; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
     /* 切换 sheet 触发器/inline 控件显隐见 Task 4/7 的断点样式 */
+    #desktopControls { display: none; }
 }
 
 /* 统一胶囊导航(控制台页;看板页 dashboard.css 另有一份,dashboard.html 不引 style.css 故不合并) */
@@ -327,3 +328,8 @@ html, body {
 .switch-sheet-btn:not(:disabled):active { background: var(--surface-2); }
 .switch-sheet-btn:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .switch-sheet { animation: none; } }
+
+/* 桌面端隐藏移动切换按钮(meta bar 内的 swap-btn 仅移动抽屉入口) */
+@media (min-width: 769px) {
+    #switchToggle.swap-btn { display: none; }
+}
