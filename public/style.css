@@ -321,8 +321,8 @@ html, body {
     .messages { padding: 10px; }
     .terminal-content { padding: 10px; font-size: 12px; }
     .terminal-input-row { padding: 10px; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
-    /* 移动端登录入口收起(spec §4:登录收起) */
-    .nav-link--login { display: none; }
+    /* 移动端登录入口收起(spec §4:登录收起);.nav 前缀提 specificity 压过 .nav-link 基础规则(source order 在前) */
+    .nav .nav-link--login { display: none; }
 }
 
 /* 统一胶囊导航(控制台页;看板页 dashboard.css 另有一份,dashboard.html 不引 style.css 故不合并) */

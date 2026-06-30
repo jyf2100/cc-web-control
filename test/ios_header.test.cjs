@@ -235,3 +235,20 @@ test('style.css: switch-sheet 项目区分组 + 启动按钮样式', () => {
     assert.ok(css.includes('.switch-sheet-section-title'), '应有分组标题样式');
     assert.ok(css.includes('.switch-sheet-btn--launch'), '应有启动按钮样式');
 });
+
+test('style.css: @media(768) 移动端登录收起(.nav .nav-link--login display:none,防 specificity 覆盖)', () => {
+    const css = readCss();
+    // .nav 前缀提 specificity:无前缀 .nav-link--login 在 source order 上早于
+    // .nav-link 基础规则(同 specificity),会被后者 inline-flex 覆盖 → 登录入口在移动端不收起。
+    // 此规则全文唯一一处(仅存在于 ≤768 收起语境),故全文直搜即可。
+    assert.ok(/\.nav\s+\.nav-link--login\s*\{[^}]*display:\s*none/.test(css),
+        '应有 .nav .nav-link--login { display:none }(带 .nav 前缀压过 .nav-link)');
+});
+
+test('style.css: 阅读文字 meta-label 不用 fg-3(WCAG AA)', () => {
+    const css = readCss();
+    const block = css.match(/\.meta-inline\s+\.meta-label\s*\{[^}]*\}/);
+    assert.ok(block, '应有 .meta-inline .meta-label 规则');
+    assert.ok(!/var\(--fg-3\)/.test(block[0]), 'meta-label 不应用 fg-3(禁承载阅读文字)');
+    assert.ok(/var\(--fg-2\)/.test(block[0]), 'meta-label 应用 fg-2(达 AA)');
+});
