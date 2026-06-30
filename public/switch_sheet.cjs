@@ -1,7 +1,7 @@
 /**
  * switch_sheet.cjs — 切换 sheet 状态机 + DOM 构建。
  * 设计依据:2026-06-29-ios-editorial-redesign-design.md §7.1「切换 sheet 契约」。
- * 纯函数(handleTabTrap/shouldCloseOnKey/buildSessionItems)可 node --test;
+ * 纯函数(handleTabTrap/shouldCloseOnKey/buildSessionItems/buildProjectItems)可 node --test;
  * createSwitchSheet 操作 document(仅浏览器调用)。
  */
 (function (root, factory) {
@@ -45,6 +45,21 @@
       .map((s) => ({ name: s.name, label: s.attached ? `${s.name} · attached` : s.name, attached: !!s.attached, isCurrent: s.name === cur }));
     items.sort((a, b) => (b.attached ? 1 : 0) - (a.attached ? 1 : 0));
     return items;
+  }
+
+  // buildProjectItems:项目列表 → 渲染项(label 带 root 后缀;去尾斜杠归一化后与 cwd 比对得 isCurrent)。
+  // 与 client.js syncProjectSelect 的 normPath 语义一致,保证当前项目高亮与桌面下拉同步。
+  function buildProjectItems(projects, currentCwd) {
+    const list = Array.isArray(projects) ? projects : [];
+    const normPath = (v) => String(v).replace(/[/\\]+$/, '');
+    const cur = normPath(typeof currentCwd === 'string' ? currentCwd : '');
+    return list
+      .filter((p) => p && typeof p.path === 'string' && typeof p.name === 'string')
+      .map((p) => ({
+        path: p.path,
+        label: p.root ? `${p.name} (${p.root})` : p.name,
+        isCurrent: normPath(p.path) === cur,
+      }));
   }
 
   function createSwitchSheet(opts) {
@@ -112,5 +127,5 @@
     return { open, close, isOpen, destroy };
   }
 
-  return { handleTabTrap, shouldCloseOnKey, buildSessionItems, createSwitchSheet };
+  return { handleTabTrap, shouldCloseOnKey, buildSessionItems, buildProjectItems, createSwitchSheet };
 });

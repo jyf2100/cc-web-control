@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { handleTabTrap, shouldCloseOnKey, buildSessionItems } = require('../public/switch_sheet.cjs');
+const { handleTabTrap, shouldCloseOnKey, buildSessionItems, buildProjectItems } = require('../public/switch_sheet.cjs');
 
 test('handleTabTrap 末项 Tab 跳首', () => {
   const r = handleTabTrap({ key: 'Tab', shiftKey: false }, ['a','b','c'], 2);
@@ -35,4 +35,21 @@ test('buildSessionItems attached 排前 + isCurrent', () => {
 test('buildSessionItems 非法降级', () => {
   assert.deepEqual(buildSessionItems(null, 'x'), []);
   assert.equal(buildSessionItems([{ name: 'ok' }, { bad: 1 }, 'x' ], 'ok').length, 1);
+});
+test('buildProjectItems 渲染 label(root 带后缀)+ isCurrent(去尾斜杠匹配 cwd)', () => {
+  const projects = [
+    { path: '/roots/a/foo', name: 'foo', root: 'A' },
+    { path: '/roots/b/bar/', name: 'bar' },
+  ];
+  const items = buildProjectItems(projects, '/roots/b/bar');
+  assert.equal(items.length, 2);
+  assert.equal(items[0].path, '/roots/a/foo');
+  assert.equal(items[0].label, 'foo (A)');
+  assert.equal(items[1].label, 'bar');
+  assert.equal(items.find(i => i.path === '/roots/b/bar/').isCurrent, true);
+  assert.equal(items.find(i => i.path === '/roots/a/foo').isCurrent, false);
+});
+test('buildProjectItems 非法降级', () => {
+  assert.deepEqual(buildProjectItems(null, 'x'), []);
+  assert.equal(buildProjectItems([{ path: '/p', name: 'p' }, { bad: 1 }, 'x' ], '/p').length, 1);
 });
