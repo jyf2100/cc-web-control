@@ -12,3 +12,8 @@ test('login.html token 输入属性成套', () => {
     assert.ok(/autocomplete="off"/.test(html));
     assert.ok(/autocapitalize="none"/.test(html));
 });
+
+test('index.html #toast-container 有 aria-live=polite', () => {
+    const html = fs.readFileSync('public/index.html', 'utf8');
+    assert.ok(/id="toast-container"[^>]*aria-live="polite"/.test(html));
+});
