@@ -264,6 +264,7 @@ html, body {
 @keyframes toast-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes live-glow { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
 @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .live-dot-pulse { animation: none; } }
 .toast-info { background-color: var(--waiting); color: #ffffff; }
 .toast-success { background-color: var(--success); color: #ffffff; }
 .toast-error { background-color: var(--errored); color: #ffffff; }

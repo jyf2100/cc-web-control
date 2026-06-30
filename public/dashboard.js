@@ -40,6 +40,7 @@
         if (titleCountEl) titleCountEl.textContent = count + ' sessions'; // §7.2:209 不重复 waiting 计数
     }
     function showState(eyebrow, lede) {
+        if (!stateMsg) return;
         list.innerHTML = '';
         stateMsg.hidden = false;
         stateMsg.innerHTML = R.renderState(eyebrow, lede);
