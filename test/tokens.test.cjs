@@ -39,3 +39,21 @@ test('client.js 无 var(--brand)/var(--brand-strong)', () => {
   const js = fs.readFileSync(`${P}/client.js`,'utf8');
   assert.ok(!/var\(--brand(-strong)?\b/.test(js));
 });
+
+test('login.html 结构:brand-mark + eyebrow + 成套输入属性 + 主/ghost 按钮 + POST 契约', () => {
+  const html = fs.readFileSync(`${P}/login.html`, 'utf8');
+  assert.ok(!/var\(--(brand|brand-strong|text|muted|font|r-lg)\b/.test(html), '残留旧令牌');
+  assert.ok(!/rgba\(212,\s*165,\s*116/.test(html), '残留琥珀硬编码');
+  assert.ok(html.includes('brand-mark brand-mark--lg'));
+  assert.ok(html.includes('Roc-CC'));                 // brand mark 旁可见文本(可达性)
+  assert.ok(html.includes('[ login ]'));
+  assert.ok(/id="token"[^>]*autocomplete="off"/.test(html));
+  assert.ok(/enterkeyhint="go"/.test(html));
+  assert.ok(html.includes('class="btn-primary"'));
+  assert.ok(html.includes('id="pasteBtn"') && html.includes('btn-ghost'));
+  assert.ok(/<form[^>]*method="POST"[^>]*action="\/login"/.test(html));
+  assert.ok(html.includes('id="next"') && html.includes('name="next"'));
+  // .token-input 基类无裸 outline:none
+  const base = html.match(/\.token-input\s*\{[^}]*\}/)[0];
+  assert.ok(!/outline:\s*none/.test(base));
+});
