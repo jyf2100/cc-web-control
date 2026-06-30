@@ -100,12 +100,11 @@ function extractMediaBlock(css, mediaHead) {
     return css.slice(start, i);
 }
 
-test('style.css @media (max-width:768px) 块含 #desktopControls display:none', () => {
+test('style.css @media (max-width:1100px) 块含 #desktopControls display:none(中屏+移动折叠)', () => {
     const css = readCss();
-    // 文件里可能有多处 @media (max-width: 768px)(含行内短块),取多行块(头后跟换行+缩进的那块)
-    const head = '@media (max-width: 768px) {\n';
+    const head = '@media (max-width: 1100px) {\n';
     const start = css.indexOf(head);
-    assert.ok(start >= 0, '存在多行 max-width:768px 媒体查询块');
+    assert.ok(start >= 0, '存在多行 max-width:1100px 媒体查询块');
     const braceOpen = css.indexOf('{', start);
     let depth = 0, i = braceOpen;
     for (; i < css.length; i++) {
@@ -113,15 +112,14 @@ test('style.css @media (max-width:768px) 块含 #desktopControls display:none', 
         else if (css[i] === '}') { depth--; if (depth === 0) { i++; break; } }
     }
     const block = css.slice(start, i);
-    assert.ok(block.includes('#desktopControls'));
-    assert.ok(/#desktopControls\s*\{[^}]*display:\s*none/.test(block), 'desktopControls 在窄屏应 display:none');
+    assert.ok(/#desktopControls\s*\{[^}]*display:\s*none/.test(block), '≤1100 时 desktopControls 应隐藏');
+    assert.ok(/#switchToggle\.swap-btn\s*\{[^}]*display:\s*inline-flex/.test(block), '≤1100 时切换入口应显示');
 });
 
-test('style.css @media (min-width:769px) 含 #switchToggle.swap-btn display:none', () => {
+test('style.css @media (min-width:1101px) 含 #switchToggle.swap-btn display:none(桌面控件外露)', () => {
     const css = readCss();
-    const block = extractMediaBlock(css, '@media (min-width: 769px)');
-    assert.ok(block, '存在 min-width:769px 媒体查询');
-    assert.ok(block.includes('#switchToggle.swap-btn'));
+    const block = extractMediaBlock(css, '@media (min-width: 1101px)');
+    assert.ok(block, '存在 min-width:1101px 媒体查询');
     assert.ok(/#switchToggle\.swap-btn\s*\{[^}]*display:\s*none/.test(block));
 });
 
@@ -229,4 +227,11 @@ test('style.css: welcome-message p 去 serif(用 sans)', () => {
     const block = css.match(/\.welcome-message\s+p\s*\{[^}]*\}/);
     assert.ok(block && /font-family:\s*var\(--sans\)/.test(block[0]), 'welcome p 应用 sans(终端页字体收敛)');
     assert.ok(block && !/var\(--serif\)/.test(block[0]), 'welcome p 不应再用 serif');
+});
+
+test('style.css: switch-sheet 项目区分组 + 启动按钮样式', () => {
+    const css = readCss();
+    assert.ok(css.includes('.switch-sheet-projects'), '应有项目区容器样式');
+    assert.ok(css.includes('.switch-sheet-section-title'), '应有分组标题样式');
+    assert.ok(css.includes('.switch-sheet-btn--launch'), '应有启动按钮样式');
 });

@@ -294,17 +294,35 @@ html, body {
 }
 .palette-item:hover, .palette-item.selected { background-color: var(--surface-2); color: var(--accent-2); }
 
+/* === switch_sheet 项目区(spec §4 抽屉扩展)=== */
+.switch-sheet-projects { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.switch-sheet-section-title {
+    margin: 0 0 8px; font-family: var(--mono); font-size: 11px; color: var(--fg-2);
+    letter-spacing: 0.04em; text-transform: lowercase;
+}
+.switch-sheet-btn--launch::before {
+    content: '↗'; display: inline-block; margin-right: 6px; color: var(--accent-2);
+}
+
+/* === 折叠断点:中屏(≤1100)即折叠控件进抽屉,不只移动端 === */
+@media (max-width: 1100px) {
+    /* 控件收进「切换」抽屉,header 精简为 brand+live+nav */
+    #desktopControls { display: none; }
+    .meta-inline { display: none; }
+    #switchToggle.swap-btn { display: inline-flex; }
+    /* 卡片贴边:窄屏不浪费空间 */
+    .console-card { max-width: 100%; margin: 0; border-radius: 0; border: none; box-shadow: none; }
+}
+
+/* 窄屏(≤768)细节收缩 */
 @media (max-width: 768px) {
-    .header { padding: 8px 14px; }
+    .header { padding: 8px 12px; }
     .control-label { display: none; }
-    #sessionSelect.control-input, #refreshSessions.btn { display: none; }
-    .logo { font-size: 14px; gap: 8px; }
     .messages { padding: 10px; }
-    .terminal-view { min-height: 280px; max-height: calc(100dvh - 100px); }
     .terminal-content { padding: 10px; font-size: 12px; }
     .terminal-input-row { padding: 10px; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
-    /* 切换 sheet 触发器/inline 控件显隐见 Task 4/7 的断点样式 */
-    #desktopControls { display: none; }
+    /* 移动端登录入口收起(spec §4:登录收起) */
+    .nav-link--login { display: none; }
 }
 
 /* 统一胶囊导航(控制台页;看板页 dashboard.css 另有一份,dashboard.html 不引 style.css 故不合并) */
@@ -341,7 +359,7 @@ html, body {
 .switch-sheet-btn:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .switch-sheet { animation: none; } }
 
-/* 桌面端隐藏移动切换按钮(meta bar 内的 swap-btn 仅移动抽屉入口) */
-@media (min-width: 769px) {
+/* 桌面(>1100):控件外露,抽屉入口隐藏 */
+@media (min-width: 1101px) {
     #switchToggle.swap-btn { display: none; }
 }
