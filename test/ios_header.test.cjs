@@ -311,3 +311,81 @@ test('index.html: .bottom-tabbar 三项(控制台 active + 看板 + #switchTab b
     assert.ok(m[0].includes('aria-expanded="false"'), 'switchTab aria-expanded=false');
     assert.ok(m[0].includes('aria-controls="switchSheet"'), 'switchTab aria-controls=switchSheet');
 });
+
+// === Task 2: tab 样式 + 色彩收敛 + a11y + 断点清理 ===
+
+test('style.css: .bottom-tabbar + .tab + .tab--active 顶部指示条(--accent-2)', () => {
+    const css = readCss();
+    assert.ok(/\.bottom-tabbar\s*\{/.test(css), '应有 .bottom-tabbar');
+    assert.ok(/\.tab\s*\{[^}]*min-height:\s*44px/.test(css), '.tab 应 min-height 44px');
+    assert.ok(/\.tab--active\s*\{[^}]*color:\s*var\(--accent-2\)/.test(css), '.tab--active 用 --accent-2');
+    assert.ok(/\.tab--active::before\s*\{[^}]*background:\s*var\(--accent-2\)/.test(css),
+        '.tab--active::before 指示条用 --accent-2(不整块染色)');
+    assert.ok(/\.tab:focus-visible/.test(css), '.tab 应有 :focus-visible');
+});
+
+test('style.css: .bottom-tabbar.is-hidden 仅在 @media(≤768)内(>768 不隐藏)', () => {
+    const css = readCss();
+    const block = extractMediaBlock(css, '@media (max-width: 768px)');
+    assert.ok(block, '存在 max-width:768px 块');
+    assert.ok(/\.bottom-tabbar\.is-hidden\s*\{[^}]*display:\s*none/.test(block),
+        '≤768 块内应有 .bottom-tabbar.is-hidden { display:none }');
+    const base = css.replace(/@media[^{]*\{[\s\S]*?\}(?=\s*@media|\s*$)/g, '').replace(/@media[^{]*\{[\s\S]*?\}/g, '');
+    assert.ok(!/\.bottom-tabbar\.is-hidden\s*\{\s*display:\s*none/.test(base),
+        '基础区不应有无条件 .bottom-tabbar.is-hidden(否则桌面也隐藏)');
+});
+
+test('style.css: 断点清理(无 #desktopControls/.nav-link--login/#switchToggle 残留规则)', () => {
+    const css = readCss();
+    assert.ok(!/#desktopControls\s*\{/.test(css), '#desktopControls 规则应已删除');
+    assert.ok(!/\.nav-link--login/.test(css), '.nav-link--login 规则应已删除');
+    assert.ok(!/#switchToggle/.test(css), '#switchToggle 规则应已删除');
+});
+
+test('style.css: placeholder 用 --fg-2(非 fg-3,达 AA)', () => {
+    const css = readCss();
+    const inlinePh = css.match(/\.terminal-inline-input::placeholder\s*\{[^}]*\}/);
+    const taPh = css.match(/\.terminal-inline-textarea::placeholder\s*\{[^}]*\}/);
+    assert.ok(inlinePh && /var\(--fg-2\)/.test(inlinePh[0]), 'terminal-inline-input placeholder 应用 --fg-2');
+    assert.ok(taPh && /var\(--fg-2\)/.test(taPh[0]), 'terminal-inline-textarea placeholder 应用 --fg-2');
+    [inlinePh, taPh].forEach((m) => assert.ok(m && !/var\(--fg-3\)/.test(m[0]), 'placeholder 不应用 fg-3'));
+});
+
+test('style.css: .live-dot-text 去橙(不用 --accent/--accent-2,色彩收敛)', () => {
+    const css = readCss();
+    const block = css.match(/\.live-dot\s*\{[^}]*\}/);
+    assert.ok(block, '应有 .live-dot 规则');
+    assert.ok(!/color:\s*var\(--accent/.test(block[0]), '.live-dot 文字不应再用 --accent(收敛)');
+    assert.ok(/color:\s*var\(--fg-2\)/.test(block[0]), '.live-dot 文字应用 --fg-2');
+});
+
+test('style.css: .console-card ≤1100 保留边框(只去 max-width/阴影,非硬切)', () => {
+    const css = readCss();
+    const block = extractMediaBlock(css, '@media (max-width: 1100px)');
+    assert.ok(block, '存在 max-width:1100px 块');
+    assert.ok(/\.console-card\s*\{[^}]*max-width:\s*100%/.test(block), '≤1100 console-card 贴边');
+    assert.ok(!/border:\s*none/.test(block), '≤1100 块内不应有 border:none(保留边框)');
+});
+
+test('style.css: .visually-hidden 工具类', () => {
+    const css = readCss();
+    assert.ok(/\.visually-hidden\s*\{/.test(css), '应有 .visually-hidden');
+    assert.ok(/clip:\s*rect/.test(css) || /clip-path:\s*polygon/.test(css), 'visually-hidden 应 clip 隐藏');
+});
+
+test('style.css: .btn 补 :focus-visible', () => {
+    const css = readCss();
+    assert.ok(/\.btn:focus-visible/.test(css), '.btn 应有 :focus-visible(焦点可见)');
+});
+
+test('style.css: toast-info/success 底色加深达 AA(深底白字 ≥4.5:1)', () => {
+    const css = readCss();
+    const info = css.match(/\.toast-info\s*\{[^}]*\}/)?.[0] || '';
+    const succ = css.match(/\.toast-success\s*\{[^}]*\}/)?.[0] || '';
+    assert.ok(info, '应有 .toast-info');
+    assert.ok(succ, '应有 .toast-success');
+    assert.ok(!/background-color:\s*var\(--waiting\)/.test(info), 'toast-info 不应再用 --waiting 浅底(对比不足)');
+    assert.ok(!/background-color:\s*var\(--success\)/.test(succ), 'toast-success 不应再用 --success 浅底(对比不足)');
+    assert.ok(/#[0-9a-fA-F]{3,6}/.test(info), 'toast-info 应改用加深的具体十六进制底色');
+    assert.ok(/#[0-9a-fA-F]{3,6}/.test(succ), 'toast-success 应改用加深的具体十六进制底色');
+});
