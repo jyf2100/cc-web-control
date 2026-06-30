@@ -66,7 +66,6 @@ html, body {
     font-family: var(--mono); font-size: 11px; color: var(--fg-3);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.s-status { flex-shrink: 0; }
 .s-id { font-family: var(--mono); font-size: 10px; color: var(--fg-3); flex-shrink: 0; }
 
 /* 空状态:§7.2:214 serif lede + eyebrow */
