@@ -70,15 +70,33 @@
     const items = (opts && Array.isArray(opts.items)) ? opts.items : [];
     const onLaunch = (opts && typeof opts.onLaunch === 'function') ? opts.onLaunch : () => {};
     const projects = (opts && Array.isArray(opts.projects)) ? opts.projects : [];
+    const meta = (opts && opts.meta && typeof opts.meta === 'object') ? opts.meta : null;
 
     const backdrop = doc.createElement('div');
     backdrop.className = 'switch-sheet-backdrop'; backdrop.hidden = true; backdrop.setAttribute('aria-hidden', 'true');
     const sheet = doc.createElement('div');
-    sheet.className = 'switch-sheet'; sheet.setAttribute('role', 'dialog'); sheet.setAttribute('aria-modal', 'true');
+    sheet.className = 'switch-sheet'; sheet.id = 'switchSheet';
+    sheet.setAttribute('role', 'dialog'); sheet.setAttribute('aria-modal', 'true');
     sheet.setAttribute('aria-label', '切换会话'); sheet.hidden = true;
     sheet.setAttribute('tabindex', '-1');
     const handle = doc.createElement('div');
     handle.className = 'switch-sheet-handle'; handle.setAttribute('aria-hidden', 'true'); sheet.appendChild(handle);
+
+    // 第 1 段:顶部 meta 行(project · s:NNn,mono 11px fg-2)
+    if (meta) {
+      const metaRow = doc.createElement('p');
+      metaRow.className = 'switch-sheet-meta';
+      const proj = (typeof meta.project === 'string' && meta.project) ? meta.project : '—';
+      const sess = (typeof meta.session === 'string' && meta.session) ? meta.session : '—';
+      metaRow.textContent = `${proj} · s:${sess}`;
+      sheet.appendChild(metaRow);
+    }
+
+    // 第 2 段:会话列表(标题 + 复用 buildSessionItems,当前项高亮+disabled)
+    const sessTitle = doc.createElement('p');
+    sessTitle.className = 'switch-sheet-section-title';
+    sessTitle.textContent = '会话';
+    sheet.appendChild(sessTitle);
     const list = doc.createElement('ul');
     list.className = 'switch-sheet-list'; list.setAttribute('role', 'list');
     items.forEach((it) => {
@@ -87,20 +105,21 @@
       const btn = doc.createElement('button');
       btn.type = 'button'; btn.className = 'switch-sheet-btn';
       btn.setAttribute('aria-current', it.isCurrent ? 'true' : 'false');
-      btn.textContent = it.label;             // textContent 防 HTML 注入
+      btn.textContent = it.label;
       if (it.isCurrent) btn.disabled = true;
       btn.addEventListener('click', () => { onPick(it.name); });
       li.appendChild(btn); list.appendChild(li);
     });
     sheet.appendChild(list);
-    // 项目区(移动/中屏折叠后在此启动项目,复用桌面 buildProjectItems 的 isCurrent 高亮)
+
+    // 第 3 段:项目启动区(复用 buildProjectItems + onLaunch);无项目时空状态
+    const projWrap = doc.createElement('div');
+    projWrap.className = 'switch-sheet-projects';
+    const projTitle = doc.createElement('p');
+    projTitle.className = 'switch-sheet-section-title';
+    projTitle.textContent = '项目';
+    projWrap.appendChild(projTitle);
     if (projects.length) {
-      const projWrap = doc.createElement('div');
-      projWrap.className = 'switch-sheet-projects';
-      const projTitle = doc.createElement('p');
-      projTitle.className = 'switch-sheet-section-title';
-      projTitle.textContent = '项目';            // textContent 防 HTML 注入
-      projWrap.appendChild(projTitle);
       const projList = doc.createElement('ul');
       projList.className = 'switch-sheet-list';
       projList.setAttribute('role', 'list');
@@ -118,12 +137,19 @@
         projList.appendChild(li);
       });
       projWrap.appendChild(projList);
-      sheet.appendChild(projWrap);
+    } else {
+      const empty = doc.createElement('p');
+      empty.className = 'switch-sheet-projects-empty';
+      empty.textContent = '暂无可启动项目';
+      projWrap.appendChild(empty);
     }
+    sheet.appendChild(projWrap);
     doc.body.appendChild(backdrop); doc.body.appendChild(sheet);
 
     let openState = false, savedOverflow = '', lastFocused = null;
     const focusables = () => Array.from(sheet.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])')).filter((el) => el.offsetParent !== null);
+    // 抽屉打开时把背景卡片 inert(补 aria-modal 跨 AT 缺陷);关闭移除
+    const backdropRoot = () => doc.querySelector('.console-card');
     const onKeydown = (e) => {
       if (!openState) return;
       if (shouldCloseOnKey(e)) { e.preventDefault(); close(); return; }
@@ -137,6 +163,7 @@
       if (openState) return; openState = true;
       lastFocused = doc.activeElement; savedOverflow = doc.body.style.overflow;
       doc.body.style.overflow = 'hidden';
+      const root = backdropRoot(); if (root) root.setAttribute('inert', '');
       backdrop.hidden = false; sheet.hidden = false; sheet.setAttribute('aria-hidden', 'false');
       if (trigger) trigger.setAttribute('aria-expanded', 'true');
       doc.addEventListener('keydown', onKeydown, true);
@@ -145,6 +172,7 @@
     function close() {
       if (!openState) return; openState = false;
       doc.body.style.overflow = savedOverflow;
+      const root = backdropRoot(); if (root) root.removeAttribute('inert');
       backdrop.hidden = true; sheet.hidden = true; sheet.setAttribute('aria-hidden', 'true');
       if (trigger) trigger.setAttribute('aria-expanded', 'false');
       doc.removeEventListener('keydown', onKeydown, true);
