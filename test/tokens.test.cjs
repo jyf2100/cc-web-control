@@ -57,3 +57,8 @@ test('login.html 结构:brand-mark + eyebrow + 成套输入属性 + 主/ghost �
   const base = html.match(/\.token-input\s*\{[^}]*\}/)[0];
   assert.ok(!/outline:\s*none/.test(base));
 });
+
+test('tokens.css 含 --shadow-card 卡片阴影令牌', () => {
+  const css = fs.readFileSync(`${P}/tokens.css`, 'utf8');
+  assert.ok(css.includes('--shadow-card'), 'tokens.css 应定义 --shadow-card(控制台卡片容器用)');
+});

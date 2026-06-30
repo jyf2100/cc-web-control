@@ -39,6 +39,8 @@
   --r-sm: 6px;     /* 卡片 */
   --r: 10px;       /* 主容器 */
   --r-pill: 9999px;
+  /* 卡片阴影:控制台卡片容器(轻量 editorial 风,承载「包裹」视觉,不喧宾夺主) */
+  --shadow-card: 0 1px 3px rgba(38, 37, 30, 0.06), 0 8px 24px rgba(38, 37, 30, 0.08);
 
   color-scheme: light;
 }
