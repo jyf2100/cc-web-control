@@ -84,10 +84,9 @@ test('client.js: --vh-available setProperty + init 调用', () => {
     assert.ok(idx > 0, 'setupVisualViewport() 被调用');
 });
 
-test('client.js: updateSessionUi 同步 metaSession + metaProject(getElementById)', () => {
+test('client.js: updateSessionUi 同步 metaSession(getElementById) + live 点文本', () => {
     const js = readClient();
     assert.ok(js.includes("getElementById('metaSession')"));
-    assert.ok(js.includes("getElementById('metaProject')"));
     // live 点文本切换
     assert.ok(js.includes("'.live-dot-text'"));
     assert.ok(js.includes("'live'"));
@@ -306,4 +305,56 @@ test('style.css: toast-info/success 底色加深达 AA(深底白字 ≥4.5:1)', 
     assert.ok(!/background-color:\s*var\(--success\)/.test(succ), 'toast-success 不应再用 --success 浅底(对比不足)');
     assert.ok(/#[0-9a-fA-F]{3,6}/.test(info), 'toast-info 应改用加深的具体十六进制底色');
     assert.ok(/#[0-9a-fA-F]{3,6}/.test(succ), 'toast-success 应改用加深的具体十六进制底色');
+});
+
+// === Task 4: client.js 交互契约 ===
+
+test('client.js: switchTab 装配(原 switchToggle)+ 抽屉 onOpen 刷新 + 传 meta', () => {
+    const js = readClient();
+    assert.ok(/getElementById\(\s*['"]switchTab['"]\s*\)/.test(js), '应 getElementById switchTab(原 switchToggle)');
+    assert.ok(!/getElementById\(\s*['"]switchToggle['"]\s*\)/.test(js), 'switchToggle 引用应已改名');
+    // onOpen 刷新:点击先 await loadSessions
+    assert.ok(/switchTab[\s\S]*await\s+loadSessions\(\)/.test(js), '点击 switchTab 应先 await loadSessions(onOpen 刷新)');
+    // 传 meta:buildMeta()(buildMeta 构造 {project,session})
+    assert.ok(/meta\s*:\s*buildMeta\(\)/.test(js), 'createSwitchSheet 应传 meta: buildMeta()');
+    assert.ok(/buildMeta[\s\S]*project[\s\S]*session/.test(js), 'buildMeta 应构造 {project,session}');
+});
+
+test('client.js: sessionStorage openSwitchSheet 跨页开抽屉(检测+removeItem)', () => {
+    const js = readClient();
+    assert.ok(/sessionStorage\.getItem\(\s*['"]openSwitchSheet['"]\s*\)/.test(js), '应检测 sessionStorage openSwitchSheet');
+    assert.ok(/sessionStorage\.removeItem\(\s*['"]openSwitchSheet['"]\s*\)/.test(js), '检测后应立即 removeItem(防残留)');
+});
+
+test('client.js: ≤768 终端输入聚焦折叠 tab bar(focus 加 is-hidden / blur 移除)', () => {
+    const js = readClient();
+    assert.ok(/addEventListener\(\s*['"]focus['"][\s\S]*classList\.add\(\s*['"]is-hidden['"]\s*\)/.test(js),
+        '终端 input focus 应给 .bottom-tabbar 加 is-hidden');
+    assert.ok(/addEventListener\(\s*['"]blur['"][\s\S]*classList\.remove\(\s*['"]is-hidden['"]\s*\)/.test(js),
+        '终端 input blur 应移除 is-hidden');
+    assert.ok(/bottom-tabbar/.test(js), '应引用 .bottom-tabbar');
+});
+
+test('client.js: 终端 textarea 加 aria-label(命令输入)', () => {
+    const js = readClient();
+    assert.ok(/setAttribute\(\s*['"]aria-label['"]\s*,\s*['"]命令输入['"]\s*\)/.test(js),
+        'ensureTerminalView 应给 inlineInput textarea 加 aria-label="命令输入"');
+});
+
+test('client.js: updateSessionUi 不再写 metaProject DOM(元素已删)', () => {
+    const js = readClient();
+    assert.ok(!/getElementById\(\s*['"]metaProject['"]\s*\)/.test(js), 'updateSessionUi 不应再 getElementById metaProject(元素已删,project 入抽屉 meta)');
+});
+
+test('client.js: sheetHandle/rebuildSheet 提升到 init 作用域(跨页 IIFE 可见,防块作用域 ReferenceError)', () => {
+    const js = readClient();
+    const switchTriggerIdx = js.indexOf("getElementById('switchTab')");
+    const sheetDecl = js.indexOf('let sheetHandle = null');
+    const rebuildDecl = js.indexOf('let rebuildSheet = null');
+    assert.ok(sheetDecl > -1, '应有 let sheetHandle = null 声明');
+    assert.ok(rebuildDecl > -1, '应有 let rebuildSheet = null 声明');
+    // 声明须在 switch 装配(switchTrigger)之前 = init 顶层作用域;若落回下方 if 块内(在 switchTrigger 之后)
+    // 则块作用域隔离、bootstrap IIFE 不可见 → 跨页开抽屉时 ReferenceError
+    assert.ok(sheetDecl < switchTriggerIdx, 'let sheetHandle 应在 switch 装配前(init 作用域,非 if 块内)');
+    assert.ok(rebuildDecl < switchTriggerIdx, 'let rebuildSheet 应在 switch 装配前(init 作用域,非 if 块内)');
 });
