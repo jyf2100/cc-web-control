@@ -13,6 +13,7 @@
     var stateMsg = document.getElementById('stateMessage');
     var titleEl = document.getElementById('title');
     var titleCountEl = document.getElementById('titleCount'); // 可选 header meta 锚点
+    var prevSessions = [];
 
     function goToSession(name) {
         if (!name) return;
@@ -56,7 +57,13 @@
             showState('ready', '还没有会话。在主控制台启动一个会话,这里会显示状态。'); return;
         }
         stateMsg.hidden = true;
+        var changed = R.diffChangedStatus(prevSessions, sessions);
         list.innerHTML = R.renderSessionList(sessions);
+        var items = list.querySelectorAll('.session');
+        Array.prototype.forEach.call(items, function (li) {
+            if (changed.has(li.getAttribute('data-session'))) li.classList.add('session--flash');
+        });
+        prevSessions = sessions;
     }
     async function poll() {
         try {
