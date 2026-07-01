@@ -38,9 +38,11 @@ function renderTerminal(output, lineRenderer) {
     if (!terminalModel || !virtualScroll) return;
     const changed = terminalModel.replace(output);
     if (!changed) return;
-    const scrollTop = _prevScrollTop;
+    // 先在 render 之前判断贴底状态(render 会改变 scrollHeight,先判后 render 才准确);
+    // 配合 client.js 的 scroll 监听,_prevScrollTop 实时反映用户最新滚动位置
+    const wasBottom = virtualScroll.wasAtBottom(_prevScrollTop);
     virtualScroll.render(terminalModel, lineRenderer);
-    if (virtualScroll.wasAtBottom(scrollTop)) {
+    if (wasBottom) {
         virtualScroll.scrollToBottom();
     }
 }

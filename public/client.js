@@ -10,6 +10,9 @@
     const WS_URL = `${WS_PROTOCOL}://${window.location.host}`;
     let defaultSession = 'claude-web-session';
     const RECONNECT_INTERVAL = 3000;
+    // sticky 滚动贴底阈值:距底部此距离内视为"跟随最新输出";
+    // 用户手动上滚超过此距离则停止自动跟随,直到重新滚回底部
+    const PINNED_THRESHOLD_PX = 48;
 
     // DOM 元素
     const messagesEl = document.getElementById('messages');
@@ -129,17 +132,29 @@
     }
 
     /**
-     * 滚动到底部
+     * 是否贴底:用户正在跟随最新输出(距底部 PINNED_THRESHOLD_PX 内)。
+     */
+    function isPinnedToBottom(el) {
+        return el.scrollTop + el.clientHeight >= el.scrollHeight - PINNED_THRESHOLD_PX;
+    }
+
+    /**
+     * sticky 滚动:仅当用户已贴底时才跟随最新输出到底部;
+     * 用户手动上滚查看历史时,自动滚动让位,直到重新滚回底部才恢复跟随。
      */
     function scrollToBottom() {
         if (terminalContentEl) {
             const prevScrollTop = terminalContentEl.scrollTop;
-            terminalContentEl.scrollTop = terminalContentEl.scrollHeight;
+            if (isPinnedToBottom(terminalContentEl)) {
+                terminalContentEl.scrollTop = terminalContentEl.scrollHeight;
+            }
             if (window.ccModules?.updateScrollTop) {
                 window.ccModules.updateScrollTop(prevScrollTop);
             }
         }
-        chatContainer.scrollTop = chatContainer.scrollHeight;
+        if (chatContainer && isPinnedToBottom(chatContainer)) {
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
     }
 
     /**
@@ -242,6 +257,13 @@
         terminalHeaderEl = terminalHeader;
         terminalContentEl = terminalContent;
         terminalInputEl = inlineInput;
+
+        // 用户手动滚动时实时同步位置,供虚拟滚动路径 wasAtBottom 判断消费
+        terminalContent.addEventListener('scroll', () => {
+            if (window.ccModules?.updateScrollTop) {
+                window.ccModules.updateScrollTop(terminalContent.scrollTop);
+            }
+        });
 
         // ≤768 终端输入聚焦时折叠底部 tab bar 让出空间(CSS 媒体查询控制仅移动端隐藏)
         const bottomTabbar = document.querySelector('.bottom-tabbar');

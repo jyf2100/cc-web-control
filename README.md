@@ -123,7 +123,7 @@ tmux-web-control/
 设置允许扫描的项目根目录（逗号分隔）：
 
 ```bash
-export CC_WEB_PROJECT_ROOTS="/Volumes/work/workspace"
+export CC_WEB_PROJECT_ROOTS="<项目父目录>"
 ```
 
 启动服务后，页面顶部会出现 `Project` 下拉框，选择项目并点击 `启动` 会：
@@ -153,6 +153,7 @@ Claude Code 有些交互会在输入 `/` 后弹出命令面板（不一定需要
 - `CC_WEB_PORT`：端口（默认 `7684`）
 - `CC_WEB_SESSION`：默认会话名（默认 `claude-web-session`）
 - `CC_WEB_POLL_INTERVAL`：输出轮询间隔 ms（默认 `100`）
+- `CC_WEB_CAPTURE_HISTORY`：控制台可回看的 tmux scrollback 历史行数。未设/`0`=原行为（只抓当前可见屏）；正整数 N=抓当前屏 + 往上 N 行（受 tmux `history-limit` 上限约束，默认 2000）。例：`CC_WEB_CAPTURE_HISTORY=2000` 让滚动条能回看更早的历史输出。
 - `CC_WEB_PROJECT_ROOTS`：允许扫描的项目根目录（逗号分隔；不设置则不展示项目下拉框）
 - `CC_WEB_AUTH_TOKEN`：开启鉴权（设置后需要先访问 `/login` 输入 token 才能进入主页面；WS/API 同样受保护）
 - `CC_WEB_CLAUDE_CONTINUE=1`：当服务端需要新启动 `claude` 时，使用 `claude -c/--continue`（在项目目录继续最近一次对话，减少“记忆断层”）
@@ -169,7 +170,7 @@ Claude Code 有些交互会在输入 `/` 后弹出命令面板（不一定需要
 脚本：`scripts/restart_tunnel.sh`
 
 ```bash
-cd /Volumes/work/workspace/cc-control
+cd <项目目录>
 bash scripts/restart_tunnel.sh
 ```
 

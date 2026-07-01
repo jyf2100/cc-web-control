@@ -37,6 +37,9 @@ const PORT = Number.parseInt(process.env.CC_WEB_PORT || '', 10) || 7684;
 const HOST = process.env.CC_WEB_HOST || '127.0.0.1';
 const DEFAULT_SESSION = process.env.CC_WEB_SESSION || 'claude-web-session';
 const POLL_INTERVAL = Number.parseInt(process.env.CC_WEB_POLL_INTERVAL || '', 10) || 100;
+// 控制台可回看的 tmux scrollback 历史行数:未设/0=原行为(只抓当前屏);正整数 N=抓当前屏+往上N行。
+// 用户反馈滚动条只能看当前一屏;显式设 CC_WEB_CAPTURE_HISTORY=N 开启 scrollback 回看。
+const CAPTURE_HISTORY = tmux.parseCaptureHistory(process.env.CC_WEB_CAPTURE_HISTORY);
 const NO_OPEN = process.env.CC_WEB_NO_OPEN === '1' || hasFlag('--no-open');
 const NO_ATTACH = process.env.CC_WEB_NO_ATTACH === '1' || hasFlag('--no-attach');
 const WEB_ONLY = process.env.CC_WEB_WEB_ONLY === '1' || hasFlag('--web-only');
@@ -549,7 +552,7 @@ function startWebServer() {
     clients.set(ws, clientInfo);
 
     try {
-      const output = await tmux.capturePane(sessionName);
+      const output = await tmux.capturePane(sessionName, CAPTURE_HISTORY);
       if (output === null && ws.readyState === 1) {
         clientInfo.missingNoticeSent = true;
         ws.send(JSON.stringify({
@@ -567,7 +570,7 @@ function startWebServer() {
       if (clientInfo.isPolling) return;
       clientInfo.isPolling = true;
       try {
-        const output = await tmux.capturePane(sessionName);
+        const output = await tmux.capturePane(sessionName, CAPTURE_HISTORY);
         if (output === null && !clientInfo.missingNoticeSent && ws.readyState === 1) {
           clientInfo.missingNoticeSent = true;
           ws.send(JSON.stringify({

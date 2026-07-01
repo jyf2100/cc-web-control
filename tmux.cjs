@@ -91,7 +91,31 @@ async function createSession(sessionName, command = null) {
  * @param {string} sessionName - 会话名称
  * @returns {Promise<string|null>} - 会话内容
  */
-async function capturePane(sessionName) {
+/**
+ * 构造 capture-pane 的 tmux 参数。
+ * @param {string} sessionName
+ * @param {number} [scrollback=0] - 抓取的 scrollback 历史行数;0=只抓当前可见屏(原行为)
+ * @returns {string[]}
+ */
+function buildCaptureArgs(sessionName, scrollback = 0) {
+  const base = ['capture-pane', '-t', sessionName, '-p'];
+  return scrollback > 0 ? [...base, '-S', `-${scrollback}`] : base;
+}
+
+/**
+ * 解析 CC_WEB_CAPTURE_HISTORY 环境变量。
+ * 未设/空/非法/负数 → 0(原行为,只抓当前屏);正整数 N → 抓当前屏 + 往上 N 行 scrollback。
+ * @param {string|undefined} raw
+ * @returns {number}
+ */
+function parseCaptureHistory(raw) {
+  if (raw === undefined || raw === '') return 0;
+  const n = Number.parseInt(raw, 10);
+  if (Number.isFinite(n) && n >= 0) return n;
+  return 0;
+}
+
+async function capturePane(sessionName, scrollback = 0) {
   if (!sessionName || typeof sessionName !== 'string') {
     throw new Error('Session name must be a non-empty string');
   }
@@ -102,7 +126,7 @@ async function capturePane(sessionName) {
   }
 
   try {
-    const { stdout } = await runTmux(['capture-pane', '-t', sessionName, '-p'], {
+    const { stdout } = await runTmux(buildCaptureArgs(sessionName, scrollback), {
       maxStdoutChars: 10 * 1024 * 1024,
     });
     return stdout;
@@ -170,6 +194,8 @@ module.exports = {
   sendKeys,
   killSession,
   sendKey,
+  buildCaptureArgs,
+  parseCaptureHistory,
 };
 
 async function sendKey(sessionName, key) {

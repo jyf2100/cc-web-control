@@ -6,11 +6,12 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMUX_SESSION="${CC_WEB_TMUX_SESSION:-cc-web-control}"
 HOST="${CC_WEB_HOST:-127.0.0.1}"
 PORT="${CC_WEB_PORT:-7684}"
-PROJECT_ROOTS="${CC_WEB_PROJECT_ROOTS:-/Users/roc/workspace}"
+PROJECT_ROOTS="${CC_WEB_PROJECT_ROOTS:-}"   # 默认空(对外不依赖本机路径);用户按需设
 PROXY_URL="${CC_WEB_PROXY_URL:-}"
 CLAUDE_CONTINUE="${CC_WEB_CLAUDE_CONTINUE:-1}"
 CLOUDFLARED_PROTOCOL="${CC_WEB_CLOUDFLARED_PROTOCOL:-http2}"
 CLOUDFLARED_EDGE_IP_VERSION="${CC_WEB_CLOUDFLARED_EDGE_IP_VERSION:-4}"
+CAPTURE_HISTORY="${CC_WEB_CAPTURE_HISTORY:-}"   # 控制台 scrollback 行数;空=原行为(只抓当前屏)
 
 ENV_FILE="${CC_WEB_ENV_FILE:-/tmp/${TMUX_SESSION}-env.sh}"
 TUNNEL_LOG_FILE="${CC_WEB_TUNNEL_LOG_FILE:-/tmp/${TMUX_SESSION}-tunnel.log}"
@@ -52,6 +53,7 @@ export CC_WEB_PROJECT_ROOTS=$(single_quote "$PROJECT_ROOTS")
 export CC_WEB_HOST=$(single_quote "$HOST")
 export CC_WEB_PORT=$(single_quote "$PORT")
 export CC_WEB_CLAUDE_CONTINUE=$(single_quote "$CLAUDE_CONTINUE")
+export CC_WEB_CAPTURE_HISTORY=$(single_quote "$CAPTURE_HISTORY")
 export CC_WEB_NO_OPEN=1
 export CC_WEB_NO_ATTACH=1
 EOF
@@ -62,7 +64,7 @@ if tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
   tmux kill-session -t "$TMUX_SESSION"
 fi
 
-server_inner="set -euo pipefail; source \"$ENV_FILE\"; cd \"$ROOT_DIR\"; node server.cjs --no-open --no-attach"
+server_inner="set -euo pipefail; source \"$ENV_FILE\"; node \"$ROOT_DIR/server.cjs\" --no-open --no-attach"
 proxy_export=""
 if [[ -n "$PROXY_URL" ]]; then
   proxy_export="HTTP_PROXY=\"$PROXY_URL\" HTTPS_PROXY=\"$PROXY_URL\" ALL_PROXY=\"$PROXY_URL\" NO_PROXY='127.0.0.1,localhost' "

@@ -186,7 +186,7 @@ html, body {
 
 .stop-controls { display: none; gap: 8px; flex-shrink: 0; }
 .btn.stop-btn {
-    height: auto; min-height: 44px; padding: 0 14px;
+    height: 28px; padding: 0 10px;
     font-family: var(--mono); font-size: 12px; color: var(--accent-2);
     background: var(--accent-bg); border: 1px solid var(--accent-dim); border-radius: var(--r-pill);
 }
