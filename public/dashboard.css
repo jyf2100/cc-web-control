@@ -105,10 +105,15 @@ html, body {
     overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
 
-/* === 状态变化闪动(spec 需求2)=== */
+/* === 状态变化闪动(spec 需求2)===
+   原实现 box-shadow 4px @ --accent-dim(rgba 0.25)在 editorial 浅底上几乎不可见,
+   且 background 与 .session.waiting 的橙底重叠 → 背景闪烁看不出。
+   改用实色 --accent-2 外发光 + 轻微 scale,确保任意状态(含 waiting)都肉眼可察。 */
 @keyframes session-flash {
-  0%   { box-shadow: 0 0 0 0 var(--accent-dim); }
-  50%  { box-shadow: 0 0 0 4px var(--accent-dim); background: var(--accent-bg); }
-  100% { box-shadow: 0 0 0 0 transparent; }
+  0%   { box-shadow: 0 0 0 0 var(--accent-dim); transform: scale(1); }
+  25%  { box-shadow: 0 0 0 6px var(--accent-2); transform: scale(1.015); }
+  60%  { box-shadow: 0 0 0 3px var(--accent-dim); transform: scale(1); }
+  100% { box-shadow: 0 0 0 0 transparent; transform: scale(1); }
 }
-.session--flash { animation: session-flash 1s ease-out 1; }
+.session--flash { animation: session-flash 1.1s cubic-bezier(0.22, 1, 0.36, 1) 1; }
+@media (prefers-reduced-motion: reduce) { .session--flash { animation: none; } }

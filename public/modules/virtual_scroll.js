@@ -1,4 +1,6 @@
-const SCROLL_THRESHOLD_PX = 2;
+// sticky 贴底容差:与 client.js PINNED_THRESHOLD_PX 一致,
+// 用户上滚超过此距离才视为"离开底部"并停止自动跟随
+const SCROLL_THRESHOLD_PX = 48;
 
 export class VirtualScrollView {
     #container;

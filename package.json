@@ -1,17 +1,19 @@
 {
   "name": "cc-web-control",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "通过 Web 页面以对话框形式控制本地 tmux 会话",
   "type": "module",
   "main": "server.cjs",
   "bin": {
-    "cc-web-control": "bin/cc-web-control.cjs"
+    "cc-web-control": "bin/cc-web-control.cjs",
+    "cc-web-control-tunnel": "bin/cc-web-control-tunnel.cjs"
   },
   "files": [
     "*.cjs",
     "public/",
     "claude-wrapper.sh",
-    "bin/"
+    "bin/",
+    "scripts/restart_tunnel.sh"
   ],
   "engines": {
     "node": ">=18"
