@@ -32,6 +32,12 @@ test('formatMissing 输出含依赖名与标题', () => {
   assert.ok(out.includes('claude'));
 });
 
+test('formatMissing 单项缺失时输出该依赖名与安装提示', () => {
+  const out = formatMissing(findMissing(name => name !== 'tmux'));
+  assert.ok(out.includes('✗ tmux'));
+  assert.ok(out.includes('brew install tmux'));
+});
+
 test('main 缺失依赖时以 exit code 1 退出且不启动 server', () => {
   const origExit = process.exit;
   const origErr = console.error;

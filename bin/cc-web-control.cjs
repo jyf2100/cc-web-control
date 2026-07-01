@@ -10,6 +10,7 @@ const DEPS = [
 ];
 
 function commandExists(cmd) {
+  if (!/^[a-zA-Z0-9._-]+$/.test(cmd)) return false;
   try {
     execSync(`command -v ${cmd}`, { stdio: 'ignore' });
     return true;
