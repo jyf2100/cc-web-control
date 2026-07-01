@@ -25,42 +25,6 @@ test('index.html header: live-dot role=status + aria-live polite + pulse + text'
     assert.ok(h.includes('class="live-dot-text"'));
 });
 
-test('index.html header: project/session meta 元素齐全(metaProject/metaSession/meta-label/meta-sep)', () => {
-    const h = readHtml();
-    assert.ok(h.includes('id="metaProject"'));
-    assert.ok(h.includes('id="metaSession"'));
-    assert.ok(h.includes('class="meta-label"'));
-    assert.ok(h.includes('class="meta-sep"'));
-});
-
-test('index.html header: switchToggle aria-haspopup dialog + aria-expanded false + aria-controls switchSheet', () => {
-    const h = readHtml();
-    const m = h.match(/<button[^>]*id="switchToggle"[^>]*>/);
-    assert.ok(m, 'switchToggle 按钮存在');
-    const btn = m[0];
-    assert.ok(btn.includes('aria-haspopup="dialog"'));
-    assert.ok(btn.includes('aria-expanded="false"'));
-    assert.ok(btn.includes('aria-controls="switchSheet"'));
-});
-
-test('index.html header: #switchSheet hidden 锚点存在', () => {
-    const h = readHtml();
-    assert.ok(h.includes('id="switchSheet"'));
-    assert.ok(/<div id="switchSheet" hidden>/.test(h));
-});
-
-test('index.html header: desktopControls 含各 id(sessionSelect/refreshSessions/projectSelect/projectControl/projectsEmpty/startProject)', () => {
-    const h = readHtml();
-    assert.ok(h.includes('id="desktopControls"'));
-    const start = h.indexOf('id="desktopControls"');
-    const end = h.indexOf('</header>', start);
-    assert.ok(end > start, 'desktopControls 在 header 内');
-    const block = h.slice(start, end);
-    for (const id of ['sessionSelect', 'refreshSessions', 'projectSelect', 'projectControl', 'projectsEmpty', 'startProject']) {
-        assert.ok(block.includes(`id="${id}"`), `desktopControls 缺 id=${id}`);
-    }
-});
-
 test('index.html header: 不含 connectionStatus(已删,状态改由 live 点承载)', () => {
     const h = readHtml();
     assert.ok(!h.includes('id="connectionStatus"'), 'connectionStatus 应已删除');
@@ -100,29 +64,6 @@ function extractMediaBlock(css, mediaHead) {
     return css.slice(start, i);
 }
 
-test('style.css @media (max-width:1100px) 块含 #desktopControls display:none(中屏+移动折叠)', () => {
-    const css = readCss();
-    const head = '@media (max-width: 1100px) {\n';
-    const start = css.indexOf(head);
-    assert.ok(start >= 0, '存在多行 max-width:1100px 媒体查询块');
-    const braceOpen = css.indexOf('{', start);
-    let depth = 0, i = braceOpen;
-    for (; i < css.length; i++) {
-        if (css[i] === '{') depth++;
-        else if (css[i] === '}') { depth--; if (depth === 0) { i++; break; } }
-    }
-    const block = css.slice(start, i);
-    assert.ok(/#desktopControls\s*\{[^}]*display:\s*none/.test(block), '≤1100 时 desktopControls 应隐藏');
-    assert.ok(/#switchToggle\.swap-btn\s*\{[^}]*display:\s*inline-flex/.test(block), '≤1100 时切换入口应显示');
-});
-
-test('style.css @media (min-width:1101px) 含 #switchToggle.swap-btn display:none(桌面控件外露)', () => {
-    const css = readCss();
-    const block = extractMediaBlock(css, '@media (min-width: 1101px)');
-    assert.ok(block, '存在 min-width:1101px 媒体查询');
-    assert.ok(/#switchToggle\.swap-btn\s*\{[^}]*display:\s*none/.test(block));
-});
-
 test('client.js: enterkeyhint + inputmode setAttribute', () => {
     const js = readClient();
     assert.ok(js.includes("setAttribute('enterkeyhint', 'send')"));
@@ -143,18 +84,9 @@ test('client.js: --vh-available setProperty + init 调用', () => {
     assert.ok(idx > 0, 'setupVisualViewport() 被调用');
 });
 
-// switchToggle 静态 aria(HTML 保证初始态,运行时由 createSwitchSheet 更新)
-test('index.html switchToggle: 静态 aria-haspopup/aria-expanded/aria-controls', () => {
-    const html = readHtml();
-    assert.ok(/id="switchToggle"[^>]*aria-haspopup="dialog"/.test(html), 'switchToggle 有 aria-haspopup=dialog');
-    assert.ok(/id="switchToggle"[^>]*aria-expanded="false"/.test(html), 'switchToggle 有 aria-expanded=false');
-    assert.ok(/id="switchToggle"[^>]*aria-controls="switchSheet"/.test(html), 'switchToggle 有 aria-controls=switchSheet');
-});
-
-test('client.js: updateSessionUi 同步 metaSession + metaProject(getElementById)', () => {
+test('client.js: updateSessionUi 同步 metaSession(getElementById) + live 点文本', () => {
     const js = readClient();
     assert.ok(js.includes("getElementById('metaSession')"));
-    assert.ok(js.includes("getElementById('metaProject')"));
     // live 点文本切换
     assert.ok(js.includes("'.live-dot-text'"));
     assert.ok(js.includes("'live'"));
@@ -195,12 +127,6 @@ test('index.html: .console-card 卡片包裹 header + main', () => {
     assert.ok(mainIdx > cardOpen, 'main 在 console-card 内');
 });
 
-test('index.html header: 单行结构 header-left + header-right', () => {
-    const h = readHtml();
-    assert.ok(h.includes('class="header-left"'));
-    assert.ok(h.includes('class="header-right"'));
-});
-
 test('style.css: .console-card 限宽 1100 + 阴影 + 圆角', () => {
     const css = readCss();
     const block = css.match(/\.console-card\s*\{[^}]*\}/);
@@ -236,19 +162,199 @@ test('style.css: switch-sheet 项目区分组 + 启动按钮样式', () => {
     assert.ok(css.includes('.switch-sheet-btn--launch'), '应有启动按钮样式');
 });
 
-test('style.css: @media(768) 移动端登录收起(.nav .nav-link--login display:none,防 specificity 覆盖)', () => {
-    const css = readCss();
-    // .nav 前缀提 specificity:无前缀 .nav-link--login 在 source order 上早于
-    // .nav-link 基础规则(同 specificity),会被后者 inline-flex 覆盖 → 登录入口在移动端不收起。
-    // 此规则全文唯一一处(仅存在于 ≤768 收起语境),故全文直搜即可。
-    assert.ok(/\.nav\s+\.nav-link--login\s*\{[^}]*display:\s*none/.test(css),
-        '应有 .nav .nav-link--login { display:none }(带 .nav 前缀压过 .nav-link)');
-});
-
 test('style.css: 阅读文字 meta-label 不用 fg-3(WCAG AA)', () => {
     const css = readCss();
     const block = css.match(/\.meta-inline\s+\.meta-label\s*\{[^}]*\}/);
     assert.ok(block, '应有 .meta-inline .meta-label 规则');
     assert.ok(!/var\(--fg-3\)/.test(block[0]), 'meta-label 不应用 fg-3(禁承载阅读文字)');
     assert.ok(/var\(--fg-2\)/.test(block[0]), 'meta-label 应用 fg-2(达 AA)');
+});
+
+// === 底部 tab 重构契约(2026-06-30 spec)===
+
+test('index.html header: 只有 header-left(无 header-right)', () => {
+    const h = readHtml();
+    assert.ok(h.includes('class="header-left"'), '应有 header-left');
+    assert.ok(!h.includes('class="header-right"'), 'header-right 应已删除(控件入抽屉)');
+});
+
+test('index.html header: 极简 session meta 只含 s(无 metaProject/meta-sep)', () => {
+    const h = readHtml();
+    assert.ok(h.includes('id="metaSession"'), '极简 session 标识 metaSession 存在');
+    assert.ok(h.includes('class="meta-label"'), 'meta-label 存在');
+    assert.ok(!h.includes('id="metaProject"'), 'header 不应再有 metaProject(project 入抽屉)');
+    assert.ok(!h.includes('class="meta-sep"'), 'header 不应再有 meta-sep(只剩 s)');
+});
+
+test('index.html: 无 #desktopControls / nav / #switchToggle / refreshSessions / 登录', () => {
+    const h = readHtml();
+    assert.ok(!h.includes('id="desktopControls"'), 'desktopControls 应已删除');
+    assert.ok(!h.includes('class="nav"'), 'header nav 应已删除(导航下沉底部 tab)');
+    assert.ok(!h.includes('id="switchToggle"'), 'switchToggle 应已删除(改 #switchTab)');
+    assert.ok(!h.includes('id="refreshSessions"'), 'refreshSessions 应已删除(onOpen 刷新)');
+    assert.ok(!/class="nav-link--login"/.test(h), '登录 nav-link 应已删除');
+});
+
+test('index.html: 隐藏 #stateCarriers 含原控件 id(不含 refreshSessions)', () => {
+    const h = readHtml();
+    const m = h.match(/<div id="stateCarriers" hidden>[\s\S]*?<\/div>/);
+    assert.ok(m, '应有 <div id="stateCarriers" hidden>');
+    const block = m[0];
+    for (const id of ['sessionSelect', 'projectSelect', 'projectControl', 'projectsEmpty', 'startProject']) {
+        assert.ok(block.includes(`id="${id}"`), `#stateCarriers 应含 id=${id}(client.js 守卫依赖)`);
+    }
+    assert.ok(!block.includes('id="refreshSessions"'), '#stateCarriers 不应含 refreshSessions(已删)');
+});
+
+test('index.html: 无 #switchSheet 空锚点(改由 switch_sheet.cjs 动态挂 id)', () => {
+    const h = readHtml();
+    assert.ok(!/<div id="switchSheet" hidden>/.test(h), '#switchSheet 空锚点应已删除');
+    assert.ok(!/id="switchSheet"/.test(h), 'index.html 不应再有 switchSheet(switch_sheet.cjs 动态创建)');
+});
+
+test('index.html: <main> 内有 visually-hidden <h1>', () => {
+    const h = readHtml();
+    assert.ok(/<h1 class="visually-hidden">/.test(h), 'main 应有 visually-hidden h1(建立大纲)');
+});
+
+test('index.html: .bottom-tabbar 三项(控制台 active + 看板 + #switchTab button)', () => {
+    const h = readHtml();
+    assert.ok(h.includes('class="bottom-tabbar"'), '应有 .bottom-tabbar');
+    assert.ok(/class="tab tab--active"[^>]*href="\/"[^>]*aria-current="page"/.test(h), '控制台 tab=active + aria-current');
+    assert.ok(/class="tab"[^>]*href="\/dashboard\.html"/.test(h), '看板 tab');
+    const m = h.match(/<button[^>]*id="switchTab"[^>]*>/);
+    assert.ok(m, 'switchTab 按钮存在');
+    assert.ok(m[0].includes('aria-haspopup="dialog"'), 'switchTab aria-haspopup=dialog');
+    assert.ok(m[0].includes('aria-expanded="false"'), 'switchTab aria-expanded=false');
+    assert.ok(m[0].includes('aria-controls="switchSheet"'), 'switchTab aria-controls=switchSheet');
+});
+
+// === Task 2: tab 样式 + 色彩收敛 + a11y + 断点清理 ===
+
+test('style.css: .bottom-tabbar + .tab + .tab--active 顶部指示条(--accent-2)', () => {
+    const css = readCss();
+    assert.ok(/\.bottom-tabbar\s*\{/.test(css), '应有 .bottom-tabbar');
+    assert.ok(/\.tab\s*\{[^}]*min-height:\s*44px/.test(css), '.tab 应 min-height 44px');
+    assert.ok(/\.tab--active\s*\{[^}]*color:\s*var\(--accent-2\)/.test(css), '.tab--active 用 --accent-2');
+    assert.ok(/\.tab--active::before\s*\{[^}]*background:\s*var\(--accent-2\)/.test(css),
+        '.tab--active::before 指示条用 --accent-2(不整块染色)');
+    assert.ok(/\.tab:focus-visible/.test(css), '.tab 应有 :focus-visible');
+});
+
+test('style.css: .bottom-tabbar.is-hidden 仅在 @media(≤768)内(>768 不隐藏)', () => {
+    const css = readCss();
+    const block = extractMediaBlock(css, '@media (max-width: 768px)');
+    assert.ok(block, '存在 max-width:768px 块');
+    assert.ok(/\.bottom-tabbar\.is-hidden\s*\{[^}]*display:\s*none/.test(block),
+        '≤768 块内应有 .bottom-tabbar.is-hidden { display:none }');
+    const base = css.replace(/@media[^{]*\{[\s\S]*?\}(?=\s*@media|\s*$)/g, '').replace(/@media[^{]*\{[\s\S]*?\}/g, '');
+    assert.ok(!/\.bottom-tabbar\.is-hidden\s*\{\s*display:\s*none/.test(base),
+        '基础区不应有无条件 .bottom-tabbar.is-hidden(否则桌面也隐藏)');
+});
+
+test('style.css: 断点清理(无 #desktopControls/.nav-link--login/#switchToggle 残留规则)', () => {
+    const css = readCss();
+    assert.ok(!/#desktopControls\s*\{/.test(css), '#desktopControls 规则应已删除');
+    assert.ok(!/\.nav-link--login/.test(css), '.nav-link--login 规则应已删除');
+    assert.ok(!/#switchToggle/.test(css), '#switchToggle 规则应已删除');
+});
+
+test('style.css: placeholder 用 --fg-2(非 fg-3,达 AA)', () => {
+    const css = readCss();
+    const inlinePh = css.match(/\.terminal-inline-input::placeholder\s*\{[^}]*\}/);
+    const taPh = css.match(/\.terminal-inline-textarea::placeholder\s*\{[^}]*\}/);
+    assert.ok(inlinePh && /var\(--fg-2\)/.test(inlinePh[0]), 'terminal-inline-input placeholder 应用 --fg-2');
+    assert.ok(taPh && /var\(--fg-2\)/.test(taPh[0]), 'terminal-inline-textarea placeholder 应用 --fg-2');
+    [inlinePh, taPh].forEach((m) => assert.ok(m && !/var\(--fg-3\)/.test(m[0]), 'placeholder 不应用 fg-3'));
+});
+
+test('style.css: .live-dot-text 去橙(不用 --accent/--accent-2,色彩收敛)', () => {
+    const css = readCss();
+    const block = css.match(/\.live-dot\s*\{[^}]*\}/);
+    assert.ok(block, '应有 .live-dot 规则');
+    assert.ok(!/color:\s*var\(--accent/.test(block[0]), '.live-dot 文字不应再用 --accent(收敛)');
+    assert.ok(/color:\s*var\(--fg-2\)/.test(block[0]), '.live-dot 文字应用 --fg-2');
+});
+
+test('style.css: .console-card ≤1100 保留边框(只去 max-width/阴影,非硬切)', () => {
+    const css = readCss();
+    const block = extractMediaBlock(css, '@media (max-width: 1100px)');
+    assert.ok(block, '存在 max-width:1100px 块');
+    assert.ok(/\.console-card\s*\{[^}]*max-width:\s*100%/.test(block), '≤1100 console-card 贴边');
+    assert.ok(!/border:\s*none/.test(block), '≤1100 块内不应有 border:none(保留边框)');
+});
+
+test('style.css: .visually-hidden 工具类', () => {
+    const css = readCss();
+    assert.ok(/\.visually-hidden\s*\{/.test(css), '应有 .visually-hidden');
+    assert.ok(/clip:\s*rect/.test(css) || /clip-path:\s*polygon/.test(css), 'visually-hidden 应 clip 隐藏');
+});
+
+test('style.css: .btn 补 :focus-visible', () => {
+    const css = readCss();
+    assert.ok(/\.btn:focus-visible/.test(css), '.btn 应有 :focus-visible(焦点可见)');
+});
+
+test('style.css: toast-info/success 底色加深达 AA(深底白字 ≥4.5:1)', () => {
+    const css = readCss();
+    const info = css.match(/\.toast-info\s*\{[^}]*\}/)?.[0] || '';
+    const succ = css.match(/\.toast-success\s*\{[^}]*\}/)?.[0] || '';
+    assert.ok(info, '应有 .toast-info');
+    assert.ok(succ, '应有 .toast-success');
+    assert.ok(!/background-color:\s*var\(--waiting\)/.test(info), 'toast-info 不应再用 --waiting 浅底(对比不足)');
+    assert.ok(!/background-color:\s*var\(--success\)/.test(succ), 'toast-success 不应再用 --success 浅底(对比不足)');
+    assert.ok(/#[0-9a-fA-F]{3,6}/.test(info), 'toast-info 应改用加深的具体十六进制底色');
+    assert.ok(/#[0-9a-fA-F]{3,6}/.test(succ), 'toast-success 应改用加深的具体十六进制底色');
+});
+
+// === Task 4: client.js 交互契约 ===
+
+test('client.js: switchTab 装配(原 switchToggle)+ 抽屉 onOpen 刷新 + 传 meta', () => {
+    const js = readClient();
+    assert.ok(/getElementById\(\s*['"]switchTab['"]\s*\)/.test(js), '应 getElementById switchTab(原 switchToggle)');
+    assert.ok(!/getElementById\(\s*['"]switchToggle['"]\s*\)/.test(js), 'switchToggle 引用应已改名');
+    // onOpen 刷新:点击先 await loadSessions
+    assert.ok(/switchTab[\s\S]*await\s+loadSessions\(\)/.test(js), '点击 switchTab 应先 await loadSessions(onOpen 刷新)');
+    // 传 meta:buildMeta()(buildMeta 构造 {project,session})
+    assert.ok(/meta\s*:\s*buildMeta\(\)/.test(js), 'createSwitchSheet 应传 meta: buildMeta()');
+    assert.ok(/buildMeta[\s\S]*project[\s\S]*session/.test(js), 'buildMeta 应构造 {project,session}');
+});
+
+test('client.js: sessionStorage openSwitchSheet 跨页开抽屉(检测+removeItem)', () => {
+    const js = readClient();
+    assert.ok(/sessionStorage\.getItem\(\s*['"]openSwitchSheet['"]\s*\)/.test(js), '应检测 sessionStorage openSwitchSheet');
+    assert.ok(/sessionStorage\.removeItem\(\s*['"]openSwitchSheet['"]\s*\)/.test(js), '检测后应立即 removeItem(防残留)');
+});
+
+test('client.js: ≤768 终端输入聚焦折叠 tab bar(focus 加 is-hidden / blur 移除)', () => {
+    const js = readClient();
+    assert.ok(/addEventListener\(\s*['"]focus['"][\s\S]*classList\.add\(\s*['"]is-hidden['"]\s*\)/.test(js),
+        '终端 input focus 应给 .bottom-tabbar 加 is-hidden');
+    assert.ok(/addEventListener\(\s*['"]blur['"][\s\S]*classList\.remove\(\s*['"]is-hidden['"]\s*\)/.test(js),
+        '终端 input blur 应移除 is-hidden');
+    assert.ok(/bottom-tabbar/.test(js), '应引用 .bottom-tabbar');
+});
+
+test('client.js: 终端 textarea 加 aria-label(命令输入)', () => {
+    const js = readClient();
+    assert.ok(/setAttribute\(\s*['"]aria-label['"]\s*,\s*['"]命令输入['"]\s*\)/.test(js),
+        'ensureTerminalView 应给 inlineInput textarea 加 aria-label="命令输入"');
+});
+
+test('client.js: updateSessionUi 不再写 metaProject DOM(元素已删)', () => {
+    const js = readClient();
+    assert.ok(!/getElementById\(\s*['"]metaProject['"]\s*\)/.test(js), 'updateSessionUi 不应再 getElementById metaProject(元素已删,project 入抽屉 meta)');
+});
+
+test('client.js: sheetHandle/rebuildSheet 提升到 init 作用域(跨页 IIFE 可见,防块作用域 ReferenceError)', () => {
+    const js = readClient();
+    const switchTriggerIdx = js.indexOf("getElementById('switchTab')");
+    const sheetDecl = js.indexOf('let sheetHandle = null');
+    const rebuildDecl = js.indexOf('let rebuildSheet = null');
+    assert.ok(sheetDecl > -1, '应有 let sheetHandle = null 声明');
+    assert.ok(rebuildDecl > -1, '应有 let rebuildSheet = null 声明');
+    // 声明须在 switch 装配(switchTrigger)之前 = init 顶层作用域;若落回下方 if 块内(在 switchTrigger 之后)
+    // 则块作用域隔离、bootstrap IIFE 不可见 → 跨页开抽屉时 ReferenceError
+    assert.ok(sheetDecl < switchTriggerIdx, 'let sheetHandle 应在 switch 装配前(init 作用域,非 if 块内)');
+    assert.ok(rebuildDecl < switchTriggerIdx, 'let rebuildSheet 应在 switch 装配前(init 作用域,非 if 块内)');
 });

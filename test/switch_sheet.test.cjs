@@ -62,3 +62,32 @@ test('createSwitchSheet 源码契约:支持 projects 渲染 + onLaunch 回调', 
   assert.ok(/projects\.forEach/.test(src), '应遍历 projects 渲染项目项');
   assert.ok(/onLaunch\(/.test(src), '项目项点击应调用 onLaunch(path)');
 });
+
+test('createSwitchSheet 源码契约:三段分组 + meta 行 + 会话标题 + 项目空状态', () => {
+  const src = fs.readFileSync('public/switch_sheet.cjs', 'utf8');
+  // meta 行(opts.meta → .switch-sheet-meta)
+  assert.ok(/opts\.meta/.test(src) || /meta\s*=.*opts\.meta/.test(src), '应解析 opts.meta');
+  assert.ok(src.includes('switch-sheet-meta'), '应有 .switch-sheet-meta 行');
+  // 会话段标题
+  assert.ok(/switch-sheet-section-title[\s\S]*'会话'/.test(src) || src.includes("'会话'"), '应有会话段标题「会话」');
+  // 项目区空状态(.switch-sheet-projects-empty,无项目时提示)
+  assert.ok(src.includes('switch-sheet-projects-empty'), '应有项目区空状态 .switch-sheet-projects-empty');
+  assert.ok(/projects\.length[\s\S]*switch-sheet-projects-empty/.test(src) || /else[\s\S]*switch-sheet-projects-empty/.test(src),
+    'projects 为空时应渲染空状态(else 分支)');
+});
+
+test('createSwitchSheet 源码契约:动态 sheet 挂 id="switchSheet"(供 aria-controls 指向)', () => {
+  const src = fs.readFileSync('public/switch_sheet.cjs', 'utf8');
+  assert.ok(/sheet\.setAttribute\(\s*['"]id['"]\s*,\s*['"]switchSheet['"]\s*\)/.test(src)
+    || /sheet\.id\s*=\s*['"]switchSheet['"]/.test(src),
+    'sheet 应挂 id="switchSheet"');
+});
+
+test('createSwitchSheet 源码契约:open 给 .console-card 加 inert,close 移除', () => {
+  const src = fs.readFileSync('public/switch_sheet.cjs', 'utf8');
+  assert.ok(/console-card/.test(src), '应引用 .console-card');
+  assert.ok(/setAttribute\(\s*['"]inert['"]\s*,\s*['"]['"]?\s*\)/.test(src)
+    || /setAttribute\(\s*['"]inert['"]\s*,\s*''\s*\)/.test(src)
+    || /inert['"],?\s*['"]?['"]?\)/.test(src), 'open 应 setAttribute inert');
+  assert.ok(/removeAttribute\(\s*['"]inert['"]/.test(src), 'close 应 removeAttribute inert');
+});

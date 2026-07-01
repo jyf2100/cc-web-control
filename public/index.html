@@ -15,9 +15,9 @@
 </head>
 <body>
     <div id="app">
-        <!-- 控制台卡片容器:header + main 同宽对齐,治「空挂」 -->
+        <!-- 控制台卡片容器:header + main 同宽对齐 -->
         <div class="console-card">
-            <!-- 顶部导航:桌面单行等高 -->
+            <!-- 顶部:精简为 brand + live + 极简 session(只 s);控件入底部「切换」抽屉 -->
             <header class="header header--single">
                 <div class="header-left">
                     <span class="brand" aria-label="Roc-CC Remote Control">
@@ -28,35 +28,14 @@
                         <span class="live-dot-pulse" aria-hidden="true"></span>
                         <span class="live-dot-text">未连接</span>
                     </span>
-                    <span class="meta-inline" role="group" aria-label="会话信息">
-                        <span class="meta-label">project</span>
-                        <span id="metaProject" class="meta-val">—</span>
-                        <span class="meta-sep" aria-hidden="true">·</span>
+                    <span class="meta-inline" role="group" aria-label="当前会话">
                         <span class="meta-label">s</span><span id="metaSession" class="meta-val">—</span>
                     </span>
                 </div>
-                <div class="header-right">
-                    <div class="header-actions" id="desktopControls">
-                        <div class="controls">
-                            <label class="control"><span class="control-label">Session</span><select id="sessionSelect" class="control-input"></select></label>
-                            <button id="refreshSessions" class="btn" type="button">刷新</button>
-                            <label id="projectControl" class="control"><span class="control-label">Project</span><select id="projectSelect" class="control-input"></select></label>
-                            <p id="projectsEmpty" class="projects-empty" hidden></p>
-                            <button id="startProject" class="btn" type="button">启动</button>
-                        </div>
-                    </div>
-                    <nav class="nav" aria-label="主导航">
-                        <a class="nav-link cur" href="/" aria-current="page">控制台</a>
-                        <a class="nav-link" href="/dashboard.html">看板</a>
-                        <a class="nav-link nav-link--login" href="/login">登录</a>
-                    </nav>
-                    <button id="switchToggle" class="swap-btn" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="switchSheet">切换 <span aria-hidden="true">⌄</span></button>
-                </div>
             </header>
-            <!-- 切换 sheet 容器(switch_sheet.cjs createSwitchSheet 创建 backdrop+sheet 挂 body;此 #switchSheet 仅作 aria-controls 锚点) -->
-            <div id="switchSheet" hidden></div>
             <!-- 主内容区 -->
             <main class="main">
+                <h1 class="visually-hidden">控制台</h1>
                 <!-- 对话区域 -->
                 <div id="chatContainer" class="chat-container">
                     <div id="messages" class="messages">
@@ -71,6 +50,22 @@
                 <div id="toast-container" aria-label="通知" aria-live="polite" role="status"></div>
             </main>
         </div>
+
+        <!-- 隐藏状态载体:控件移出 header,client.js 的 getElementById/value 仍可用,渲染走抽屉 -->
+        <!-- 不含 refreshSessions(onOpen 自动刷新,该按钮已删) -->
+        <div id="stateCarriers" hidden>
+            <select id="sessionSelect" class="control-input"></select>
+            <label id="projectControl" class="control"><select id="projectSelect" class="control-input"></select></label>
+            <p id="projectsEmpty" class="projects-empty" hidden></p>
+            <button id="startProject" class="btn" type="button">启动</button>
+        </div>
+
+        <!-- 底部 tab bar:≥768 常驻;≤768 终端输入聚焦时 CSS 折叠让位 -->
+        <nav class="bottom-tabbar" aria-label="主导航">
+            <a class="tab tab--active" href="/" aria-current="page"><span class="tab-icon" aria-hidden="true">▤</span><span class="tab-label">控制台</span></a>
+            <a class="tab" href="/dashboard.html"><span class="tab-icon" aria-hidden="true">◫</span><span class="tab-label">看板</span></a>
+            <button class="tab" type="button" id="switchTab" aria-haspopup="dialog" aria-expanded="false" aria-controls="switchSheet"><span class="tab-icon" aria-hidden="true">⇄</span><span class="tab-label">切换</span></button>
+        </nav>
     </div>
 
     <script src="terminal_cleaner.cjs"></script>
