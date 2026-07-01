@@ -16,7 +16,7 @@ const { spawn, exec } = require('child_process');
 const { WebSocketServer } = require('ws');
 const tmux = require('./tmux.cjs');
 const auth = require('./auth.cjs');
-const { buildClaudeLaunchCommand } = require('./claude_launch.cjs');
+const { buildClaudeLaunchCommand, shellEscapeForDoubleQuotes } = require('./claude_launch.cjs');
 const { getDashboardCache, buildDashboardPayload } = require('./dashboard_cache.cjs');
 const { cwdToSlug } = require('./dashboard_slug.cjs');
 const { readBinding, deleteBinding, migrateStaleBindings } = require('./dashboard_binding.cjs');
@@ -72,14 +72,6 @@ function isValidSessionName(name) {
   return typeof name === 'string' && /^[A-Za-z0-9._-]{1,64}$/.test(name);
 }
 
-function shellEscapeForDoubleQuotes(value) {
-  return String(value)
-    .replace(/\\/g, '\\\\')
-    .replace(/"/g, '\\"')
-    .replace(/\$/g, '\\$')
-    .replace(/`/g, '\\`');
-}
-
 function tryRealpath(p) {
   try {
     return fs.realpathSync(p);
@@ -107,6 +99,11 @@ function isWithinRoots(candidatePath) {
 function normalizeProjectCwd(cwdInput) {
   if (typeof cwdInput !== 'string' || !cwdInput.trim()) {
     throw new Error('cwd must be a non-empty string');
+  }
+  // 源头拒绝换行:cwd 经 tmux send-keys 双引号拼进命令,换行可触发命令分隔(注入)。
+  // 与 auth.cjs normalizeNextPath 同策略;shellEscapeForDoubleQuotes 再删一次作纵深。
+  if (/[\r\n]/.test(cwdInput)) {
+    throw new Error('cwd must not contain line breaks');
   }
   const abs = path.resolve(cwdInput);
   const real = tryRealpath(abs);
