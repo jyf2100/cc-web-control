@@ -186,12 +186,13 @@ html, body {
 
 .stop-controls { display: none; gap: 8px; flex-shrink: 0; }
 .btn.stop-btn {
-    height: 28px; padding: 0 10px;
-    font-family: var(--mono); font-size: 12px; color: var(--accent-2);
-    background: var(--accent-bg); border: 1px solid var(--accent-dim); border-radius: var(--r-pill);
+    height: 28px; padding: 0 8px;
+    font-family: var(--mono); font-size: 11px; color: var(--fg-2);
+    background: transparent; border: none; border-radius: var(--r-sm);
 }
-.btn.stop-btn:hover, .btn.stop-btn:active { background: var(--accent-dim); }
-.btn.stop-btn:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+.btn.stop-btn:hover { color: var(--accent-2); background: var(--surface); }
+.btn.stop-btn:active { color: var(--accent-2); background: var(--accent-bg); }
+.btn.stop-btn:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 1px; }
 
 .quick-reply {
     display: flex; gap: 8px; padding: 10px 14px;
