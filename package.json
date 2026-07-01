@@ -1,9 +1,21 @@
 {
-  "name": "tmux-web-control",
-  "version": "1.0.0",
+  "name": "cc-web-control",
+  "version": "1.0.1",
   "description": "通过 Web 页面以对话框形式控制本地 tmux 会话",
   "type": "module",
   "main": "server.cjs",
+  "bin": {
+    "cc-web-control": "bin/cc-web-control.cjs"
+  },
+  "files": [
+    "*.cjs",
+    "public/",
+    "claude-wrapper.sh",
+    "bin/"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "start": "node server.cjs",
     "dev": "nodemon server.js",

@@ -2,6 +2,27 @@
 
 通过 Web 页面对话形式控制本地 Claude Code，实现双向同步：Web 输入发送给 Claude Code，Claude Code 输出显示在 Web 上。
 
+## 快速开始
+
+```bash
+# 方式一：无需安装，直接运行
+npx cc-web-control
+
+# 方式二：全局安装后使用
+npm install -g cc-web-control
+cc-web-control
+```
+
+### 前置依赖
+
+本工具在本机通过 tmux 操控 `claude` CLI，运行前请确保已安装：
+
+- **Node.js** ≥ 18
+- **tmux**（macOS: `brew install tmux`；Ubuntu: `sudo apt install tmux`）
+- **Claude Code CLI**（已完成 Claude 登录认证）
+
+首次启动若缺少依赖，程序会打印安装提示并退出（exit code 1）。
+
 > 部署与运维入口：`docs/部署使用文档.md`  
 > 完整中文手册：`docs/操作手册.md`
 
@@ -29,7 +50,7 @@
 ### 1. 安装依赖
 
 ```bash
-cd /Users/pan/cc-control/tmux-web-control
+cd <项目目录>/cc-web-control
 npm install
 ```
 
@@ -81,7 +102,7 @@ tmux-web-control/
 
 ## 环境要求
 
-- Node.js >= 14
+- Node.js >= 18
 - tmux >= 3.0
 - Claude Code CLI 已安装
 - 现代浏览器（支持 WebSocket）

@@ -229,6 +229,7 @@
         inlineInput.spellcheck = false;
         inlineInput.setAttribute('enterkeyhint', 'send');
         inlineInput.setAttribute('inputmode', 'text');
+        inlineInput.setAttribute('aria-label', '命令输入');
 
         inputRow.appendChild(prompt);
         inputRow.appendChild(inlineInput);
@@ -241,6 +242,13 @@
         terminalHeaderEl = terminalHeader;
         terminalContentEl = terminalContent;
         terminalInputEl = inlineInput;
+
+        // ≤768 终端输入聚焦时折叠底部 tab bar 让出空间(CSS 媒体查询控制仅移动端隐藏)
+        const bottomTabbar = document.querySelector('.bottom-tabbar');
+        if (bottomTabbar) {
+            inlineInput.addEventListener('focus', () => bottomTabbar.classList.add('is-hidden'));
+            inlineInput.addEventListener('blur', () => bottomTabbar.classList.remove('is-hidden'));
+        }
 
         // P0/P2/P4: Initialize modules after terminal view is created
         if (window.ccModules?.initP0) window.ccModules.initP0(terminalContent);
@@ -668,11 +676,6 @@
             metaSession.textContent = currentSession
                 ? (currentSession.replace(/[^0-9]/g, '').padStart(2, '0') || '—') : '—';
         }
-        const metaProject = document.getElementById('metaProject');
-        if (metaProject) {
-            const entry = Array.isArray(cachedSessions) ? cachedSessions.find(s => s && s.name === currentSession) : null;
-            metaProject.textContent = (entry && entry.cwd) ? entry.cwd : '—';
-        }
         if (sessionSelect && currentSession) sessionSelect.value = currentSession;
     }
 
@@ -890,6 +893,11 @@
         bindInlineInput();
         updateConnectionStatus(false);
 
+        // sheetHandle/rebuildSheet 提升到 init 作用域:bootstrap IIFE(跨页开抽屉)需引用,
+        // 若声明在下方 switch 装配的 if 块内,则块作用域隔离、IIFE 不可见 → ReferenceError。
+        let sheetHandle = null;
+        let rebuildSheet = null;
+
         // Bootstrap in order: config -> sessions/projects -> ws connect
         (async () => {
             await loadConfig();
@@ -905,6 +913,12 @@
             await loadSessions();
             await loadProjects();
             connect();
+            // 跨页开抽屉:看板页「切换」tab 跳来时带 sessionStorage 标志 → 打开抽屉 → 立即清
+            if (sessionStorage.getItem('openSwitchSheet') === '1') {
+                sessionStorage.removeItem('openSwitchSheet');
+                // rebuildSheet/sheetHandle 提升至 init 作用域(见上),switch 装配未进入时仍为 null
+                if (rebuildSheet) { rebuildSheet(); if (sheetHandle) sheetHandle.open(); }
+            }
         })();
 
         if (refreshSessionsBtn) {
@@ -935,13 +949,20 @@
             });
         }
 
-        // === 切换 sheet 装配(spec §7.1)===
-        const switchTrigger = document.getElementById('switchToggle');
+        // === 切换 sheet 装配(spec §7.1;底部 tab「切换」#switchTab 入口)===
+        const switchTrigger = document.getElementById('switchTab');
         if (switchTrigger && typeof SwitchSheet !== 'undefined' && SwitchSheet.createSwitchSheet) {
             switchTrigger.setAttribute('aria-haspopup', 'dialog');
             switchTrigger.setAttribute('aria-expanded', 'false');
-            let sheetHandle = null;
-            const rebuildSheet = () => {
+            // meta 行:project 来自当前 session 的 cwd;s 来自 session 名数字位
+            const buildMeta = () => {
+                const curEntry = Array.isArray(cachedSessions) ? cachedSessions.find(s => s && s.name === currentSession) : null;
+                const project = (curEntry && curEntry.cwd) ? curEntry.cwd : '—';
+                const session = currentSession
+                    ? (currentSession.replace(/[^0-9]/g, '').padStart(2, '0') || '—') : '—';
+                return { project, session };
+            };
+            rebuildSheet = () => {
                 if (sheetHandle) { sheetHandle.destroy(); sheetHandle = null; }
                 const items = SwitchSheet.buildSessionItems(cachedSessions, currentSession);
                 const curEntry = Array.isArray(cachedSessions) ? cachedSessions.find(s => s && s.name === currentSession) : null;
@@ -949,6 +970,7 @@
                 sheetHandle = SwitchSheet.createSwitchSheet({
                     trigger: switchTrigger, items,
                     projects: projectItems,
+                    meta: buildMeta(),
                     onPick: (name) => {
                         const switchSession = (typeof SessionSwitch !== 'undefined' && SessionSwitch.switchSession) || null;
                         if (switchSession) {
@@ -969,7 +991,12 @@
                     },
                 });
             };
-            switchTrigger.addEventListener('click', () => { rebuildSheet(); if (sheetHandle) sheetHandle.open(); });
+            // onOpen 刷新:点击先 await loadSessions 再 rebuild+open(去掉独立刷新按钮的位置误导)
+            switchTrigger.addEventListener('click', async () => {
+                await loadSessions();
+                rebuildSheet();
+                if (sheetHandle) sheetHandle.open();
+            });
         }
 
         if (startProjectBtn) {
