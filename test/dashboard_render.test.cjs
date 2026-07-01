@@ -55,3 +55,33 @@ test('escapeHtml 中和注入', () => {
   assert.equal(R.escapeHtml('<script>'), '&lt;script&gt;');
   assert.equal(R.escapeHtml('a"b'), 'a&quot;b');
 });
+test('diffChangedStatus status 不变返回空集', () => {
+  const r = R.diffChangedStatus([{name:'a',status:'idle'}], [{name:'a',status:'idle'}]);
+  assert.equal(r.size, 0);
+});
+test('diffChangedStatus status 变化收集 name', () => {
+  const r = R.diffChangedStatus([{name:'a',status:'idle'}], [{name:'a',status:'working'}]);
+  assert.equal(r.size, 1); assert.ok(r.has('a'));
+});
+test('diffChangedStatus 多会话只收变化者', () => {
+  const prev = [{name:'a',status:'idle'},{name:'b',status:'working'}];
+  const next = [{name:'a',status:'working'},{name:'b',status:'working'}];
+  const r = R.diffChangedStatus(prev, next);
+  assert.equal(r.size, 1); assert.ok(r.has('a')); assert.ok(!r.has('b'));
+});
+test('diffChangedStatus 新会话(旧无)不计入变化', () => {
+  const r = R.diffChangedStatus([], [{name:'new',status:'idle'}]);
+  assert.equal(r.size, 0);
+});
+test('diffChangedStatus 消失会话不计入变化', () => {
+  const r = R.diffChangedStatus([{name:'gone',status:'idle'}], []);
+  assert.equal(r.size, 0);
+});
+test('diffChangedStatus 空兜底(null/undefined)', () => {
+  assert.equal(R.diffChangedStatus(null, null).size, 0);
+  assert.equal(R.diffChangedStatus(undefined, undefined).size, 0);
+});
+test('diffChangedStatus 缺 name 字段跳过', () => {
+  const r = R.diffChangedStatus([{status:'idle'}], [{status:'working'}]);
+  assert.equal(r.size, 0);
+});

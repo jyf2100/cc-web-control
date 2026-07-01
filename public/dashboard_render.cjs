@@ -43,6 +43,20 @@
     function countWaiting(sessions) {
         return sessions.filter(function (s) { return s.status === 'waiting' || s.status === 'errored'; }).length;
     }
+    function diffChangedStatus(prev, next) {
+        var prevMap = new Map();
+        (prev || []).forEach(function (s) {
+            if (s && typeof s.name === 'string') prevMap.set(s.name, s.status);
+        });
+        var changed = new Set();
+        (next || []).forEach(function (s) {
+            if (!s || typeof s.name !== 'string') return;
+            if (prevMap.has(s.name) && prevMap.get(s.name) !== s.status) {
+                changed.add(s.name);
+            }
+        });
+        return changed;
+    }
     function renderSession(s, index) {
         var statusKey = STATUS_LABEL[s.status] ? s.status : FALLBACK_STATUS_KEY;
         var status = STATUS_LABEL[statusKey];
@@ -76,6 +90,7 @@
         STATUS_WEIGHT: STATUS_WEIGHT, STATUS_LABEL: STATUS_LABEL,
         escapeHtml: escapeHtml, relativeTime: relativeTime, shortPath: shortPath,
         sortSessions: sortSessions, countWaiting: countWaiting,
+        diffChangedStatus: diffChangedStatus,
         renderSession: renderSession, renderSessionList: renderSessionList, renderState: renderState
     };
 });
