@@ -77,7 +77,7 @@
     const sheet = doc.createElement('div');
     sheet.className = 'switch-sheet'; sheet.id = 'switchSheet';
     sheet.setAttribute('role', 'dialog'); sheet.setAttribute('aria-modal', 'true');
-    sheet.setAttribute('aria-label', '切换会话'); sheet.hidden = true;
+    sheet.setAttribute('aria-label', '启动项目'); sheet.hidden = true;
     sheet.setAttribute('tabindex', '-1');
     const handle = doc.createElement('div');
     handle.className = 'switch-sheet-handle'; handle.setAttribute('aria-hidden', 'true'); sheet.appendChild(handle);
@@ -92,27 +92,7 @@
       sheet.appendChild(metaRow);
     }
 
-    // 第 2 段:会话列表(标题 + 复用 buildSessionItems,当前项高亮+disabled)
-    const sessTitle = doc.createElement('p');
-    sessTitle.className = 'switch-sheet-section-title';
-    sessTitle.textContent = '会话';
-    sheet.appendChild(sessTitle);
-    const list = doc.createElement('ul');
-    list.className = 'switch-sheet-list'; list.setAttribute('role', 'list');
-    items.forEach((it) => {
-      const li = doc.createElement('li');
-      li.className = 'switch-sheet-item' + (it.isCurrent ? ' switch-sheet-item--current' : '');
-      const btn = doc.createElement('button');
-      btn.type = 'button'; btn.className = 'switch-sheet-btn';
-      btn.setAttribute('aria-current', it.isCurrent ? 'true' : 'false');
-      btn.textContent = it.label;
-      if (it.isCurrent) btn.disabled = true;
-      btn.addEventListener('click', () => { onPick(it.name); });
-      li.appendChild(btn); list.appendChild(li);
-    });
-    sheet.appendChild(list);
-
-    // 第 3 段:项目启动区(复用 buildProjectItems + onLaunch);无项目时空状态
+    // 第 2 段:项目启动区(复用 buildProjectItems + onLaunch);无项目时空状态
     const projWrap = doc.createElement('div');
     projWrap.className = 'switch-sheet-projects';
     const projTitle = doc.createElement('p');

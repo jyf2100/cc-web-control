@@ -63,13 +63,11 @@ test('createSwitchSheet 源码契约:支持 projects 渲染 + onLaunch 回调', 
   assert.ok(/onLaunch\(/.test(src), '项目项点击应调用 onLaunch(path)');
 });
 
-test('createSwitchSheet 源码契约:三段分组 + meta 行 + 会话标题 + 项目空状态', () => {
+test('createSwitchSheet 源码契约:meta 行 + 项目空状态', () => {
   const src = fs.readFileSync('public/switch_sheet.cjs', 'utf8');
   // meta 行(opts.meta → .switch-sheet-meta)
   assert.ok(/opts\.meta/.test(src) || /meta\s*=.*opts\.meta/.test(src), '应解析 opts.meta');
   assert.ok(src.includes('switch-sheet-meta'), '应有 .switch-sheet-meta 行');
-  // 会话段标题
-  assert.ok(/switch-sheet-section-title[\s\S]*'会话'/.test(src) || src.includes("'会话'"), '应有会话段标题「会话」');
   // 项目区空状态(.switch-sheet-projects-empty,无项目时提示)
   assert.ok(src.includes('switch-sheet-projects-empty'), '应有项目区空状态 .switch-sheet-projects-empty');
   assert.ok(/projects\.length[\s\S]*switch-sheet-projects-empty/.test(src) || /else[\s\S]*switch-sheet-projects-empty/.test(src),
@@ -90,4 +88,26 @@ test('createSwitchSheet 源码契约:open 给 .console-card 加 inert,close 移�
     || /setAttribute\(\s*['"]inert['"]\s*,\s*''\s*\)/.test(src)
     || /inert['"],?\s*['"]?['"]?\)/.test(src), 'open 应 setAttribute inert');
   assert.ok(/removeAttribute\(\s*['"]inert['"]/.test(src), 'close 应 removeAttribute inert');
+});
+
+test('createSwitchSheet aria-label 为「启动项目」(原「切换会话」)', () => {
+  const src = fs.readFileSync('public/switch_sheet.cjs', 'utf8');
+  assert.match(src, /'启动项目'/);
+  assert.doesNotMatch(src, /'切换会话'/);
+});
+test('createSwitchSheet 不再渲染会话段(会话标题与 sessTitle 变量删除)', () => {
+  const src = fs.readFileSync('public/switch_sheet.cjs', 'utf8');
+  assert.ok(!/textContent\s*=\s*'会话'/.test(src), '会话段标题应删除');
+  assert.ok(!/sessTitle/.test(src), 'sessTitle 变量应删除');
+});
+test('createSwitchSheet 仍渲染项目段', () => {
+  const src = fs.readFileSync('public/switch_sheet.cjs', 'utf8');
+  assert.match(src, /'项目'/);
+  assert.match(src, /switch-sheet-projects/);
+});
+test('buildSessionItems 纯函数保留(向后兼容)', () => {
+  assert.deepEqual(
+    buildSessionItems([{name:'a',attached:false}], 'a'),
+    [{name:'a',label:'a',attached:false,isCurrent:true}]
+  );
 });
