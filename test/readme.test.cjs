@@ -22,3 +22,7 @@ test('声明需 Node.js >= 18', () => {
 test('无硬编码 /Users/pan 绝对路径', () => {
   assert.ok(!/\/Users\/pan\//.test(readme), '仍含 /Users/pan/ 硬编码路径');
 });
+
+test('README 无旧的 Node >=14 表述(与 engines>=18 一致)', () => {
+  assert.ok(!/node\.js\s*>=?\s*14/i.test(readme), '仍含 Node >=14 旧表述');
+});

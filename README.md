@@ -102,7 +102,7 @@ tmux-web-control/
 
 ## 环境要求
 
-- Node.js >= 14
+- Node.js >= 18
 - tmux >= 3.0
 - Claude Code CLI 已安装
 - 现代浏览器（支持 WebSocket）
