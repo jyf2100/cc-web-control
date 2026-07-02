@@ -34,7 +34,18 @@ function startServer() {
   require(path.join(__dirname, '..', 'server.cjs'));
 }
 
-function main(existsFn = commandExists) {
+// 子命令解析：接收已 slice 的用户参数（不含 node/脚本路径）
+function parseSubcommand(args) {
+  if (args[0] === 'hub') return { sub: 'hub', args: args.slice(1) };
+  return { sub: 'default', args };
+}
+
+function main(existsFn = commandExists, argv = process.argv) {
+  const { sub } = parseSubcommand(argv.slice(2));
+  if (sub === 'hub') {
+    require(path.join(__dirname, '..', 'hub', 'server_entry.cjs'));
+    return;
+  }
   const missing = findMissing(existsFn);
   if (missing.length) {
     console.error(formatMissing(missing));
@@ -44,6 +55,6 @@ function main(existsFn = commandExists) {
   startServer();
 }
 
-if (require.main === module) main();
+if (require.main === module) main(undefined, process.argv);
 
-module.exports = { commandExists, findMissing, formatMissing, main };
+module.exports = { commandExists, findMissing, formatMissing, parseSubcommand, main };
