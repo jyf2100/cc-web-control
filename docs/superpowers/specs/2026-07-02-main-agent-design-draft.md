@@ -128,8 +128,11 @@ v0 的「完整手脚 + 全自动」单一基线经 review 判定不可行。v1 
 ## 10. 开放问题 + 必做 spike
 
 - **spike(进入实现前必做)**:
-  1. sendInput 单行 poke 可靠唤醒(不与 TUI 抢键、不落 paste)
-  2. 多行自然语言注入子会话(预期失败 → 验证 §5 单行约束必要性)
-  3. hub_mcp_server HTTP IPC 原型 + 主 agent transcript `end_turn` 完成信号可用性
-  4. 主 agent 独立 UID/sandbox 跑 claude code 的可行性(token 隔离、tmux 权限、平台冻结原语:Linux cgroup / macOS sandbox-exec)
+  1. ✅ sendInput 单行 poke 可靠唤醒 —— **GO**(spike 01:单行 `send-keys -l`+Enter 唤醒 claude TUI,微往返 ~8s,不要 grep 面板做完成检测)
+  2. ✅ 多行自然语言注入子会话 —— **NO-GO,符合预期**(spike 02:tmux 把 `\n` 逐行拆成多命令,验证 §5 单行约束必要)
+  3. ✅ hub_mcp_server HTTP IPC 原型 —— **GO**(spike 03:SDK 1.29 CJS 可直 `require`、handler 用 zod schema 作 key、连接 `server.connect(transport)`;完成信号 T1 用显式 `ack_event`,不依赖 transcript 路径解析)
+  4. ⏸️ 主 agent 独立 UID/sandbox 跑 claude code 的可行性(token 隔离、tmux 权限、平台冻结原语:Linux cgroup / macOS sandbox-exec)—— **T3 硬前提,T1 不做**
+- **A2A (Agent2Agent) 协议(2026-07-02 评估,用户决策「暂不引入」)**:Google 的 A2A(agent↔agent,横向)与 MCP(agent↔tool,纵向)定位**互补、非替代**。claude code **原生只讲 MCP**(是 MCP client),不原生讲 A2A(经 MCP 桥接可接但绕路、T1 场景零收益)。当前 T1「主 agent 调 hub 只读工具」= agent→tool = MCP 范畴,**T1 用 MCP 是正解**。A2A 候选场景(记入,T2+ 评估):
+  - **hub↔子机协作**:把子机 claude 包成 A2A agent,hub 用 Task 状态机(`submitted→working→completed`)委派,替代 WS+sendInput+transcript grep —— 正好解决 §4「完成信号难拿」痛点(属二期大改,动 hub WS 架构)。
+  - **§7 独立诊断 agent**:主 agent 把「读子会话→产结构化结论」委派给无 Bash 诊断 agent(agent→agent),A2A 契合度高(主 agent 经 MCP 桥接讲 A2A)。
 - **留 spec 细化**:T1→T2→T3 晋升门的具体阈值(误唤醒率/日成本/回滚次数);allowlist 白名单初始集;审计 sink 选型(本地 append-only vs 外置);诊断 agent 是否独立(看 T1 复杂度)。

@@ -1161,7 +1161,12 @@ git commit -m "feat(hub): add AgentDispatcher + dequeue/ack endpoints"
 
 ## Phase 3 — MCP stdio server(独立子进程 + HTTP IPC)
 
-> spec §5。`@modelcontextprotocol/sdk` 是 **ESM**;项目 `type:module` 下 `.cjs` 是 CommonJS,`require(ESM)` 会 `ERR_REQUIRE_ESM`。对策:`buildRequest`/`callHub` 写成纯同步 CommonJS 函数(可直测),SDK 部分用 dynamic `import()` 包进 async `createMcpServer`。SDK 导入路径以 **spike 3 定论**为准;若版本 API 不同,在 spike 3 已据实修正。
+> spec §5。`@modelcontextprotocol/sdk`(spike 3 实测 v1.29.0)虽 `type:module`,但 `exports` 同时发布 ESM 与 CJS 两种构建,在 `.cjs` 里**直接 `require()` 即可,不会 `ERR_REQUIRE_ESM`**(无需 dynamic import、无需 `.mjs`)。导入路径已由 spike 3 钉死(**必须带子路径**):
+> - `Server` ← `@modelcontextprotocol/sdk/server/index.js`
+> - `StdioServerTransport` ← `@modelcontextprotocol/sdk/server/stdio.js`
+> - `ListToolsRequestSchema` / `CallToolRequestSchema` ← `@modelcontextprotocol/sdk/types.js`
+>
+> handler 注册用 **zod schema 作 key**(`setRequestHandler(ListToolsRequestSchema, ...)`),**不是** method 字符串;transport 连接是 `server.connect(transport)`(**非** `transport.connect(server)`,否则报 `connect is not a function`)。详见 `docs/superpowers/spikes/03-mcp-ipc/result.md`。
 
 ### Task 10: hub/mcp/stdio.cjs + bin 入口
 
@@ -1284,19 +1289,23 @@ const TOOLS = [
   { name: 'ack_event', description: '确认事件处理完毕。outcome 描述结果(如 "advised: …" / "noop: …")。每条事件 ack 恰好一次。', inputSchema: { type: 'object', properties: { runId: { type: 'string' }, outcome: { type: 'string' } }, required: ['runId', 'outcome'], additionalProperties: false } },
 ];
 
-/**
- * 创建 MCP stdio server。SDK 是 ESM → 用 dynamic import()。
- * 导入路径以 spike 3 定论为准;若 SDK 版本 API 不同(spike 3 已验证),据实修正此处。
- */
-async function createMcpServer({ fetchImpl } = {}) {
-  const { Server } = await import('@modelcontextprotocol/sdk/server/index.js');
-  const { StdioServerTransport } = await import('@modelcontextprotocol/sdk/server/stdio.js');
+// SDK 导入(spike 3 定论:CJS require 即可,带子路径)。模块顶层 require 仅加载类、无副作用,
+// 不影响 buildRequest/callHub 的纯函数测试(SDK 在 Step 1 已 npm i)。
+const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
+const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
+const { ListToolsRequestSchema, CallToolRequestSchema } = require('@modelcontextprotocol/sdk/types.js');
 
+/**
+ * 创建 MCP stdio server。fetchImpl 可注入(测试)。
+ * 关键(SDK 1.29 实测):handler 用 zod schema 作 key;连接用 server.connect(transport)。
+ */
+function createMcpServer({ fetchImpl } = {}) {
   const server = new Server({ name: 'cc-web-control', version: '1.0.0' }, { capabilities: { tools: {} } });
 
-  server.setRequestHandler({ method: 'tools/list' }, async () => ({ tools: TOOLS }));
-  server.setRequestHandler({ method: 'tools/call' }, async (req) => {
-    const { name, arguments: args = {} } = req.params;
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
+  server.setRequestHandler(CallToolRequestSchema, async (req) => {
+    const name = req?.params?.name;
+    const args = req?.params?.arguments ?? {};
     try {
       const httpReq = buildRequest(name, args);
       const result = await callHub(httpReq, { fetchImpl });
@@ -1309,9 +1318,8 @@ async function createMcpServer({ fetchImpl } = {}) {
 }
 
 async function run() {
-  const server = await createMcpServer();
-  const transport = new StdioServerTransport();
-  await transport.connect(server);
+  const server = createMcpServer();
+  await server.connect(new StdioServerTransport());
 }
 
 module.exports = { buildRequest, callHub, TOOLS, createMcpServer, run };
@@ -1334,7 +1342,7 @@ Expected: PASS(7/7)。
 
 - [ ] **Step 6: 手动验证 MCP 协议(确认 SDK 导入路径)**
 
-复用 spike 3 的 hub-shim,但这次连**真实** hub:启动 hub(Task 11 后)+ 用 `claude --mcp-config` 挂本 bin,问「调 list_sessions」。若 SDK 导入路径在当前版本有变,据此修正 `createMcpServer` 里的 `import(...)` 路径并补测试。此步在 Task 11 装配后更易做;此处先确认 `node bin/cc-web-control-mcp.cjs` 不因导入路径崩溃(应静默等 stdin,而非立即抛 ERR_MODULE_NOT_FOUND)。
+复用 spike 3 的 hub-shim,但这次连**真实** hub:启动 hub(Task 11 后)+ 用 `claude --mcp-config` 挂本 bin,问「调 list_sessions」。SDK 导入路径已由 spike 3 钉死(require + 子路径),此处确认 `node bin/cc-web-control-mcp.cjs` 加载后不崩溃(应静默等 stdin,而非立即抛模块找不到或 `connect is not a function`)。
 
 Run: `node bin/cc-web-control-mcp.cjs </dev/null`(应不报模块找不到即退出;Ctrl-C 终止)。
 
