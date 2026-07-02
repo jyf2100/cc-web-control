@@ -131,3 +131,50 @@ test('sendOneShot 收到对端 error 帧(会话不存在)→ ok:false,不再误�
     assert.match(r.error, /会话不存在/);
   } finally { await stub.stop(); }
 });
+
+test('attach 后连接未建立即 detach 不 crash(快速切换会话回归)', async () => {
+  // 回归:ws.close() 对 CONNECTING 态会触发 abortHandshake,抛
+  // "WebSocket was closed before the connection was established",逃逸 try/catch
+  // 成进程级 crash。修复:_safeClose 对 CONNECTING/CLOSING 态改用 terminate()+removeAllListeners。
+  // 复现:attach 后不等 once('open')(ws 同步仍处 CONNECTING)立即 detach。
+  let crashed = false;
+  const onCrash = () => { crashed = true; };
+  process.once('uncaughtException', onCrash);
+  const stub = await new StubMachine({ token: 't' }).start();
+  try {
+    const ac = new AgentClient({ id: 'mc1', url: stub.url, token: 't' });
+    const ref = ac.attachSession('s1', () => {});
+    ref.detach(); // 故意在握手完成前 detach → _safeClose 走 terminate 分支
+    assert.equal(ac._poolSize('s1'), 0);
+    await new Promise((r) => setTimeout(r, WAIT));
+    assert.equal(crashed, false, 'detach CONNECTING 态 ws 不应导致进程级 crash');
+    ac.close();
+  } finally {
+    process.removeListener('uncaughtException', onCrash);
+    await stub.stop();
+  }
+});
+
+test('快速连续 attach 不同会话(旧 handle 未建立即被 detach)不 crash', async () => {
+  // 回归 UI 场景:用户快速点不同行 → ws_bridge.detachCurrent 在新 attach 前对旧 handle
+  // 调 detach,而旧 ws 首次握手尚未完成(CONNECTING)。修复前会 crash hub 进程。
+  let crashed = false;
+  const onCrash = () => { crashed = true; };
+  process.once('uncaughtException', onCrash);
+  const stub = await new StubMachine({ token: 't' }).start();
+  try {
+    const ac = new AgentClient({ id: 'mc1', url: stub.url, token: 't' });
+    const r1 = ac.attachSession('s1', () => {});
+    r1.detach(); // 模拟 detachCurrent:切到 s2 前先 detach s1(此时 s1 仍 CONNECTING)
+    const r2 = ac.attachSession('s2', () => {});
+    r2.detach();
+    await new Promise((r) => setTimeout(r, WAIT));
+    assert.equal(crashed, false, '快速切换会话不应 crash');
+    assert.equal(ac._poolSize('s1'), 0);
+    assert.equal(ac._poolSize('s2'), 0);
+    ac.close();
+  } finally {
+    process.removeListener('uncaughtException', onCrash);
+    await stub.stop();
+  }
+});

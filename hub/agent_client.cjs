@@ -80,11 +80,30 @@ class AgentClient {
     return entry;
   }
 
+  // 安全关闭。CONNECTING 态 close()/terminate() 会经 ws 库 abortHandshake →
+  // process.nextTick(emitErrorAndClose) 异步 emit 'error'。两条 crash 路:
+  //   ① ws 上无 'error' 监听器 → emit 同步 throw(uncaughtException);
+  //   ② 'error' 监听器调 _rejectOpen 去 reject 一个无人 await 的 once('open')
+  //      promise → unhandledRejection(Node 默认 =throw)。
+  // 快速切换会话时首个连接尚未建立即被 detach,正中此坑。修法:摘除所有监听器
+  // (杜绝 reject/回调副作用),补一个吞 error 的 no-op 监听器,再按态销毁——
+  // nextTick 的 emit('error') 被 no-op 接住,既不 throw 也不 reject。
+  _safeClose(ws) {
+    if (!ws) return;
+    try {
+      ws.removeAllListeners();
+      ws.on('error', () => {});
+      if (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.CLOSING) {
+        ws.terminate();
+      } else if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
+    } catch {}
+  }
+
   _connect(session, entry) {
     // 覆盖前先关旧连接(防御 error/close 延迟到达的边沿竞态,自愈加固)
-    if (entry.ws && entry.ws.readyState <= 1) {
-      try { entry.ws.close(); } catch {}
-    }
+    this._safeClose(entry.ws);
     const wsUrl = this.url.replace(/^http/, 'ws') + `/?session=${encodeURIComponent(session)}`;
     const ws = new WebSocket(wsUrl, { headers: { Authorization: `Bearer ${this.token}` } });
     entry.ws = ws;
@@ -128,7 +147,7 @@ class AgentClient {
     entry.refs.delete(onMessage);
     if (entry.refs.size === 0) {
       if (entry.retry) { clearTimeout(entry.retry); entry.retry = null; }
-      try { entry.ws && entry.ws.close(); } catch {}
+      this._safeClose(entry.ws);
       this._pool.delete(session);
     }
   }
@@ -156,7 +175,7 @@ class AgentClient {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
-        try { ws.close(); } catch {}
+        this._safeClose(ws); // 与池连接同款安全关闭:杜绝 CONNECTING 态 emit('error') 逃逸
         resolve(result);
       };
       const timer = setTimeout(() => done({ ok: false, error: 'timeout' }), 5000);
@@ -181,11 +200,11 @@ class AgentClient {
 
   close() {
     for (const [, entry] of this._pool) {
-      // 先清 refs:ws.close() 会触发 'close',此时 refs 为空 → 不调度重连,
-      // 否则会留下引用计数 > 0 的重连 timer,撑住进程不退出。
+      // _safeClose 已 removeAllListeners('close'),不会回调 _scheduleReconnect;
+      // refs.clear() 与清 retry 在此作防御纵深(双重保险),确保无悬空重连 timer 撑住进程不退出。
       entry.refs.clear();
       if (entry.retry) { clearTimeout(entry.retry); entry.retry = null; }
-      try { entry.ws && entry.ws.close(); } catch {}
+      this._safeClose(entry.ws);
     }
     this._pool.clear();
   }
