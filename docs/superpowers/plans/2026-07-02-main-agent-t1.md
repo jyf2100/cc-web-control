@@ -673,7 +673,7 @@ test('readPane: 取 init 帧尾部 N 行', async () => {
     const r = await ac.readPane('s1', 5);
     assert.equal(r.ok, true);
     assert.equal(r.total, 200);
-    assert.deepEqual(r.lines, ['line-196', 'line-197', 'line-198', 'line-199']);
+    assert.deepEqual(r.lines, ['line-195', 'line-196', 'line-197', 'line-198', 'line-199']);
   } finally {
     await stub.close();
   }
