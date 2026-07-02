@@ -117,3 +117,20 @@ html, body {
 }
 .session--flash { animation: session-flash 1.1s cubic-bezier(0.22, 1, 0.36, 1) 1; }
 @media (prefers-reduced-motion: reduce) { .session--flash { animation: none; } }
+
+/* ===== 多机控制台三区布局(追加,不改现有规则) ===== */
+.console-header { display:flex; align-items:center; justify-content:space-between; padding:8px 12px; }
+.console-board { padding:0 12px; max-height:38vh; overflow:auto; }
+#global-board { width:100%; border-collapse:collapse; font-size:.9em; }
+#global-board th, #global-board td { padding:4px 8px; border-bottom:1px solid rgba(255,255,255,.08); text-align:left; }
+#global-board tr.row { cursor:pointer; }
+#global-board tr.row.active { background:rgba(96,165,250,.15); }
+.st-working { color:#34d399; } .st-waiting{color:#fbbf24;} .st-idle{color:#94a3b8;} .st-errored{color:#f87171;} .st-unknown{color:#64748b;}
+.term-target { opacity:.6; font-size:.85em; padding:4px 12px; }
+.term-screen { margin:0 12px; padding:8px; background:#000; color:#e5e7eb; font-family:monospace; font-size:.85em; min-height:30vh; max-height:38vh; overflow:auto; white-space:pre-wrap; }
+.term-input-form { display:flex; gap:6px; padding:6px 12px; }
+.term-input { flex:1; }
+.console-broadcast { position:sticky; bottom:0; display:flex; gap:6px; align-items:center; padding:8px 12px; background:rgba(245,158,11,.08); border-top:1px solid rgba(245,158,11,.3); }
+.bc-count { font-size:.8em; background:rgba(245,158,11,.2); padding:2px 8px; border-radius:4px; }
+.bc-send { background:#f59e0b; color:#fff; border:0; padding:4px 12px; border-radius:4px; cursor:pointer; }
+.bc-result { font-size:.75em; opacity:.8; }
