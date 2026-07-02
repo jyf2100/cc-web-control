@@ -10,12 +10,14 @@ class MachineRegistry {
   }
 
   all() {
-    return Array.from(this._byId.values()).map((m) => ({ ...m }));
+    return Array.from(this._byId.values()).map(({ token, ...rest }) => rest);
   }
 
   getById(id) {
     const m = this._byId.get(id);
-    return m ? { ...m } : undefined;
+    if (!m) return undefined;
+    const { token, ...rest } = m;
+    return rest;
   }
 
   setOnline(id, online, lastError = null) {

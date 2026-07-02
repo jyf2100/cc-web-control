@@ -34,3 +34,11 @@ test('snapshot 含 online 字段', () => {
   assert.equal(mc1.online, true);
   assert.equal(mc1.token, undefined); // snapshot 不外泄 token
 });
+
+test('all() 与 getById() 不泄露 token', () => {
+  const r = new MachineRegistry(MACHINES);
+  assert.equal(r.all()[0].token, undefined);
+  assert.equal(r.getById('mc1').token, undefined);
+  // getSecret 仍能取到 token
+  assert.equal(r.getSecret('mc1').token, 't1');
+});
