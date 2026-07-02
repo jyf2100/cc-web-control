@@ -180,6 +180,23 @@ function startHub(opts) {
     res.json(aggregator.getLatest());
   });
 
+  // —— 主控 agent 内部端点(只读参谋 T1)——
+  app.get('/api/mcp/list_sessions', (req, res) => {
+    res.json(aggregator.getLatest());
+  });
+
+  app.get('/api/mcp/read_session', async (req, res) => {
+    const machine = req.query.machine ? String(req.query.machine) : '';
+    const session = req.query.session ? String(req.query.session) : '';
+    if (!machine || !session) { res.status(400).json({ error: 'machine and session required' }); return; }
+    const lines = Math.min(Math.max(Number(req.query.lines) || 40, 1), 500);
+    const ac = clients.get(machine);
+    if (!ac) { res.status(404).json({ error: `unknown machine: ${machine}` }); return; }
+    const r = await ac.readPane(session, lines);
+    if (!r.ok) { res.status(502).json({ error: r.error }); return; }
+    res.json({ machine, session, lines: r.lines });
+  });
+
   // 代理:创建会话(body 带 machine 字段指定目标机)
   app.post('/api/sessions', async (req, res) => {
     const { machine, name, cwd } = req.body || {};
