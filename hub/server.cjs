@@ -13,6 +13,7 @@ const { MachineRegistry } = require('./registry.cjs');
 const { DashboardAggregator } = require('./dashboard_aggregator.cjs');
 const { AgentClient } = require('./agent_client.cjs');
 const { WsBridge } = require('./ws_bridge.cjs');
+const { createRateLimiter } = require('../rate_limit.cjs');
 
 function startHub(opts) {
   const {
@@ -46,44 +47,130 @@ function startHub(opts) {
 
   const app = express();
   app.use(express.json());
+  app.use(express.urlencoded({ extended: false }));
 
-  // 静态:控制台前端(复用 public/)
-  const publicDir = path.join(__dirname, '..', 'public');
-  app.use(express.static(publicDir));
+  // 登录速率限制:对齐单机 server.cjs 配置(默认 5 次/15 分钟,可经环境变量调整)
+  const loginRateLimiter = createRateLimiter({
+    max: Number.parseInt(process.env.CC_WEB_LOGIN_MAX || '', 10) || 5,
+    windowMs: Number.parseInt(process.env.CC_WEB_LOGIN_WINDOW_MS || '', 10) || 15 * 60 * 1000,
+  });
 
-  // 统一鉴权:cookie(cc_web_auth)或 Authorization: Bearer
-  const requireHubAuth = (req, res) => {
-    const ok = auth.isAuthorized(
-      { cookieHeader: req.headers.cookie, authorizationHeader: req.headers.authorization },
-      hubToken,
-    );
+  const expectedOriginForHttp = (req) => ({
+    protocol: req.protocol,
+    host: req.get('host'),
+  });
+
+  const requireSameOriginForUnsafeMethods = (req, res) => {
+    const method = String(req.method || 'GET').toUpperCase();
+    if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return true;
+    const ok = auth.isSameOrigin(req.get('origin'), expectedOriginForHttp(req));
     if (!ok) {
-      res.status(401).json({ error: 'unauthorized' });
+      res.status(403).json({ error: 'Forbidden (origin mismatch)' });
       return false;
     }
     return true;
   };
 
+  // GET /login:复用根 public/login.html(纯静态表单,input name=token/next)
+  app.get('/login', (req, res) => {
+    res.sendFile(path.join(__dirname, '..', 'public', 'login.html'));
+  });
+
+  // POST /login:限流 → same-origin → safeEqual → 设 httpOnly cookie → 重定向 next
+  app.post('/login', (req, res) => {
+    const { limited, retryAfterMs } = loginRateLimiter.check(req.ip);
+    if (limited) {
+      res.set('Retry-After', String(Math.ceil(retryAfterMs / 1000)));
+      res.status(429).type('text/plain').send('Too many login attempts, try again later');
+      return;
+    }
+    if (!requireSameOriginForUnsafeMethods(req, res)) return;
+
+    const token = typeof req.body?.token === 'string' ? req.body.token : '';
+    const nextRaw = typeof req.body?.next === 'string' ? req.body.next : '';
+    if (!token) {
+      res.status(400).type('text/plain').send('Missing token');
+      return;
+    }
+    if (!auth.safeEqual(token, hubToken)) {
+      res.status(401).type('text/plain').send('Invalid token');
+      return;
+    }
+    loginRateLimiter.reset(req.ip); // 合法用户,清空该 IP 计数
+
+    const secure = req.secure || String(req.get('x-forwarded-proto') || '').toLowerCase().startsWith('https');
+    res.cookie('cc_web_auth', token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure,
+      path: '/',
+    });
+    const nextPath = auth.normalizeNextPath(nextRaw);
+    res.redirect(nextPath || '/');
+  });
+
+  // POST /logout:清 cookie,回登录页
+  app.post('/logout', (req, res) => {
+    if (!requireSameOriginForUnsafeMethods(req, res)) return;
+    res.clearCookie('cc_web_auth', { path: '/' });
+    res.redirect('/login');
+  });
+
+  // requireAuth 中间件:白名单(login/logout/healthz/公开 PWA 资源);未授权 /api→401,其它→重定向 /login?next=
+  // 注册在 /login、/logout 之后,express.static 与 /api 路由之前。
+  const requireAuth = (req, res, next) => {
+    const p = req.path || '/';
+    // tokens.css 必须公开:它是 login.html 唯一依赖的样式表;manifest/icon 需公开以支持 PWA standalone 启动
+    if (
+      p === '/login' ||
+      p === '/logout' ||
+      p === '/healthz' ||
+      p === '/tokens.css' ||
+      p === '/logo.png' ||
+      p === '/favicon.ico' ||
+      p === '/manifest.json' ||
+      p === '/icon-192.png' ||
+      p === '/icon-512.png' ||
+      p === '/apple-touch-icon.png'
+    ) {
+      return next();
+    }
+    const ok = auth.isAuthorized(
+      { cookieHeader: req.headers.cookie, authorizationHeader: req.headers.authorization },
+      hubToken,
+    );
+    if (ok) return next();
+
+    if (p.startsWith('/api/')) {
+      res.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+    const nextUrl = typeof req.originalUrl === 'string' && req.originalUrl.startsWith('/') ? req.originalUrl : '/';
+    res.redirect(`/login?next=${encodeURIComponent(nextUrl)}`);
+  };
+
+  app.use(requireAuth);
+
+  // 静态:控制台前端(复用 public/);requireAuth 之后,控制台资源需登录
+  const publicDir = path.join(__dirname, '..', 'public');
+  app.use(express.static(publicDir));
+
   app.get('/api/config', (req, res) => {
-    if (!requireHubAuth(req, res)) return;
     res.json({ hub: true, intervalMs });
   });
 
   // 机器列表(已剥离 token)
   app.get('/api/machines', (req, res) => {
-    if (!requireHubAuth(req, res)) return;
     res.json({ machines: registry.snapshot() });
   });
 
   // 全局聚合 dashboard
   app.get('/api/global-dashboard', (req, res) => {
-    if (!requireHubAuth(req, res)) return;
     res.json(aggregator.getLatest());
   });
 
   // 代理:创建会话(body 带 machine 字段指定目标机)
   app.post('/api/sessions', async (req, res) => {
-    if (!requireHubAuth(req, res)) return;
     const { machine, name, cwd } = req.body || {};
     const ac = clients.get(machine);
     if (!ac) {
@@ -96,7 +183,6 @@ function startHub(opts) {
 
   // 代理:删除会话
   app.delete('/api/sessions/:machine/:name', async (req, res) => {
-    if (!requireHubAuth(req, res)) return;
     const ac = clients.get(req.params.machine);
     if (!ac) {
       res.status(404).json({ error: `unknown machine: ${req.params.machine}` });

@@ -131,6 +131,7 @@ html, body {
 .term-input-form { display:flex; gap:6px; padding:6px 12px; }
 .term-input { flex:1; }
 .console-broadcast { position:sticky; bottom:0; display:flex; gap:6px; align-items:center; padding:8px 12px; background:rgba(245,158,11,.08); border-top:1px solid rgba(245,158,11,.3); }
+.console-broadcast[hidden] { display: none; }
 .bc-count { font-size:.8em; background:rgba(245,158,11,.2); padding:2px 8px; border-radius:4px; }
 .bc-send { background:#f59e0b; color:#fff; border:0; padding:4px 12px; border-radius:4px; cursor:pointer; }
 .bc-result { font-size:.75em; opacity:.8; }

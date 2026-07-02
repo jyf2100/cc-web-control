@@ -170,3 +170,99 @@ test('DELETE /api/sessions/:machine/:name 代理到目标机', async () => {
     await s1.stop();
   }
 });
+
+// ===== 登录链(T8 回填:hub 复用根 login.html + cookie)=====
+
+test('GET /login 返回登录表单(含 <form)', async () => {
+  const s1 = await new StubMachine({ token: 't1' }).start();
+  try {
+    await withHub([s1], 'hubtok', async (hub) => {
+      const res = await fetch(`http://127.0.0.1:${hub.port}/login`);
+      assert.equal(res.status, 200);
+      const body = await res.text();
+      assert.match(body, /<form/i, 'login 页应含 form 表单');
+    });
+  } finally {
+    await s1.stop();
+  }
+});
+
+test('POST /login 正确 token → 302 + 设置 httpOnly cookie', async () => {
+  const s1 = await new StubMachine({ token: 't1' }).start();
+  try {
+    await withHub([s1], 'hubtok', async (hub) => {
+      const origin = `http://127.0.0.1:${hub.port}`;
+      const res = await fetch(`http://127.0.0.1:${hub.port}/login`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: origin,
+        },
+        body: 'token=hubtok&next=/',
+      });
+      assert.equal(res.status, 302);
+      const setCookie = res.headers.get('set-cookie') || '';
+      assert.match(setCookie, /cc_web_auth=hubtok/, '应设置 cc_web_auth cookie');
+      assert.match(setCookie, /HttpOnly/i, 'cookie 必须 httpOnly');
+    });
+  } finally {
+    await s1.stop();
+  }
+});
+
+test('POST /login 错误 token → 401', async () => {
+  const s1 = await new StubMachine({ token: 't1' }).start();
+  try {
+    await withHub([s1], 'hubtok', async (hub) => {
+      const origin = `http://127.0.0.1:${hub.port}`;
+      const res = await fetch(`http://127.0.0.1:${hub.port}/login`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: origin,
+        },
+        body: 'token=wrong&next=/',
+      });
+      assert.equal(res.status, 401);
+    });
+  } finally {
+    await s1.stop();
+  }
+});
+
+test('POST /login 缺 token → 400', async () => {
+  const s1 = await new StubMachine({ token: 't1' }).start();
+  try {
+    await withHub([s1], 'hubtok', async (hub) => {
+      const origin = `http://127.0.0.1:${hub.port}`;
+      const res = await fetch(`http://127.0.0.1:${hub.port}/login`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: origin,
+        },
+        body: 'next=/',
+      });
+      assert.equal(res.status, 400);
+    });
+  } finally {
+    await s1.stop();
+  }
+});
+
+test('未授权 GET / → 302 重定向到 /login?next=', async () => {
+  const s1 = await new StubMachine({ token: 't1' }).start();
+  try {
+    await withHub([s1], 'hubtok', async (hub) => {
+      const res = await fetch(`http://127.0.0.1:${hub.port}/`, { redirect: 'manual' });
+      assert.equal(res.status, 302);
+      const loc = res.headers.get('location') || '';
+      assert.match(loc, /\/login\?next=/, '应重定向到 /login?next=');
+    });
+  } finally {
+    await s1.stop();
+  }
+});

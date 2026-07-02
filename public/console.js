@@ -1,10 +1,9 @@
 'use strict';
 (function () {
-  const TOKEN = (() => {
-    const m = document.cookie.match(/(?:^|;\s*)cc_web_auth=([^;]+)/);
-    return m ? m[1] : new URLSearchParams(location.search).get('token') || '';
-  })();
-  const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/?token=${encodeURIComponent(TOKEN)}`;
+  // 认证:同源 cookie(httpOnly,JS 读不到)由浏览器自动携带;?token= 仅测试/直链 fallback
+  const queryToken = new URLSearchParams(location.search).get('token') || '';
+  const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/`
+    + (queryToken ? `?token=${encodeURIComponent(queryToken)}` : '');
   let ws = null;
   let currentTarget = null;       // {machine,session}
   const selected = new Set();     // "machine/session"
@@ -25,7 +24,13 @@
     ws = new WebSocket(wsUrl);
     // 修正 Bug 2:init 覆盖、output 追加(增量不丢历史)
     ws.onmessage = (ev) => {
-      const msg = JSON.parse(ev.data);
+      let msg;
+      try {
+        msg = JSON.parse(ev.data);
+      } catch {
+        termScreen.textContent += '\n[协议错误] 非 JSON 帧';
+        return;
+      }
       const isCurrent = currentTarget && msg.target &&
         msg.target.machine === currentTarget.machine && msg.target.session === currentTarget.session;
       if (msg.type === 'init' && isCurrent) {
@@ -37,8 +42,9 @@
       } else if (msg.type === 'error' && isCurrent) {
         termScreen.textContent += `\n[错误] ${msg.data}`;
       } else if (msg.type === 'broadcast_result') {
-        const okN = msg.results.filter((r) => r.ok).length;
-        bcResult.textContent = `成功 ${okN}/${msg.results.length}`;
+        const arr = Array.isArray(msg.results) ? msg.results : [];
+        const okN = arr.filter((r) => r.ok).length;
+        bcResult.textContent = `成功 ${okN}/${arr.length}`;
       }
     };
     return ws;
@@ -107,7 +113,7 @@
 
   async function poll() {
     try {
-      const res = await fetch('/api/global-dashboard', { headers: { Authorization: `Bearer ${TOKEN}` } });
+      const res = await fetch('/api/global-dashboard');
       if (res.ok) renderBoard(await res.json());
     } catch {}
   }
