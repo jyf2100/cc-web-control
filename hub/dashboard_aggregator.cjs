@@ -28,12 +28,16 @@ class DashboardAggregator {
   }
   start() {
     if (this._timer) return;
-    this._tick(); // 立即跑一次
-    this._timer = setInterval(() => this._tick(), this._intervalMs);
+    this._safeTick(); // 立即跑一次
+    this._timer = setInterval(() => this._safeTick(), this._intervalMs);
   }
   stop() {
     if (this._timer) clearInterval(this._timer);
     this._timer = null;
+  }
+  // 单轮聚合的容错入口:registry 异常等导致 _tick reject 时忽略这一轮(单机失败已在 _tick 内隔离)
+  _safeTick() {
+    this._tick().catch(() => {});
   }
   async _tick() {
     const visible = this._registry.all(); // [{id,name,url,online,lastError}] 无 token

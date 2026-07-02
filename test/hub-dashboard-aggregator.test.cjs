@@ -81,3 +81,22 @@ test('DashboardAggregator fetchOne 失败 → online:false + lastError', async (
   assert.equal(latest.machines[0].online, false);
   assert.equal(latest.machines[0].lastError, 'ECONNREFUSED');
 });
+
+test('DashboardAggregator fetchOne 抛异常 → 该机 online:false + lastError,不影响其它机', async () => {
+  const reg = fakeRegistry([
+    { id: 'mc1', name: 'A', url: 'http://1', token: 't1' },
+    { id: 'mc2', name: 'B', url: 'http://2', token: 't2' },
+  ]);
+  const agg = new DashboardAggregator({
+    registry: reg,
+    fetchOne: async (secret) => { if (secret.id === 'mc1') throw new Error('boom'); return { ok: true, payload: { tmuxOk: true, sessions: [] } }; },
+    intervalMs: 999999,
+  });
+  await agg._tick();
+  const latest = agg.getLatest();
+  const mc1 = latest.machines.find((m) => m.id === 'mc1');
+  const mc2 = latest.machines.find((m) => m.id === 'mc2');
+  assert.equal(mc1.online, false);
+  assert.equal(mc1.lastError, 'boom');
+  assert.equal(mc2.online, true); // 异常隔离,mc2 仍正常
+});
