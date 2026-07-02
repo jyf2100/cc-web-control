@@ -107,3 +107,66 @@ test('POST /api/sessions 代理到目标机', async () => {
     await s1.stop();
   }
 });
+
+test('WS 鉴权失败(?token=错)→ 连接被关闭', async () => {
+  const s1 = await new StubMachine({ token: 't1' }).start();
+  try {
+    await withHub([s1], 'hubtok', async (hub) => {
+      const ws = new WebSocket(`ws://127.0.0.1:${hub.port}/?token=wrong`);
+      const closed = await new Promise((r) => {
+        ws.on('close', () => r(true));
+        ws.on('error', () => {}); // 防 unhandled
+        setTimeout(() => r(false), 500);
+      });
+      assert.equal(closed, true);
+    });
+  } finally {
+    await s1.stop();
+  }
+});
+
+test('单机离线降级:该机 online:false,其余机正常', async () => {
+  const s1 = await new StubMachine({
+    token: 't1',
+    dashboardPayload: { tmuxOk: true, sessions: [{ name: 'a', cwd: '/a', status: 'idle', lastLine: '', lastTs: 1, attached: false }] },
+  }).start();
+  const s2 = await new StubMachine({ token: 't2', dashboardPayload: { tmuxOk: true, sessions: [] } }).start();
+  try {
+    await withHub([s1, s2], 'hubtok', async (hub) => {
+      await new Promise((r) => setTimeout(r, 250));
+      // 停掉 s1 模拟离线
+      await s1.stop();
+      await new Promise((r) => setTimeout(r, 350)); // 等下一轮轮询(intervalMs:100)
+      const res = await fetch(`http://127.0.0.1:${hub.port}/api/global-dashboard`, {
+        headers: { Cookie: 'cc_web_auth=hubtok' },
+      });
+      const body = await res.json();
+      assert.equal(body.machines.length, 2); // 整体不崩,s1 仍在列表
+      const mc1 = body.machines.find((m) => m.id === 'mc1');
+      const mc2 = body.machines.find((m) => m.id === 'mc2');
+      assert.equal(mc1.online, false); // s1 离线
+      assert.equal(mc2.online, true); // s2 不受影响
+    });
+  } finally {
+    // ⚠️ 只 stop s2(s1 已在测试内停,重复 stop 会报 ERR_SERVER_NOT_RUNNING)
+    await s2.stop();
+  }
+});
+
+test('DELETE /api/sessions/:machine/:name 代理到目标机', async () => {
+  let deleted = null;
+  const s1 = await new StubMachine({ token: 't1' }).start();
+  s1.app.delete('/api/sessions/:name', (req, res) => { deleted = req.params.name; res.status(200).json({ success: true }); });
+  try {
+    await withHub([s1], 'hubtok', async (hub) => {
+      const res = await fetch(`http://127.0.0.1:${hub.port}/api/sessions/mc1/theSess`, {
+        method: 'DELETE',
+        headers: { Cookie: 'cc_web_auth=hubtok' },
+      });
+      assert.equal(res.status, 200);
+      assert.equal(deleted, 'theSess');
+    });
+  } finally {
+    await s1.stop();
+  }
+});

@@ -141,7 +141,9 @@ function startHub(opts) {
     bridge.handleConnection(ws);
   });
 
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
+    // listen 失败(如端口占用)Node 在 server 上发 'error' → reject,避免 uncaughtException + await 永挂
+    server.on('error', reject);
     server.listen(port, host, () => {
       aggregator.start();
       const addr = server.address();
