@@ -2,6 +2,8 @@
 
 通过 Web 页面对话形式控制本地 Claude Code，实现双向同步：Web 输入发送给 Claude Code，Claude Code 输出显示在 Web 上。
 
+另支持 **hub 多机模式**：一条 `cc-web-control hub` 子命令聚合多台机器的 cc-web-control，提供统一看板、终端切换与批量广播。详见下文 [hub 多机模式](#hub-多机模式)。
+
 ## 快速开始
 
 ```bash
@@ -34,6 +36,7 @@ cc-web-control
 - **深色主题**: 类似 Claude Code 的深色界面风格
 - **单行输入**: Enter 发送（当前输入框为单行）
 - **补全/命令面板按键**: 支持 `Tab` 补全、`↑/↓` 选择、`Esc` 退出（输入框为空时发送按键）
+- **多机 hub 聚合**: `cc-web-control hub` 子命令聚合 N 台机器，统一全局看板 / 点行切换终端 / 多选批量广播
 
 ## 技术架构
 
@@ -160,6 +163,79 @@ Claude Code 有些交互会在输入 `/` 后弹出命令面板（不一定需要
 - `CC_WEB_WEB_ONLY=1` 或 `--web-only`：只启动 Web（不创建/附加 tmux 会话）
 - `CC_WEB_NO_OPEN=1` 或 `--no-open`：不自动打开浏览器
 - `CC_WEB_NO_ATTACH=1` 或 `--no-attach`：不在当前终端 attach 到 tmux 会话
+
+## hub 多机模式
+
+`cc-web-control hub` 启动一个中央服务，聚合多台机器上各自运行的 cc-web-control 实例：一个全局看板轮询所有机器、点行切换任一会话终端、多选会话批量广播同一条输入。浏览器只连 hub，单一入口、单一 token。
+
+### 1) 机器侧准备
+
+每台被聚合的机器照常运行 `cc-web-control`，但需对内网暴露并开启 token 鉴权：
+
+```bash
+# 在每台机器上
+CC_WEB_HOST=0.0.0.0 CC_WEB_AUTH_TOKEN=<各机 token> cc-web-control
+```
+
+> 也可把 `CC_WEB_HOST` 设为该机的局域网 IP（如 `192.168.1.10`）。`CC_WEB_AUTH_TOKEN` 必设——裸奔危险。
+
+### 2) hub 侧配置
+
+hub 通过一个 JSON 文件得知机器清单，默认路径 `~/.cc-web-control/hub-machines.json`（可用 `CC_WEB_HUB_MACHINES_FILE` 覆盖）。文件内含各机 token，建议权限 **0600**：
+
+```json
+{
+  "machines": [
+    { "id": "mac1", "name": "MBP",  "url": "http://192.168.1.10:7684", "token": "<机器 mac1 的 CC_WEB_AUTH_TOKEN>" },
+    { "id": "srv1", "name": "开发服", "url": "http://192.168.1.20:7684", "token": "<机器 srv1 的 CC_WEB_AUTH_TOKEN>" }
+  ]
+}
+```
+
+字段约束（校验失败 hub 会 fail-fast 退出，不静默）：
+
+- `id`：稳定标识，正则 `^[A-Za-z0-9._-]{1,32}$`，**禁止含 `/`**（全局会话键分隔符），清单内唯一。
+- `name`：显示名（可省略，默认取 `id`）。
+- `url`：该机的内网地址（含端口）。
+- `token`：该机的 `CC_WEB_AUTH_TOKEN`。
+
+```bash
+chmod 0600 ~/.cc-web-control/hub-machines.json
+```
+
+### 3) 启动 hub
+
+```bash
+CC_WEB_HUB_TOKEN=<hub 访问 token> cc-web-control hub
+```
+
+hub 专用环境变量：
+
+- `CC_WEB_HUB_TOKEN` — 浏览器访问 hub 用的 token（**必设**，否则裸奔退出）。
+- `CC_WEB_HUB_MACHINES_FILE` — 机器清单路径（默认 `~/.cc-web-control/hub-machines.json`）。
+- `CC_WEB_HUB_HOST` — hub 监听地址（默认 `127.0.0.1`）。
+- `CC_WEB_HUB_PORT` — hub 端口（默认 `7685`，避开单机默认 7684）。
+- `CC_WEB_HUB_DASHBOARD_INTERVAL_MS` — 看板聚合轮询间隔（默认 `2000` ms）。
+
+### 4) 使用
+
+浏览器打开 `http://<hub 所在机>:7685/` → 输入 `CC_WEB_HUB_TOKEN` 登录 → 进入多机控制台：
+
+- **看板**：顶部全局 dashboard 展示所有机器及其会话状态（每 2s 聚合一次）。
+- **切换终端**：点某行 → 右侧终端切换到该会话（一条 WS 到 hub，hub 代理到目标机）。
+- **批量广播**：多选若干会话 → 在广播栏输入 → 一次性扇出到所有选中会话。
+
+> `http://<hub>/?token=<CC_WEB_HUB_TOKEN>` 直链可跳过登录页，**仅供本地测试**，勿用于日常/外网。
+
+### 5) 安全提示
+
+三层 token 各自独立、互不通用：
+
+1. **浏览器 → hub**：`CC_WEB_HUB_TOKEN`，登录后写 httpOnly + sameSite=lax cookie（`cc_web_auth`）。
+2. **hub → 各机**：hub 用清单里每台的 `token`，以 `Authorization: Bearer <token>` 调各机 HTTP 与 WS。
+3. **各机对内网暴露**：各机自己的 `CC_WEB_AUTH_TOKEN` 把关。
+
+建议把 hub 部署在内网，如需外网访问请走安全隧道（见下节）并保留 `CC_WEB_HUB_TOKEN` 鉴权。
 
 ## 外网访问（安全隧道 / 手机访问）
 
