@@ -3,6 +3,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { exec } = require('node:child_process');
 const { startHub } = require('./server.cjs');
+const { resolveMainAgentConfig } = require('./main_agent_env.cjs');
 
 const machinesFile = process.env.CC_WEB_HUB_MACHINES_FILE ||
   path.join(os.homedir(), '.cc-web-control', 'hub-machines.json');
@@ -17,6 +18,7 @@ startHub({
   host: process.env.CC_WEB_HUB_HOST,
   port: process.env.CC_WEB_HUB_PORT && Number(process.env.CC_WEB_HUB_PORT),
   intervalMs: process.env.CC_WEB_HUB_DASHBOARD_INTERVAL_MS && Number(process.env.CC_WEB_HUB_DASHBOARD_INTERVAL_MS),
+  mainAgent: resolveMainAgentConfig(process.env),
 }).then((hub) => {
   console.log(`[hub] listening on ${hub.host}:${hub.port} (machines: ${machinesFile})`);
   console.log(`[hub] 访问地址: ${hub.url}`);
