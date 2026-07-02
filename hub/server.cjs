@@ -14,6 +14,10 @@ const { DashboardAggregator } = require('./dashboard_aggregator.cjs');
 const { AgentClient } = require('./agent_client.cjs');
 const { WsBridge } = require('./ws_bridge.cjs');
 const { createRateLimiter } = require('../rate_limit.cjs');
+const { AgentDispatcher } = require('./agent_dispatcher.cjs');
+const { createLocalTmux } = require('./local_tmux.cjs');
+const { EventWatcher } = require('./event_watcher.cjs');
+const { AuditLog } = require('./audit_log.cjs');
 
 function startHub(opts) {
   const {
@@ -22,6 +26,7 @@ function startHub(opts) {
     host = process.env.CC_WEB_HUB_HOST || '127.0.0.1',
     port = Number(process.env.CC_WEB_HUB_PORT) || 7685,
     intervalMs = Number(process.env.CC_WEB_HUB_DASHBOARD_INTERVAL_MS) || 2000,
+    mainAgent = {},
   } = opts;
 
   if (!hubToken) throw new Error('CC_WEB_HUB_TOKEN 必设(裸奔危险)');
@@ -195,6 +200,23 @@ function startHub(opts) {
     const r = await ac.readPane(session, lines);
     if (!r.ok) { res.status(502).json({ error: r.error }); return; }
     res.json({ machine, session, lines: r.lines });
+  });
+
+  // dispatcher 实例:mainAgent 未启用时为 null(端点据此返回 503)。装配在 Task 11。
+  let dispatcher = null;
+
+  app.post('/api/mcp/dequeue_event', async (req, res) => {
+    if (!dispatcher) { res.status(503).json({ error: 'main agent disabled' }); return; }
+    const item = await dispatcher.dequeueEvent();
+    res.json(item || { event: null });
+  });
+
+  app.post('/api/mcp/ack_event', async (req, res) => {
+    const { runId, outcome } = req.body || {};
+    if (!runId) { res.status(400).json({ error: 'runId required' }); return; }
+    if (!dispatcher) { res.status(503).json({ error: 'main agent disabled' }); return; }
+    const ok = await dispatcher.ack(runId, outcome);
+    res.json({ ok });
   });
 
   // 代理:创建会话(body 带 machine 字段指定目标机)

@@ -48,3 +48,15 @@ test('list_sessions: 未授权 → 401', async () => {
   const r = await fetch(`${hub.url}/api/mcp/list_sessions`);
   assert.equal(r.status, 401);
 });
+
+test('dequeue_event: 未启用主 agent → 503', async () => {
+  const hub = await startHub(base); base._hub = hub;
+  const r = await fetch(`${hub.url}/api/mcp/dequeue_event`, { method: 'POST', headers: { Authorization: `Bearer ${base.hubToken}`, 'Content-Type': 'application/json' }, body: '{}' });
+  assert.equal(r.status, 503);
+});
+
+test('ack_event: 缺 runId → 400', async () => {
+  const hub = await startHub(base); base._hub = hub;
+  const r = await fetch(`${hub.url}/api/mcp/ack_event`, { method: 'POST', headers: { Authorization: `Bearer ${base.hubToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ outcome: 'x' }) });
+  assert.equal(r.status, 400);
+});
