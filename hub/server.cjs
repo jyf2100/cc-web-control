@@ -151,6 +151,12 @@ function startHub(opts) {
 
   app.use(requireAuth);
 
+  // hub 入口:登录后直达多机控制台(而非共享 public/ 里的单机 index.html,
+  // 那会去请求 hub 不存在的 /api/dashboard 等端点)。放在 requireAuth 之后、
+  // express.static 之前:未授权 / → requireAuth 重定向 /login?next=/;
+  // 已授权 / → 302 /console.html → 浏览器再请求 /console.html(requireAuth 通过)→ static 发文件。
+  app.get('/', (req, res) => res.redirect('/console.html'));
+
   // 静态:控制台前端(复用 public/);requireAuth 之后,控制台资源需登录
   const publicDir = path.join(__dirname, '..', 'public');
   app.use(express.static(publicDir));

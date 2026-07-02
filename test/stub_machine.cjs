@@ -46,6 +46,11 @@ class StubMachine {
       });
     });
   }
-  stop() { return new Promise((r) => this.server.close(() => r())); }
+  stop() {
+    // 先关 WS 再关 HTTP,避免潜在 WS 连接撑住 server.close(回调延迟到所有连接断开)
+    return new Promise((resolve) => {
+      this.wss.close(() => this.server.close(() => resolve()));
+    });
+  }
 }
 module.exports = { StubMachine };
