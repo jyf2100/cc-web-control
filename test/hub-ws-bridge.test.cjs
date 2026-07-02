@@ -16,14 +16,13 @@ function fakeBrowserWs() {
 }
 
 function fakeAgentFactory(handlers) {
-  return { attach: handlers.attach, sendOneShot: handlers.sendOneShot, getById: handlers.getById };
+  return { attach: handlers.attach, sendOneShot: handlers.sendOneShot };
 }
 
 test('attach → 订阅 agent,agent 消息转发给浏览器带 target', () => {
   let pushed;
   const bridge = new WsBridge({
     getClient: (mid) => fakeAgentFactory({
-      getById: () => ({ id: mid }),
       attach: (session, onMsg) => { pushed = onMsg; return { detach() {}, send() { return true; }, once: () => Promise.resolve() }; },
       sendOneShot: async () => ({ ok: true }),
     }),
@@ -39,7 +38,6 @@ test('input → 经当前 attach 的 handle 发送;未 attach 则 error', () => 
   let sentViaHandle = null;
   const bridge = new WsBridge({
     getClient: () => fakeAgentFactory({
-      getById: () => ({ id: 'mc1' }),
       attach: (session, onMsg) => ({ detach() {}, send: (m) => { sentViaHandle = m; return true; }, once: () => Promise.resolve() }),
       sendOneShot: async () => ({ ok: true }),
     }),
@@ -57,7 +55,6 @@ test('broadcast 去重 + 扇出 + 上限 50 + 返回 broadcast_result', async ()
   const shots = [];
   const bridge = new WsBridge({
     getClient: () => fakeAgentFactory({
-      getById: () => ({ id: 'mc1' }),
       attach: () => ({ detach() {}, send: () => true, once: () => Promise.resolve() }),
       sendOneShot: async (session, msg) => { shots.push({ session, msg }); return { ok: true }; },
     }),
@@ -87,7 +84,6 @@ test('detach 清理订阅', () => {
   let detached = false;
   const bridge = new WsBridge({
     getClient: () => fakeAgentFactory({
-      getById: () => ({ id: 'mc1' }),
       attach: () => ({ detach: () => { detached = true; }, send: () => true, once: () => Promise.resolve() }),
       sendOneShot: async () => ({ ok: true }),
     }),
@@ -102,7 +98,6 @@ test('detach 清理订阅', () => {
 test('ws close 触发清理,后续 input 得 target not attached', () => {
   const bridge = new WsBridge({
     getClient: () => fakeAgentFactory({
-      getById: () => ({ id: 'mc1' }),
       attach: () => ({ detach() {}, send: () => true, once: () => Promise.resolve() }),
       sendOneShot: async () => ({ ok: true }),
     }),
@@ -120,7 +115,6 @@ test('attach 切换:旧 handle detach + current 指向新 target', () => {
   let detachedOld = false;
   const bridge = new WsBridge({
     getClient: () => fakeAgentFactory({
-      getById: () => ({ id: 'mc1' }),
       attach: (session) => ({
         detach: () => { if (session === 'old') detachedOld = true; },
         send: () => true,

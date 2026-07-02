@@ -81,6 +81,10 @@ class AgentClient {
   }
 
   _connect(session, entry) {
+    // 覆盖前先关旧连接(防御 error/close 延迟到达的边沿竞态,自愈加固)
+    if (entry.ws && entry.ws.readyState <= 1) {
+      try { entry.ws.close(); } catch {}
+    }
     const wsUrl = this.url.replace(/^http/, 'ws') + `/?session=${encodeURIComponent(session)}`;
     const ws = new WebSocket(wsUrl, { headers: { Authorization: `Bearer ${this.token}` } });
     entry.ws = ws;
@@ -129,7 +133,7 @@ class AgentClient {
     }
   }
 
-  _poolSize(session) { const e = this._pool.get(session); return e ? 1 : 0; }
+  _poolSize(session) { const e = this._pool.get(session); return e ? e.refs.size : 0; }
 
   _hasReconnectTimer(session) {
     const e = this._pool.get(session);

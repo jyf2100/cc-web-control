@@ -49,6 +49,8 @@ function startHub(opts) {
   app.use(express.json());
   app.use(express.urlencoded({ extended: false }));
 
+  // 注:req.ip 取 socket 对端地址(未设 trust proxy)。反代部署时所有请求 IP 相同,
+  // 限流计数会共享——内网单用户可接受;多用户/公网部署应按需设 app.set('trust proxy', N)。
   // 登录速率限制:对齐单机 server.cjs 配置(默认 5 次/15 分钟,可经环境变量调整)
   const loginRateLimiter = createRateLimiter({
     max: Number.parseInt(process.env.CC_WEB_LOGIN_MAX || '', 10) || 5,
@@ -115,6 +117,9 @@ function startHub(opts) {
     res.clearCookie('cc_web_auth', { path: '/' });
     res.redirect('/login');
   });
+
+  // 健康检查(公开,供前置代理/K8s 探活)
+  app.get('/healthz', (req, res) => res.json({ ok: true }));
 
   // requireAuth 中间件:白名单(login/logout/healthz/公开 PWA 资源);未授权 /api→401,其它→重定向 /login?next=
   // 注册在 /login、/logout 之后,express.static 与 /api 路由之前。

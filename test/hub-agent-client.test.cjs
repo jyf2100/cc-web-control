@@ -45,7 +45,7 @@ test('attachSession 懒建 WS,收到 init 后回调,引用计数共享', async (
     // 否则 Node 的 server.close() 会因存在打开的 WS 连接而无法完成 callback,
     // 导致 stub.stop() 悬挂(spec 作者注里提到的"为避免悬挂"的严谨写法)。
     const refB = ac.attachSession('s1', (msg) => inboxB.push(msg));
-    assert.equal(ac._poolSize('s1'), 1); // 仍是同一条 WS
+    assert.equal(ac._poolSize('s1'), 2); // 两个订阅者复用同一条 WS(refs 计数)
     // 发 input 经透传到 stub
     refA.send({ type: 'input', data: 'hello', enter: true });
     await new Promise((r) => setTimeout(r, WAIT));

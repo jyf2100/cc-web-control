@@ -282,3 +282,17 @@ test('已授权 GET / → 302 重定向到 /console.html(避免落入单机 inde
     await s1.stop();
   }
 });
+
+test('GET /healthz 公开健康检查(无需 cookie)', async () => {
+  const s1 = await new StubMachine({ token: 't1' }).start();
+  try {
+    await withHub([s1], 'hubtok', async (hub) => {
+      const res = await fetch(`http://127.0.0.1:${hub.port}/healthz`);
+      assert.equal(res.status, 200);
+      const body = await res.json();
+      assert.deepEqual(body, { ok: true });
+    });
+  } finally {
+    await s1.stop();
+  }
+});

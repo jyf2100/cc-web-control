@@ -237,6 +237,8 @@ hub 专用环境变量：
 
 建议把 hub 部署在内网，如需外网访问请走安全隧道（见下节）并保留 `CC_WEB_HUB_TOKEN` 鉴权。
 
+反向代理部署时，登录限流按 socket 对端 IP 计数（未启用 `trust proxy`），内网单用户无影响；公网部署需自行配置 `trust proxy`。
+
 ## 外网访问（安全隧道 / 手机访问）
 
 推荐用 Cloudflare Quick Tunnel（`cloudflared`）把本机服务安全暴露到外网，并开启 token 鉴权。
