@@ -244,8 +244,12 @@ function startHub(opts) {
     server.listen(port, host, () => {
       aggregator.start();
       const addr = server.address();
+      // 0.0.0.0 归一为 127.0.0.1:浏览器/本机访问开不了 0.0.0.0(url 供 server_entry 自动开浏览器)
+      const displayHost = (!host || host === '0.0.0.0') ? '127.0.0.1' : host;
       resolve({
+        host: displayHost,
         port: addr.port,
+        url: `http://${displayHost}:${addr.port}`,
         close: async () => {
           aggregator.stop();
           for (const ac of clients.values()) ac.close();

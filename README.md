@@ -216,6 +216,7 @@ hub 专用环境变量：
 - `CC_WEB_HUB_HOST` — hub 监听地址（默认 `127.0.0.1`）。
 - `CC_WEB_HUB_PORT` — hub 端口（默认 `7685`，避开单机默认 7684）。
 - `CC_WEB_HUB_DASHBOARD_INTERVAL_MS` — 看板聚合轮询间隔（默认 `2000` ms）。
+- `CC_WEB_HUB_NO_OPEN` — 设为 `1`（或传 `--no-open`）禁用 hub 启动后自动开浏览器（对齐单机 `CC_WEB_NO_OPEN`）。
 
 ### 4) 使用
 

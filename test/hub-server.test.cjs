@@ -108,6 +108,30 @@ test('POST /api/sessions 代理到目标机', async () => {
   }
 });
 
+test('startHub 返回 url(127.0.0.1 + 实际端口,供自动开浏览器)', async () => {
+  const s1 = await new StubMachine({ token: 't1' }).start();
+  try {
+    await withHub([s1], 'hubtok', async (hub) => {
+      assert.equal(hub.host, '127.0.0.1');
+      assert.equal(hub.url, `http://127.0.0.1:${hub.port}`);
+    });
+  } finally { await s1.stop(); }
+});
+
+test('startHub host=0.0.0.0 → url 归一为 127.0.0.1(浏览器开不了 0.0.0.0)', async () => {
+  const s1 = await new StubMachine({ token: 't1' }).start();
+  const { file, cleanup } = tmpMachinesFile([{ id: 'mc1', name: 'M1', url: s1.url, token: s1.token }]);
+  try {
+    const hub = await startHub({ machinesFile: file, hubToken: 'hubtok', host: '0.0.0.0', port: 0, intervalMs: 100 });
+    assert.equal(hub.host, '127.0.0.1');
+    assert.equal(hub.url, `http://127.0.0.1:${hub.port}`);
+    await hub.stop();
+  } finally {
+    cleanup();
+    await s1.stop();
+  }
+});
+
 test('WS 鉴权失败(?token=错)→ 连接被关闭', async () => {
   const s1 = await new StubMachine({ token: 't1' }).start();
   try {
