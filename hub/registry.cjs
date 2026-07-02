@@ -26,9 +26,9 @@ class MachineRegistry {
     this._byId.set(id, { ...m, online: !!online, lastError: online ? null : lastError });
   }
 
-  // 对外快照,剔除 token
+  // 对外快照:all() 已剥离 token,此处仅作语义别名
   snapshot() {
-    return this.all().map(({ token, ...rest }) => rest);
+    return this.all();
   }
 
   getSecret(id) {
