@@ -29,24 +29,33 @@ class AgentClient {
   }
 
   async createSession({ name, cwd }) {
-    const res = await fetch(`${this.url}/api/sessions`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, cwd }),
-    });
-    return { ok: res.ok, status: res.status, body: res.ok ? await res.json().catch(() => ({})) : await res.text().catch(() => '') };
+    try {
+      const res = await fetch(`${this.url}/api/sessions`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, cwd }),
+      });
+      return { ok: res.ok, status: res.status, body: res.ok ? await res.json().catch(() => ({})) : await res.text().catch(() => '') };
+    } catch (e) {
+      return { ok: false, status: 0, error: e.code || e.message };
+    }
   }
 
   async deleteSession(name) {
-    const res = await fetch(`${this.url}/api/sessions/${encodeURIComponent(name)}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${this.token}` },
-    });
-    return { ok: res.ok, status: res.status };
+    try {
+      const res = await fetch(`${this.url}/api/sessions/${encodeURIComponent(name)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${this.token}` },
+      });
+      return { ok: res.ok, status: res.status };
+    } catch (e) {
+      return { ok: false, status: 0, error: e.code || e.message };
+    }
   }
 
   // —— WS 池(懒连接 + 引用计数) ——
-  // 返回 handle: { detach(), send(msg), once('open'|'close'|'error') }
+  // 返回 handle: { detach(), send(msg), once('open') }
+  // once('open') 等首次连接建立;首次连接失败会 reject(promise 已 settle 后再 resolve/reject 为 no-op)
   attachSession(session, onMessage) {
     let entry = this._pool.get(session);
     if (!entry) {
@@ -81,6 +90,7 @@ class AgentClient {
       for (const cb of entry.refs) cb(msg);
     });
     ws.on('error', (err) => {
+      try { entry._rejectOpen(err); } catch {} // 首次连接失败:让 await once('open') 等待者得到 rejection(promise 已 settle 则 no-op)
       for (const cb of entry.refs) cb({ type: 'error', data: err.message });
     });
     ws.on('close', () => {
@@ -121,6 +131,11 @@ class AgentClient {
 
   _poolSize(session) { const e = this._pool.get(session); return e ? 1 : 0; }
 
+  _hasReconnectTimer(session) {
+    const e = this._pool.get(session);
+    return !!(e && e.retry);
+  }
+
   // —— 一次性发送(广播用):临时建连、发完即关 ——
   async sendOneShot(session, msg) {
     // 若已有池连接则直接复用
@@ -145,6 +160,9 @@ class AgentClient {
 
   close() {
     for (const [, entry] of this._pool) {
+      // 先清 refs:ws.close() 会触发 'close',此时 refs 为空 → 不调度重连,
+      // 否则会留下引用计数 > 0 的重连 timer,撑住进程不退出。
+      entry.refs.clear();
       if (entry.retry) { clearTimeout(entry.retry); entry.retry = null; }
       try { entry.ws && entry.ws.close(); } catch {}
     }

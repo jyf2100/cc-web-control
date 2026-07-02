@@ -68,3 +68,37 @@ test('sendOneShot 临时连接发完即关(用于 broadcast)', async () => {
     assert.equal(ac._poolSize('sX'), 0); // 不留连接
   } finally { await stub.stop(); }
 });
+
+test('close() 关闭所有池连接 + 清 retry timer', async () => {
+  const stub = await new StubMachine({ token: 't' }).start();
+  try {
+    const ac = new AgentClient({ id: 'mc1', url: stub.url, token: 't' });
+    const refA = ac.attachSession('s1', () => {});
+    const refB = ac.attachSession('s2', () => {});
+    await refA.once('open');
+    await refB.once('open');
+    assert.equal(ac._poolSize('s1'), 1);
+    assert.equal(ac._poolSize('s2'), 1);
+    ac.close();
+    assert.equal(ac._poolSize('s1'), 0);
+    assert.equal(ac._poolSize('s2'), 0);
+  } finally { await stub.stop(); }
+});
+
+test('断线后仍有订阅者 → 调度重连(引用未归零不清理)', async () => {
+  const stub = await new StubMachine({ token: 't' }).start();
+  try {
+    const ac = new AgentClient({ id: 'mc1', url: stub.url, token: 't' });
+    const ref = ac.attachSession('s1', () => {});
+    await ref.once('open');
+    // 模拟断线:直接关底层 ws(不 detach,保留订阅者)
+    const entry = ac._pool.get('s1');
+    entry.ws.close();
+    await new Promise((r) => setTimeout(r, WAIT));
+    // 仍有订阅者 → entry 未清理,且已调度重连 timer
+    assert.equal(ac._poolSize('s1'), 1);
+    assert.equal(ac._hasReconnectTimer('s1'), true);
+    ref.detach(); // 归零 → 清 retry + 关 ws + 删 entry
+    ac.close();
+  } finally { await stub.stop(); }
+});
