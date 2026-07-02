@@ -179,6 +179,36 @@ class AgentClient {
     });
   }
 
+  // —— 一次性读尾部输出:临时连,等对端 init 帧(含 capturePane 全量),取尾部 lines 行,不发指令 ——
+  async readPane(session, lines = 40) {
+    const wsUrl = this.url.replace(/^http/, 'ws') + `/?session=${encodeURIComponent(session)}`;
+    return new Promise((resolve) => {
+      const ws = new WebSocket(wsUrl, { headers: { Authorization: `Bearer ${this.token}` } });
+      let settled = false;
+      const done = (result) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        try { ws.close(); } catch {}
+        resolve(result);
+      };
+      const timer = setTimeout(() => done({ ok: false, error: 'timeout' }), 5000);
+      ws.on('message', (buf) => {
+        let m; try { m = JSON.parse(buf.toString()); } catch { return; }
+        if (!m) return;
+        if (m.type === 'init') {
+          const text = typeof m.data === 'string' ? m.data : '';
+          const all = text.split('\n');
+          const tail = all.slice(Math.max(0, all.length - lines));
+          done({ ok: true, lines: tail, total: all.length });
+        } else if (m.type === 'error') {
+          done({ ok: false, error: m.data || 'remote error' });
+        }
+      });
+      ws.on('error', (err) => done({ ok: false, error: err.message }));
+    });
+  }
+
   close() {
     for (const [, entry] of this._pool) {
       // 先清 refs:ws.close() 会触发 'close',此时 refs 为空 → 不调度重连,
