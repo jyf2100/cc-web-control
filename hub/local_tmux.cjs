@@ -16,7 +16,7 @@ function createLocalTmux({ tmux } = {}) {
     },
     async capture(session, scrollback = 0) { return t.capturePane(session, scrollback); },
     async hasSession(session) { return t.checkSession(session); },
-    async create(session, command) { return t.createSession(session, command); },
+    async create(session, command, opts) { return t.createSession(session, command, opts); },
     async kill(session) { return t.killSession(session); },
     async sendKey(session, key) { return t.sendKey(session, key); },
   };

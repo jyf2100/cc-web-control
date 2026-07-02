@@ -62,9 +62,11 @@ async function checkSession(sessionName) {
 /**
  * 创建新的 tmux 会话
  * @param {string} sessionName - 会话名称
+ * @param {string|null} [command=null] - 会话启动命令
+ * @param {{cwd?:string, env?:Record<string,string>}} [opts={}] - cwd / env 注入
  * @returns {Promise<boolean>} - 是否创建成功
  */
-async function createSession(sessionName, command = null) {
+async function createSession(sessionName, command = null, opts = {}) {
   if (!sessionName || typeof sessionName !== 'string') {
     throw new Error('Session name must be a non-empty string');
   }
@@ -75,11 +77,7 @@ async function createSession(sessionName, command = null) {
   }
 
   try {
-    if (command) {
-      await runTmux(['new-session', '-d', '-s', sessionName, command], { maxStdoutChars: 1024 });
-    } else {
-      await runTmux(['new-session', '-d', '-s', sessionName], { maxStdoutChars: 1024 });
-    }
+    await runTmux(buildCreateArgs(sessionName, command, opts), { maxStdoutChars: 1024 });
     return true;
   } catch (error) {
     throw new Error(`Failed to create session: ${error.message}`);
@@ -100,6 +98,17 @@ async function createSession(sessionName, command = null) {
 function buildCaptureArgs(sessionName, scrollback = 0) {
   const base = ['capture-pane', '-t', sessionName, '-p'];
   return scrollback > 0 ? [...base, '-S', `-${scrollback}`] : base;
+}
+
+/** 构造 new-session 参数(支持 cwd / env)。env → -e K=V(可多次)。 */
+function buildCreateArgs(sessionName, command = null, opts = {}) {
+  const args = ['new-session', '-d', '-s', sessionName];
+  if (opts.cwd) args.push('-c', opts.cwd);
+  if (opts.env) {
+    for (const [k, v] of Object.entries(opts.env)) args.push('-e', `${k}=${v}`);
+  }
+  if (command) args.push(command);
+  return args;
 }
 
 /**
@@ -195,6 +204,7 @@ module.exports = {
   killSession,
   sendKey,
   buildCaptureArgs,
+  buildCreateArgs,
   parseCaptureHistory,
 };
 

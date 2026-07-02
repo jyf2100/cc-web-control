@@ -18,6 +18,8 @@ const { AgentDispatcher } = require('./agent_dispatcher.cjs');
 const { createLocalTmux } = require('./local_tmux.cjs');
 const { EventWatcher } = require('./event_watcher.cjs');
 const { AuditLog } = require('./audit_log.cjs');
+const rootTmux = require('../tmux.cjs');
+const { writeMainAgentFiles } = require('./main_agent_config.cjs');
 
 function startHub(opts) {
   const {
@@ -242,6 +244,34 @@ function startHub(opts) {
     res.status(r.status).json({ ok: r.ok });
   });
 
+  const ma = mainAgent;
+  let mainAgentHandles = null;
+
+  async function setupMainAgent({ realHost, realPort }) {
+    const dataDir = ma.dataDir || path.join(process.env.HOME || '/tmp', '.cc-web-control', 'main-agent');
+    const mcpServerPath = path.join(__dirname, '..', 'bin', 'cc-web-control-mcp.cjs');
+    const { mcpPath } = await writeMainAgentFiles({ dir: dataDir, mcpServerPath });
+    const audit = new AuditLog({ filePath: ma.auditFile || path.join(path.dirname(dataDir), 'main-agent-audit.jsonl') });
+    const localTmux = createLocalTmux({ tmux: rootTmux });
+    const dispatcherInst = new AgentDispatcher({ tmux: localTmux, audit, session: ma.session || 'cc-main-agent' });
+    const watcher = new EventWatcher({ getLatest: () => aggregator.getLatest(), intervalMs });
+    watcher.on('event', (evt) => {
+      audit.log({ scope: 'event', runId: null, event: 'enqueue', detail: { machine: evt.machine, session: evt.session, type: evt.to } });
+      dispatcherInst.enqueue({ machine: evt.machine, session: evt.session, to: evt.to, lastLine: evt.lastLine, lastTs: evt.lastTs });
+    });
+    const sessionName = ma.session || 'cc-main-agent';
+    const hubUrl = `http://${realHost}:${realPort}`;
+    if (!(await localTmux.hasSession(sessionName))) {
+      // token/url 经 tmux -e 注入 claude 进程 → MCP server 子进程继承;不落 mcp-config 文件
+      await localTmux.create(sessionName, `${ma.claudePath || 'claude'} --mcp-config ${mcpPath}`, {
+        cwd: dataDir,
+        env: { CC_WEB_HUB_TOKEN: hubToken, CC_WEB_HUB_URL: hubUrl },
+      });
+    }
+    watcher.start();
+    return { dispatcher: dispatcherInst, handles: { audit, watcher, dispatcher: dispatcherInst, localTmux, sessionName } };
+  }
+
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server });
 
@@ -285,11 +315,21 @@ function startHub(opts) {
       const addr = server.address();
       // 0.0.0.0 归一为 127.0.0.1:浏览器/本机访问开不了 0.0.0.0(url 供 server_entry 自动开浏览器)
       const displayHost = (!host || host === '0.0.0.0') ? '127.0.0.1' : host;
+      if (ma.enabled) {
+        setupMainAgent({ realHost: displayHost, realPort: addr.port })
+          .then(({ dispatcher: d, handles }) => { dispatcher = d; mainAgentHandles = handles; })
+          .catch((e) => { console.error('[main-agent] disabled:', e.message); });
+      }
       resolve({
         host: displayHost,
         port: addr.port,
         url: `http://${displayHost}:${addr.port}`,
         close: async () => {
+          if (mainAgentHandles) {
+            mainAgentHandles.watcher.stop();
+            mainAgentHandles.dispatcher.freeze();
+            try { await mainAgentHandles.localTmux.kill(mainAgentHandles.sessionName); } catch {}
+          }
           aggregator.stop();
           for (const ac of clients.values()) ac.close();
           wss.close();
