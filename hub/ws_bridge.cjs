@@ -19,39 +19,43 @@ class WsBridge {
     ws.on('message', async (raw) => {
       let payload; try { payload = JSON.parse(raw.toString()); } catch { return; }
       const { type } = payload || {};
-
-      if (type === 'attach') {
-        detachCurrent();
-        const { machine, session } = payload.target || {};
-        const client = this._getClient(machine);
-        if (!client || !client.getById(machine)) { this._send(ws, { type: 'error', target: payload.target, data: `unknown machine: ${machine}` }); return; }
-        const handle = client.attach(session, (msg) => {
-          this._send(ws, { ...msg, target: { machine, session } });
-        });
-        current = { machine, session, handle };
-        return;
-      }
-
-      if (type === 'detach') { detachCurrent(); return; }
-
-      if (type === 'input' || type === 'key' || type === 'batch') {
-        const { machine, session } = payload.target || {};
-        if (!current || current.machine !== machine || current.session !== session) {
-          // 临时路径:允许未 attach 的 target 走 sendOneShot(input/key/batch)
+      // 顶层 try/catch:Node EventEmitter 不 await async listener,
+      // handler 内同步 throw 或 await 链 reject 都会变进程级 unhandledRejection
+      try {
+        if (type === 'attach') {
+          detachCurrent();
+          const { machine, session } = payload.target || {};
           const client = this._getClient(machine);
+          // getClient 对未知机器已返回 null(adapter 契约),无需再调 getById
           if (!client) { this._send(ws, { type: 'error', target: payload.target, data: `unknown machine: ${machine}` }); return; }
-          const r = await client.sendOneShot(session, { type, data: payload.data, enter: payload.enter });
-          if (!r.ok) this._send(ws, { type: 'error', target: payload.target, data: r.error || 'send failed' });
+          const handle = client.attach(session, (msg) => {
+            this._send(ws, { ...msg, target: { machine, session } });
+          });
+          current = { machine, session, handle };
           return;
         }
-        const ok = current.handle.send({ type, data: payload.data, enter: payload.enter });
-        if (!ok) this._send(ws, { type: 'error', target: payload.target, data: 'session not connected' });
-        return;
-      }
 
-      if (type === 'broadcast') {
-        await this.handleBroadcast(ws, payload);
-        return;
+        if (type === 'detach') { detachCurrent(); return; }
+
+        if (type === 'input' || type === 'key' || type === 'batch') {
+          const { machine, session } = payload.target || {};
+          // 按 spec §5.2:input/key/batch 必须走当前 attach 的连接,未 attach 直接 error
+          // (一次性发送已由 broadcast 路径覆盖,这里不留 sendOneShot 兜底,避免 async race)
+          if (!current || current.machine !== machine || current.session !== session) {
+            this._send(ws, { type: 'error', target: payload.target, data: 'target not attached' });
+            return;
+          }
+          const ok = current.handle.send({ type, data: payload.data, enter: payload.enter });
+          if (!ok) this._send(ws, { type: 'error', target: payload.target, data: 'session not connected' });
+          return;
+        }
+
+        if (type === 'broadcast') {
+          await this.handleBroadcast(ws, payload);
+          return;
+        }
+      } catch (e) {
+        this._send(ws, { type: 'error', data: 'internal error' });
       }
     });
 

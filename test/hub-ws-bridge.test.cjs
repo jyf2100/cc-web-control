@@ -24,7 +24,7 @@ test('attach → 订阅 agent,agent 消息转发给浏览器带 target', () => {
   const bridge = new WsBridge({
     getClient: (mid) => fakeAgentFactory({
       getById: () => ({ id: mid }),
-      attach: (session, onMsg) => { pushed = onMsg; return { detach() {}, send() {}, once: () => Promise.resolve() }; },
+      attach: (session, onMsg) => { pushed = onMsg; return { detach() {}, send() { return true; }, once: () => Promise.resolve() }; },
       sendOneShot: async () => ({ ok: true }),
     }),
   });
@@ -40,7 +40,7 @@ test('input → 经当前 attach 的 handle 发送;未 attach 则 error', () => 
   const bridge = new WsBridge({
     getClient: () => fakeAgentFactory({
       getById: () => ({ id: 'mc1' }),
-      attach: (session, onMsg) => ({ detach() {}, send: (m) => { sentViaHandle = m; }, once: () => Promise.resolve() }),
+      attach: (session, onMsg) => ({ detach() {}, send: (m) => { sentViaHandle = m; return true; }, once: () => Promise.resolve() }),
       sendOneShot: async () => ({ ok: true }),
     }),
   });
@@ -49,6 +49,8 @@ test('input → 经当前 attach 的 handle 发送;未 attach 则 error', () => 
   ws.emit('message', JSON.stringify({ type: 'attach', target: { machine: 'mc1', session: 's1' } }));
   ws.emit('message', JSON.stringify({ type: 'input', target: { machine: 'mc1', session: 's1' }, data: 'hi', enter: true }));
   assert.deepEqual(sentViaHandle, { type: 'input', data: 'hi', enter: true });
+  // 确认正常路径未误发 error(send 返回 true,不应触发 'session not connected')
+  assert.equal(ws.sent.find((m) => m.type === 'error'), undefined);
 });
 
 test('broadcast 去重 + 扇出 + 上限 50 + 返回 broadcast_result', async () => {
@@ -56,7 +58,7 @@ test('broadcast 去重 + 扇出 + 上限 50 + 返回 broadcast_result', async ()
   const bridge = new WsBridge({
     getClient: () => fakeAgentFactory({
       getById: () => ({ id: 'mc1' }),
-      attach: () => ({ detach() {}, send() {}, once: () => Promise.resolve() }),
+      attach: () => ({ detach() {}, send: () => true, once: () => Promise.resolve() }),
       sendOneShot: async (session, msg) => { shots.push({ session, msg }); return { ok: true }; },
     }),
   });
@@ -86,7 +88,7 @@ test('detach 清理订阅', () => {
   const bridge = new WsBridge({
     getClient: () => fakeAgentFactory({
       getById: () => ({ id: 'mc1' }),
-      attach: () => ({ detach: () => { detached = true; }, send() {}, once: () => Promise.resolve() }),
+      attach: () => ({ detach: () => { detached = true; }, send: () => true, once: () => Promise.resolve() }),
       sendOneShot: async () => ({ ok: true }),
     }),
   });
@@ -95,4 +97,44 @@ test('detach 清理订阅', () => {
   ws.emit('message', JSON.stringify({ type: 'attach', target: { machine: 'mc1', session: 's1' } }));
   ws.emit('message', JSON.stringify({ type: 'detach' }));
   assert.equal(detached, true);
+});
+
+test('ws close 触发清理,后续 input 得 target not attached', () => {
+  const bridge = new WsBridge({
+    getClient: () => fakeAgentFactory({
+      getById: () => ({ id: 'mc1' }),
+      attach: () => ({ detach() {}, send: () => true, once: () => Promise.resolve() }),
+      sendOneShot: async () => ({ ok: true }),
+    }),
+  });
+  const ws = fakeBrowserWs();
+  bridge.handleConnection(ws);
+  ws.emit('message', JSON.stringify({ type: 'attach', target: { machine: 'mc1', session: 's1' } }));
+  ws.emit('close');
+  ws.emit('message', JSON.stringify({ type: 'input', target: { machine: 'mc1', session: 's1' }, data: 'x', enter: true }));
+  const err = ws.sent.find((m) => m.type === 'error');
+  assert.match(err.data, /not attached/);
+});
+
+test('attach 切换:旧 handle detach + current 指向新 target', () => {
+  let detachedOld = false;
+  const bridge = new WsBridge({
+    getClient: () => fakeAgentFactory({
+      getById: () => ({ id: 'mc1' }),
+      attach: (session) => ({
+        detach: () => { if (session === 'old') detachedOld = true; },
+        send: () => true,
+        once: () => Promise.resolve(),
+      }),
+      sendOneShot: async () => ({ ok: true }),
+    }),
+  });
+  const ws = fakeBrowserWs();
+  bridge.handleConnection(ws);
+  ws.emit('message', JSON.stringify({ type: 'attach', target: { machine: 'mc1', session: 'old' } }));
+  ws.emit('message', JSON.stringify({ type: 'attach', target: { machine: 'mc1', session: 'new' } }));
+  assert.equal(detachedOld, true);
+  ws.emit('message', JSON.stringify({ type: 'input', target: { machine: 'mc1', session: 'old' }, data: 'x', enter: true }));
+  const err = ws.sent.find((m) => m.type === 'error');
+  assert.match(err.data, /not attached/);
 });
