@@ -5,10 +5,17 @@ const { WebSocketServer } = require('ws');
 const http = require('node:http');
 
 class StubMachine {
-  constructor({ token, dashboardPayload, onWsMessage } = {}) {
+  constructor({ token, dashboardPayload, onWsMessage, listenerDelayMs, connectionError } = {}) {
     this.token = token;
     this.dashboardPayload = dashboardPayload || { tmuxOk: true, sessions: [] };
     this._onWsMessage = onWsMessage;
+    // 模拟真机 server.cjs:connection 时先 `await tmux.capturePane`(server.cjs:555),
+    // 之后才发 init(:565)并注册 message listener(:593)。设此值 >0 让 connection
+    // handler 变 async 并延迟发 init + 注册 listener,复现 sendOneShot 的时序竞态。
+    this.listenerDelayMs = listenerDelayMs || 0;
+    // 模拟对端会话不存在:connection 时发 error 帧而非 init(对应 server.cjs:558)。
+    // 验证 sendOneShot 收到 error → 如实 ok:false(修复前盲发会误报 ok:true)。
+    this.connectionError = connectionError || '';
     this.received = []; // 收到的 WS input/key/batch
     this.app = express();
     this.app.use(express.json());
@@ -21,14 +28,22 @@ class StubMachine {
     });
     this.server = http.createServer(this.app);
     this.wss = new WebSocketServer({ server: this.server });
-    this.wss.on('connection', (ws, req) => {
+    this.wss.on('connection', async (ws, req) => {
       if (this.token) {
         const ok = req.headers.authorization === `Bearer ${this.token}`;
         if (!ok) { ws.close(1008, 'Unauthorized'); return; }
       }
       const url = new URL(req.url, 'http://x');
       const session = url.searchParams.get('session') || 'default';
-      ws.send(JSON.stringify({ type: 'init', data: `[init ${session}]` }));
+      // 模拟真机 await tmux.capturePane:init 与 message listener 都在此延迟之后注册
+      if (this.listenerDelayMs) {
+        await new Promise((r) => setTimeout(r, this.listenerDelayMs));
+      }
+      if (this.connectionError) {
+        ws.send(JSON.stringify({ type: 'error', data: this.connectionError }));
+      } else {
+        ws.send(JSON.stringify({ type: 'init', data: `[init ${session}]` }));
+      }
       ws.on('message', (buf) => {
         const msg = JSON.parse(buf.toString());
         this.received.push({ session, ...msg });

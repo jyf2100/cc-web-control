@@ -102,3 +102,32 @@ test('断线后仍有订阅者 → 调度重连(引用未归零不清理)', asyn
     ac.close();
   } finally { await stub.stop(); }
 });
+
+test('sendOneShot 对延迟注册 listener 的服务端仍可靠送达(防竞态回归)', async () => {
+  // 复现真机 server.cjs 时序:connection 时先 `await tmux.capturePane`(server.cjs:555),
+  // message listener 直到 :593 才注册。修复前 sendOneShot 一 open 就发,消息抢在 listener
+  // 注册前到达 → 被 EventEmitter 丢弃 → 表现为「扇出成功(ok:true 仅代表握手)却没收到」。
+  const stub = await new StubMachine({ token: 't', listenerDelayMs: 50 }).start();
+  try {
+    const ac = new AgentClient({ id: 'mc1', url: stub.url, token: 't' });
+    const r = await ac.sendOneShot('sX', { type: 'input', data: 'boom', enter: true });
+    await new Promise((res) => setTimeout(res, WAIT));
+    assert.equal(r.ok, true);
+    assert.ok(
+      stub.received.some((m) => m.type === 'input' && m.data === 'boom' && m.session === 'sX'),
+      '消息应在服务端延迟注册 listener 后仍被收到(不应因时序竞态丢失)',
+    );
+  } finally { await stub.stop(); }
+});
+
+test('sendOneShot 收到对端 error 帧(会话不存在)→ ok:false,不再误报成功', async () => {
+  // 修复前:sendOneShot 一 open 就发、立即 resolve ok:true → 广播到不存在的会话也报"成功"。
+  // 修复后:等 init/error 帧,error 帧(如 server.cjs:558 会话不存在)→ 如实 ok:false。
+  const stub = await new StubMachine({ token: 't', connectionError: '会话不存在或无法读取' }).start();
+  try {
+    const ac = new AgentClient({ id: 'mc1', url: stub.url, token: 't' });
+    const r = await ac.sendOneShot('ghost', { type: 'input', data: 'x', enter: true });
+    assert.equal(r.ok, false);
+    assert.match(r.error, /会话不存在/);
+  } finally { await stub.stop(); }
+});

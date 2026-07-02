@@ -551,45 +551,10 @@ function startWebServer() {
     clientInfo.commandQueue = Promise.resolve();
     clients.set(ws, clientInfo);
 
-    try {
-      const output = await tmux.capturePane(sessionName, CAPTURE_HISTORY);
-      if (output === null && ws.readyState === 1) {
-        clientInfo.missingNoticeSent = true;
-        ws.send(JSON.stringify({
-          type: 'error',
-          data: `会话不存在或无法读取: "${sessionName}"（请确认 tmux 已安装且会话存在，例如: tmux list-sessions）`
-        }));
-      }
-      if (output !== null && ws.readyState === 1) {
-        clientInfo.lastOutput = output;
-        ws.send(JSON.stringify({ type: 'init', data: output }));
-      }
-    } catch (e) {}
-
-    const interval = setInterval(async () => {
-      if (clientInfo.isPolling) return;
-      clientInfo.isPolling = true;
-      try {
-        const output = await tmux.capturePane(sessionName, CAPTURE_HISTORY);
-        if (output === null && !clientInfo.missingNoticeSent && ws.readyState === 1) {
-          clientInfo.missingNoticeSent = true;
-          ws.send(JSON.stringify({
-            type: 'error',
-            data: `会话不存在或无法读取: "${sessionName}"（请确认 tmux 已安装且会话存在）`
-          }));
-        }
-        if (output !== null && ws.readyState === 1 && output !== clientInfo.lastOutput) {
-          clientInfo.lastOutput = output;
-          ws.send(JSON.stringify({ type: 'output', data: output }));
-        }
-      } catch (e) {
-      } finally {
-        clientInfo.isPolling = false;
-      }
-    }, POLL_INTERVAL);
-
-    clientInfo.interval = interval;
-
+    // 先注册 message listener,再做异步 capturePane/init:消息可能在 init 发出前到达
+    // (hub sendOneShot 等 init 后即发,或任意客户端握手后立即发)。若 listener 注册晚于
+    // `await capturePane`,抢先到达的消息会被 EventEmitter 丢弃(广播竞态根因)。
+    // 依赖的 sessionName、clientInfo.commandQueue 此处均已就绪。
     ws.on('message', (message) => {
       const run = async () => {
         const payload = JSON.parse(message);
@@ -657,6 +622,45 @@ function startWebServer() {
           }
         });
     });
+
+    try {
+      const output = await tmux.capturePane(sessionName, CAPTURE_HISTORY);
+      if (output === null && ws.readyState === 1) {
+        clientInfo.missingNoticeSent = true;
+        ws.send(JSON.stringify({
+          type: 'error',
+          data: `会话不存在或无法读取: "${sessionName}"（请确认 tmux 已安装且会话存在，例如: tmux list-sessions）`
+        }));
+      }
+      if (output !== null && ws.readyState === 1) {
+        clientInfo.lastOutput = output;
+        ws.send(JSON.stringify({ type: 'init', data: output }));
+      }
+    } catch (e) {}
+
+    const interval = setInterval(async () => {
+      if (clientInfo.isPolling) return;
+      clientInfo.isPolling = true;
+      try {
+        const output = await tmux.capturePane(sessionName, CAPTURE_HISTORY);
+        if (output === null && !clientInfo.missingNoticeSent && ws.readyState === 1) {
+          clientInfo.missingNoticeSent = true;
+          ws.send(JSON.stringify({
+            type: 'error',
+            data: `会话不存在或无法读取: "${sessionName}"（请确认 tmux 已安装且会话存在）`
+          }));
+        }
+        if (output !== null && ws.readyState === 1 && output !== clientInfo.lastOutput) {
+          clientInfo.lastOutput = output;
+          ws.send(JSON.stringify({ type: 'output', data: output }));
+        }
+      } catch (e) {
+      } finally {
+        clientInfo.isPolling = false;
+      }
+    }, POLL_INTERVAL);
+
+    clientInfo.interval = interval;
 
     ws.on('close', () => {
       const info = clients.get(ws);

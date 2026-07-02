@@ -140,9 +140,9 @@ class AgentClient {
     return !!(e && e.retry);
   }
 
-  // —— 一次性发送(广播用):临时建连、发完即关 ——
+  // —— 一次性发送(广播用):临时建连,等对端 init 再发、发完即关 ——
   async sendOneShot(session, msg) {
-    // 若已有池连接则直接复用
+    // 若已有池连接则直接复用(attach 时已等过 init,message listener 早就位)
     const entry = this._pool.get(session);
     if (entry && entry.ws && entry.ws.readyState === WebSocket.OPEN) {
       entry.ws.send(JSON.stringify(msg));
@@ -151,14 +151,31 @@ class AgentClient {
     const wsUrl = this.url.replace(/^http/, 'ws') + `/?session=${encodeURIComponent(session)}`;
     return new Promise((resolve) => {
       const ws = new WebSocket(wsUrl, { headers: { Authorization: `Bearer ${this.token}` } });
-      const timer = setTimeout(() => { try { ws.close(); } catch {}; resolve({ ok: false, error: 'timeout' }); }, 5000);
-      ws.on('open', () => {
-        ws.send(JSON.stringify(msg));
+      let settled = false;
+      const done = (result) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timer);
-        setTimeout(() => { try { ws.close(); } catch {} }, 100);
-        resolve({ ok: true });
+        try { ws.close(); } catch {}
+        resolve(result);
+      };
+      const timer = setTimeout(() => done({ ok: false, error: 'timeout' }), 5000);
+      // 关键:等对端 init 帧再发。真机 server.cjs 的 ws.on('message') 注册在
+      // `await tmux.capturePane` 之后(server.cjs:555→:593),WS 一 open 就发会把消息
+      // 抢在 listener 注册前送达,被 EventEmitter 丢弃(表现为「扇出成功」却没收到)。
+      // init 由对端在 listener 注册前后发出,等它再发可保证送达时 listener 已就位。
+      // 收到 error 帧(如会话不存在)则如实报失败,不再误报 ok。
+      ws.on('message', (buf) => {
+        let m; try { m = JSON.parse(buf.toString()); } catch { return; }
+        if (!m) return;
+        if (m.type === 'init') {
+          ws.send(JSON.stringify(msg));
+          setTimeout(() => done({ ok: true }), 50); // 给对端一个 tick 读帧、入队再关
+        } else if (m.type === 'error') {
+          done({ ok: false, error: m.data || 'remote error' });
+        }
       });
-      ws.on('error', (err) => { clearTimeout(timer); resolve({ ok: false, error: err.message }); });
+      ws.on('error', (err) => done({ ok: false, error: err.message }));
     });
   }
 
