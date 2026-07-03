@@ -177,7 +177,13 @@ function startHub(opts) {
 
   // 静态:控制台前端(复用 public/);requireAuth 之后,控制台资源需登录
   const publicDir = path.join(__dirname, '..', 'public');
-  app.use(express.static(publicDir));
+  // 前端 html/js/cjs 设 Cache-Control: no-store:防浏览器缓存旧版
+  // (曾导致"重启 main-agent 收不到信息"——用户浏览器持有旧 console.js);图片等保留默认缓存
+  app.use(express.static(publicDir, {
+    setHeaders: (res, filePath) => {
+      if (/\.(html|js|cjs)$/i.test(filePath)) res.setHeader('Cache-Control', 'no-store');
+    },
+  }));
 
   app.get('/api/config', (req, res) => {
     res.json({ hub: true, intervalMs });

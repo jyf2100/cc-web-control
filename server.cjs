@@ -492,7 +492,11 @@ function startWebServer() {
   });
 
   // 静态文件服务（放在鉴权之后）
-  app.use(express.static(path.join(__dirname, 'public')));
+  app.use(express.static(path.join(__dirname, 'public'), {
+    setHeaders: (res, filePath) => {
+      if (/\.(html|js|cjs)$/i.test(filePath)) res.setHeader('Cache-Control', 'no-store');
+    },
+  }));
 
   // WebSocket
   const wss = new WebSocketServer({ server });
