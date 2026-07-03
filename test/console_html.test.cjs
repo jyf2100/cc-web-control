@@ -71,7 +71,7 @@ test('ensureWs 补 onclose/onerror + 重连', () => {
   assert.match(js, /nextBackoff/);
 });
 test('断线态切 term-target data-state + 禁用输入', () => {
-  assert.match(js, /data-state="disconnected"/);
+  assert.match(js, /setAttribute\(['"]data-state['"]/);
   assert.match(js, /termInput\.disabled\s*=\s*true/);
 });
 test('广播融合:term-input 按 selected.size 分发', () => {
@@ -81,4 +81,7 @@ test('广播融合:term-input 按 selected.size 分发', () => {
 });
 test('refreshBroadcast 切输入条广播态 + 徽章', () => {
   assert.match(js, /bcCount\.hidden\s*=\s*selected\.size\s*<\s*2/);
+});
+test('scheduleTermReconnect 防重入(避免 onclose+onerror 双触发 backoff 风暴)', () => {
+  assert.match(js, /if\s*\(termReconnectTimer\)\s*return\s*;/);
 });

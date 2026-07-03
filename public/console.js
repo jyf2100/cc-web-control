@@ -36,8 +36,7 @@
   let reconnectedOnce = false;
 
   function setTermState(state) {
-    // dataset.state 反射为 data-state="disconnected"|"live",驱动 term-target 状态样式
-    termTarget.dataset.state = state;
+    termTarget.setAttribute('data-state', state);
     if (state === 'disconnected') {
       termTarget.textContent = (currentTarget ? `${currentTarget.machine} / ${currentTarget.session} · ` : '') + '● 断线,重连中…';
       termInput.disabled = true;
@@ -85,6 +84,7 @@
   }
 
   function scheduleTermReconnect() {
+    if (termReconnectTimer) return;          // 防 onclose+onerror 双触发(避免 backoff 双步推进 + timer 泄漏)
     if (currentTarget) setTermState('disconnected');
     const delay = ConsoleRender.nextBackoff(termBackoff++);
     termReconnectTimer = setTimeout(() => {
