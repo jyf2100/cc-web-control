@@ -139,3 +139,17 @@ test('subs 上限:第 11 个 attach 被拒(返回 dummy,不加入)', async () =>
   assert.equal(over.send({}), false); // dummy
   c.close();
 });
+
+test('subs 上限(回放分支):首 capture resolve 后第 11 个 attach 走回放分支被拒', async () => {
+  const lt = stubLocalTmux(); lt.setCaptures(['FRAME']);
+  const c = new LocalTmuxClient({ localTmux: lt, sessionName: 's', audit: memAudit(), maxSubs: 10 });
+  for (let i = 0; i < 10; i++) c.attach('s', () => {});
+  await new Promise((r) => setTimeout(r, 10)); // 让首 capture resolve → lastCaptured != null
+  const entry = c._pool.get('s');
+  assert.ok(entry && entry.lastCaptured != null, '已进入回放分支前提(lastCaptured 已填)');
+  const before = entry.subs.size;
+  const over = c.attach('s', () => {});
+  assert.equal(c._pool.get('s').subs.size, before, '回放分支第 11 个未加入');
+  assert.equal(over.send({}), false); // dummy
+  c.close();
+});

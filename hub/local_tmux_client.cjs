@@ -25,8 +25,8 @@ class LocalTmuxClient {
   _redact(text) {
     if (typeof text !== 'string') return text;
     return text
-      .replace(/CC_WEB_HUB_TOKEN=[^\s]+/gi, 'CC_WEB_HUB_TOKEN=<redacted>')
-      .replace(/Authorization:\s*Bearer\s+[A-Za-z0-9._-]+/gi, 'Authorization: Bearer <redacted>');
+      .replace(/\bCC_WEB_HUB_TOKEN=[^\s]+/gi, 'CC_WEB_HUB_TOKEN=<redacted>')
+      .replace(/\bAuthorization:\s*Bearer\s+[A-Za-z0-9._-]+/gi, 'Authorization: Bearer <redacted>');
   }
 
   _broadcast(entry, msg) {
@@ -48,7 +48,7 @@ class LocalTmuxClient {
       this._broadcast(e, { type: 'error', data: 'session ended' });
       if (e.timer) { clearInterval(e.timer); }
       e.subs.clear();
-      e.timer = null;            // R3-L1 tombstone(使 attach 守卫非死代码)
+      e.timer = null;            // clearInterval 后清理引用(entry 随下行 delete 移除)
       this._pool.delete(session); // R2-H1 无条件全清
     });
   }
@@ -59,10 +59,6 @@ class LocalTmuxClient {
       return { send: () => false, detach: () => {} }; // dummy handle(L4)
     }
     let entry = this._pool.get(session);
-    if (entry && entry.timer === null) { // R2-H1 tombstone 守卫:已死 entry 复活 → 强制删,防重放陈旧帧
-      this._pool.delete(session);
-      entry = undefined;
-    }
     if (entry && entry.lastCaptured != null) {
       if (entry.subs.size >= this._maxSubs) return { send: () => false, detach: () => {} };
       entry.subs.add(onMsg);
