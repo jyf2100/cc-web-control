@@ -16,6 +16,7 @@ const { WsBridge } = require('./ws_bridge.cjs');
 const { createRateLimiter } = require('../rate_limit.cjs');
 const { AgentDispatcher } = require('./agent_dispatcher.cjs');
 const { createLocalTmux } = require('./local_tmux.cjs');
+const { LocalTmuxClient } = require('./local_tmux_client.cjs');
 const { EventWatcher } = require('./event_watcher.cjs');
 const { AuditLog } = require('./audit_log.cjs');
 const rootTmux = require('../tmux.cjs');
@@ -246,13 +247,20 @@ function startHub(opts) {
 
   const ma = mainAgent;
   let mainAgentHandles = null;
+  // M3:主控 agent 起停操作串行化(start/stop 互斥,防 close 中途 start 留孤儿)。Task 6 端点经此包装。
+  let mainAgentOpChain = Promise.resolve();
+  function serializeMainAgentOp(fn) {
+    const next = mainAgentOpChain.then(fn, fn);
+    mainAgentOpChain = next.catch(() => {});
+    return next;
+  }
 
   async function setupMainAgent({ realHost, realPort }) {
     const dataDir = ma.dataDir || path.join(process.env.HOME || '/tmp', '.cc-web-control', 'main-agent');
     const mcpServerPath = path.join(__dirname, '..', 'bin', 'cc-web-control-mcp.cjs');
     const { mcpPath, trustPath } = await writeMainAgentFiles({ dir: dataDir, mcpServerPath });
     const audit = new AuditLog({ filePath: ma.auditFile || path.join(path.dirname(dataDir), 'main-agent-audit.jsonl') });
-    const localTmux = createLocalTmux({ tmux: rootTmux });
+    const localTmux = createLocalTmux({ tmux: ma.tmux || rootTmux });
     const watcher = new EventWatcher({
       getLatest: () => aggregator.getLatest(),
       intervalMs,
@@ -277,11 +285,25 @@ function startHub(opts) {
       // token/url 经 tmux -e 注入 claude 进程 → MCP server 子进程继承;不落 mcp-config 文件
       await localTmux.create(sessionName, `${ma.claudePath || 'claude'} --mcp-config ${mcpPath} --strict-mcp-config --settings ${trustPath}`, {
         cwd: dataDir,
-        env: { CC_WEB_HUB_TOKEN: hubToken, CC_WEB_HUB_URL: hubUrl },
+        env: { CC_WEB_HUB_TOKEN: hubToken, CC_WEB_HUB_URL: hubUrl, CC_WEB_OWNED: '1' },
       });
     }
     watcher.start();
-    return { dispatcher: dispatcherInst, handles: { audit, watcher, dispatcher: dispatcherInst, localTmux, sessionName } };
+    const localClient = new LocalTmuxClient({ localTmux, sessionName, audit });
+    // spawn 句柄:start 端点复用(不重新算 mcpPath/trustPath/cwd/token——首次已写)
+    const spawn = async () => {
+      if (await localTmux.hasOwnedSession(sessionName)) return { running: true, started: false };
+      await localTmux.create(
+        sessionName,
+        `${ma.claudePath || 'claude'} --mcp-config ${mcpPath} --strict-mcp-config --settings ${trustPath}`,
+        { cwd: dataDir, env: { CC_WEB_HUB_TOKEN: hubToken, CC_WEB_HUB_URL: hubUrl, CC_WEB_OWNED: '1' } },
+      );
+      return { running: true, started: true };
+    };
+    return {
+      dispatcher: dispatcherInst,
+      handles: { audit, watcher, dispatcher: dispatcherInst, localTmux, localClient, sessionName, spawn },
+    };
   }
 
   const server = http.createServer(app);
@@ -292,6 +314,8 @@ function startHub(opts) {
   // 未知机器返回 null,ws_bridge 据此回 error(契约见 ws_bridge.cjs)。
   const bridge = new WsBridge({
     getClient: (mid) => {
+      // M5:main-agent 直接复用 LocalTmuxClient(它就是 {attach, sendOneShot} 形状)
+      if (mid === 'main-agent') return mainAgentHandles?.localClient ?? null;
       const ac = clients.get(mid);
       if (!ac) return null;
       return {
@@ -337,9 +361,11 @@ function startHub(opts) {
         port: addr.port,
         url: `http://${displayHost}:${addr.port}`,
         close: async () => {
+          await mainAgentOpChain; // M3:等起停操作串行完,防 close 中途 start 留孤儿
           if (mainAgentHandles) {
             mainAgentHandles.watcher.stop();
             mainAgentHandles.dispatcher.freeze();
+            mainAgentHandles.localClient.close(); // R2-M1:清 capture interval
             try { await mainAgentHandles.localTmux.kill(mainAgentHandles.sessionName); } catch {}
           }
           aggregator.stop();
