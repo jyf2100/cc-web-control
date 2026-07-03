@@ -64,3 +64,21 @@ test('renderBoard 用 keyed-diff(非全量 innerHTML="")', () => {
 test('空态渲染 board-empty', () => {
   assert.match(js, /board-empty/);
 });
+
+test('ensureWs 补 onclose/onerror + 重连', () => {
+  assert.match(js, /ws\.onclose\s*=/);
+  assert.match(js, /ws\.onerror\s*=/);
+  assert.match(js, /nextBackoff/);
+});
+test('断线态切 term-target data-state + 禁用输入', () => {
+  assert.match(js, /data-state="disconnected"/);
+  assert.match(js, /termInput\.disabled\s*=\s*true/);
+});
+test('广播融合:term-input 按 selected.size 分发', () => {
+  assert.match(js, /selected\.size/);
+  assert.match(js, /type:\s*'broadcast'/);
+  assert.match(js, /type:\s*'input'/);
+});
+test('refreshBroadcast 切输入条广播态 + 徽章', () => {
+  assert.match(js, /bcCount\.hidden\s*=\s*selected\.size\s*<\s*2/);
+});

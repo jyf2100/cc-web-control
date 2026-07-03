@@ -31,18 +31,28 @@
   let maReconnectTimer = null;
   let maDisconnectedLogged = false; // M1:仅断开状态转换时记一次,防重连失败循环刷屏
 
+  let termReconnectTimer = null;
+  let termBackoff = 0;
+  let reconnectedOnce = false;
+
+  function setTermState(state) {
+    // dataset.state 反射为 data-state="disconnected"|"live",驱动 term-target 状态样式
+    termTarget.dataset.state = state;
+    if (state === 'disconnected') {
+      termTarget.textContent = (currentTarget ? `${currentTarget.machine} / ${currentTarget.session} · ` : '') + '● 断线,重连中…';
+      termInput.disabled = true;
+    } else if (state === 'live') {
+      termInput.disabled = false;
+      if (currentTarget) termTarget.textContent = `${currentTarget.machine} / ${currentTarget.session}`;
+    }
+  }
+
   function ensureWs() {
     if (ws && ws.readyState <= 1) return ws;
     ws = new WebSocket(wsUrl);
-    // 修正 Bug 2:init 覆盖、output 追加(增量不丢历史)
     ws.onmessage = (ev) => {
       let msg;
-      try {
-        msg = JSON.parse(ev.data);
-      } catch {
-        termScreen.textContent += '\n[协议错误] 非 JSON 帧';
-        return;
-      }
+      try { msg = JSON.parse(ev.data); } catch { termScreen.textContent += '\n[协议错误] 非 JSON 帧'; return; }
       const isCurrent = currentTarget && msg.target &&
         msg.target.machine === currentTarget.machine && msg.target.session === currentTarget.session;
       if (msg.type === 'init' && isCurrent) {
@@ -59,7 +69,28 @@
         bcResult.textContent = `成功 ${okN}/${arr.length}`;
       }
     };
+    ws.onopen = () => {
+      termBackoff = 0;
+      if (termReconnectTimer) { clearTimeout(termReconnectTimer); termReconnectTimer = null; }
+      if (currentTarget) {
+        setTermState('live');
+        sendWhenOpen({ type: 'attach', target: currentTarget });
+        if (reconnectedOnce) termScreen.textContent += '\n[已重连]';
+      }
+      reconnectedOnce = true;
+    };
+    ws.onclose = () => { scheduleTermReconnect(); };
+    ws.onerror = () => { scheduleTermReconnect(); };
     return ws;
+  }
+
+  function scheduleTermReconnect() {
+    if (currentTarget) setTermState('disconnected');
+    const delay = ConsoleRender.nextBackoff(termBackoff++);
+    termReconnectTimer = setTimeout(() => {
+      termReconnectTimer = null;
+      if (!ws || ws.readyState > 1) ensureWs();
+    }, delay);
   }
 
   // 修正 Bug 1:不累积 open listener。已连接立即发,否则 once 等 open
@@ -80,8 +111,17 @@
 
   termForm.addEventListener('submit', (e) => {
     e.preventDefault();
-    if (!currentTarget || !termInput.value) return;
-    sendWhenOpen({ type: 'input', target: currentTarget, data: termInput.value, enter: true });
+    if (!termInput.value) return;
+    ensureWs();
+    if (selected.size >= 2) {
+      const targets = Array.from(selected).map((k) => { const [machine, session] = k.split('/'); return { machine, session }; });
+      bcResult.textContent = '扇出中…';
+      sendWhenOpen({ type: 'broadcast', targets, data: termInput.value, enter: true });
+    } else if (currentTarget) {
+      sendWhenOpen({ type: 'input', target: currentTarget, data: termInput.value, enter: true });
+    } else {
+      return;
+    }
     termInput.value = '';
   });
 
@@ -156,9 +196,10 @@
   }
 
   function refreshBroadcast() {
-    if (!bcCount) return;
+    const broadcasting = selected.size >= 2;
     bcCount.hidden = selected.size < 2;
-    if (selected.size >= 2) bcCount.textContent = `已选 ${selected.size}`;
+    bcCount.textContent = broadcasting ? `扇出 ${selected.size}` : '';
+    termInput.placeholder = broadcasting ? `给 ${selected.size} 个会话发同一条指令…` : '输入(Enter 发送)…';
   }
 
   async function poll() {
