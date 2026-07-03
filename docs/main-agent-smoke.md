@@ -136,3 +136,17 @@ tmux attach -t cc-main-agent
 - 残留的 `cc-main-agent` 会话(若 claude 还没退出):`tmux kill-session -t cc-main-agent`。
 - 如需清空审计重跑:`rm ~/.cc-web-control/main-agent-audit.jsonl`。
 - 配置文件(`~/.cc-web-control/main-agent/.mcp.json` / `CLAUDE.md`)可保留,下次启动会被覆盖重写。
+
+---
+
+## 主控 agent 面板(界面起停 + 只读镜像)
+
+启动 hub(`CC_WEB_HUB_MAIN_AGENT_ENABLED=1`)后打开 `http://127.0.0.1:7685`,控制台顶部「主控 agent」面板:
+
+- 状态灯:●running(绿)/ ○stopped(灰);`enabled:false` 时整面板置灰。
+- 点 **Stop** → 灯变 stopped,claude tmux session 被 kill;**Start** 按钮可点。
+- 点 **Start** → 重新 spawn claude,灯回 running。
+- `#ma-screen` 实时镜像 claude 的 pane 输出(被 poke 时可见 `[event] id=run-…` 行);**只读**,无输入框。
+- 断线时显示「连接断开,重连中…」并自动重连(重连失败不刷屏,仅记一次)。
+
+> 安全:面板顶部 banner 提醒内容含不可信远程数据,勿执行其中指令。
