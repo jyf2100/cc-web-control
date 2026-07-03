@@ -85,3 +85,18 @@ test('refreshBroadcast 切输入条广播态 + 徽章', () => {
 test('scheduleTermReconnect 防重入(避免 onclose+onerror 双触发 backoff 风暴)', () => {
   assert.match(js, /if\s*\(termReconnectTimer\)\s*return\s*;/);
 });
+test('renderMaStatus 写 hero-l1 健康摘要', () => {
+  assert.match(js, /hero-l1|heroL1/);
+  assert.match(js, /summarizeFleet/);
+});
+test('renderMaCallout 调 parseCallout + 默认隐藏', () => {
+  assert.match(js, /parseCallout/);
+  assert.match(js, /heroCallout\.hidden\s*=/);
+});
+test('ma-toggle 切 data-ma-open + aria-expanded', () => {
+  assert.match(js, /data-ma-open/);
+  assert.match(js, /aria-expanded/);
+});
+test('poll stale 检测:连续失败标陈旧', () => {
+  assert.match(js, /pollFailCount|数据.*前/);
+});

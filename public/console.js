@@ -17,6 +17,7 @@
   const bcResult = document.getElementById('bc-result');
   const fleetSummary = document.getElementById('fleet-summary');
   const heroCallout = document.getElementById('hero-callout');
+  const heroL1 = document.getElementById('hero-l1');
   const maToggleBtn = document.getElementById('ma-toggle-btn');
   let lastPayload = null;
   let lastBoardMachines = [];
@@ -203,15 +204,23 @@
   }
 
   async function poll() {
+    let boardOk = false;
     try {
       const res = await fetch('/api/global-dashboard');
-      if (res.ok) renderBoard(await res.json());
+      if (res.ok) { const p = await res.json(); renderBoard(p); boardOk = true; }
     } catch {}
     try {
       const r = await fetch('/api/main-agent/status');
       if (r.ok) maStatus = await r.json();
     } catch {}
+    pollFailCount = boardOk ? 0 : pollFailCount + 1;
+    if (boardOk) lastPollOkTs = Date.now();
     renderMaStatus();
+    // stale 检测:连续 3+ 次 board 失败(≈6s+)&& 最后成功 >10s 前 → maText 覆盖标陈旧
+    if (pollFailCount > 2 && lastPollOkTs) {
+      const ago = Math.floor((Date.now() - lastPollOkTs) / 1000);
+      if (ago > 10) maText.textContent = `数据 ${ago}s 前`;
+    }
   }
 
   function renderMaStatus() {
@@ -231,6 +240,29 @@
       if (maWs) { try { maWs.close(); } catch {} maWs = null; }
       if (maReconnectTimer) { clearInterval(maReconnectTimer); maReconnectTimer = null; }
     }
+    renderHeroL1();
+    renderMaCallout();
+  }
+
+  // HERO L1/L2 渲染:calloutState 跨 poll 保持,供 parseCallout 算 stable 相对时间
+  let calloutState = { lastText: '', lastChangeTs: 0 };
+  let pollFailCount = 0;
+  let lastPollOkTs = 0;
+
+  function renderHeroL1() {
+    const s = ConsoleRender.summarizeFleet(lastBoardMachines);
+    heroL1.innerHTML =
+      `<span><span class="s-icon" aria-hidden="true">▶</span> ${s.working} working</span>` +
+      `<span><span class="s-icon" aria-hidden="true">⏸</span> ${s.idle} idle</span>` +
+      `<span><span class="s-icon" aria-hidden="true">✕</span> ${s.errored} errored</span>`;
+  }
+
+  function renderMaCallout() {
+    const r = ConsoleRender.parseCallout(maScreen.textContent, { ...calloutState, now: Date.now() });
+    if (!r.show) { heroCallout.hidden = true; return; }
+    heroCallout.hidden = false;
+    heroCallout.textContent = `⚠ ${r.text} · ${r.timeLabel}`;
+    calloutState = { lastText: r.text, lastChangeTs: r.ts };
   }
 
   function ensureMaWs() {
@@ -311,6 +343,13 @@
       attachTarget({ machine: card.dataset.machine, session: card.dataset.session });
     }
   });
+  maToggleBtn.addEventListener('click', () => {
+    // data-ma-open 浮层显隐(CSS [data-ma-open="true"] 控 main-agent-panel 内 ma-screen 浮层)
+    const open = maPanel.getAttribute('data-ma-open') === 'true';
+    maPanel.setAttribute('data-ma-open', String(!open));
+    maToggleBtn.setAttribute('aria-expanded', String(!open));
+  });
+  setInterval(renderMaCallout, 30000);
   setInterval(poll, 2000);
   poll();
   ensureWs();
