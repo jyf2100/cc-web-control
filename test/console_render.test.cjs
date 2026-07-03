@@ -110,3 +110,24 @@ test('summarizeFleet: 空/null 兜底', () => {
   assert.equal(R.summarizeFleet(null).total, 0);
   assert.equal(R.summarizeFleet([]).online, 0);
 });
+
+test('diffCards: 新增 key 进 added', () => {
+  const r = R.diffCards(['a', 'b'], ['a', 'b', 'c']);
+  assert.deepEqual(r.added, ['c']);
+  assert.deepEqual(r.removed, []);
+});
+test('diffCards: 消失 key 进 removed', () => {
+  const r = R.diffCards(['a', 'b'], ['a']);
+  assert.deepEqual(r.removed, ['b']);
+  assert.deepEqual(r.added, []);
+});
+test('diffCards: 全空返回空集', () => {
+  const r = R.diffCards([], []);
+  assert.deepEqual(r.added, []);
+  assert.deepEqual(r.removed, []);
+});
+test('diffCards: null 兜底', () => {
+  const r = R.diffCards(null, null);
+  assert.deepEqual(r.added, []);
+  assert.deepEqual(r.removed, []);
+});

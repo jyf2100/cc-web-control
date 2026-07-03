@@ -91,5 +91,15 @@
     return c;
   }
 
-  return { statusMeta, escapeHtml, relativeTime, buildCardHTML, sortCardsErroredFirst, summarizeFleet };
+  function diffCards(prevKeys, nextKeys) {
+    const prev = new Set(prevKeys || []);
+    const next = new Set(nextKeys || []);
+    const added = [];
+    const removed = [];
+    for (const k of next) if (!prev.has(k)) added.push(k);
+    for (const k of prev) if (!next.has(k)) removed.push(k);
+    return { added, removed };
+  }
+
+  return { statusMeta, escapeHtml, relativeTime, buildCardHTML, sortCardsErroredFirst, summarizeFleet, diffCards };
 });
