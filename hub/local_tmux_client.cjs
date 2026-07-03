@@ -11,18 +11,23 @@
 const INIT_SCROLLBACK_LINES = 2000;
 
 class LocalTmuxClient {
-  constructor({ localTmux, sessionName, audit, pollMs = 1000 } = {}) {
+  constructor({ localTmux, sessionName, audit, pollMs = 1000, maxSubs = 10 } = {}) {
     if (!localTmux || !sessionName || !audit) throw new Error('localTmux, sessionName, audit required');
     this._lt = localTmux;
     this._session = sessionName;
     this._audit = audit;
     this._pollMs = pollMs;
+    this._maxSubs = maxSubs;
     this._pool = new Map(); // session -> { id, subs:Set<fn>, timer, lastCaptured }
     this._seq = 0;
   }
 
-  // Task 4 实现 redact;本 task 透传
-  _redact(text) { return text; }
+  _redact(text) {
+    if (typeof text !== 'string') return text;
+    return text
+      .replace(/CC_WEB_HUB_TOKEN=[^\s]+/gi, 'CC_WEB_HUB_TOKEN=<redacted>')
+      .replace(/Authorization:\s*Bearer\s+[A-Za-z0-9._-]+/gi, 'Authorization: Bearer <redacted>');
+  }
 
   _broadcast(entry, msg) {
     for (const cb of entry.subs) {
@@ -38,7 +43,13 @@ class LocalTmuxClient {
       e.lastCaptured = captured;
       this._broadcast(e, { type: 'init', data: this._redact(captured) });
     }).catch(() => {
-      // Task 4 增强:kill 回收四件套
+      const e = this._pool.get(session);
+      if (!e || e.id !== entryId) return; // R3-M1 身份比对
+      this._broadcast(e, { type: 'error', data: 'session ended' });
+      if (e.timer) { clearInterval(e.timer); }
+      e.subs.clear();
+      e.timer = null;            // R3-L1 tombstone(使 attach 守卫非死代码)
+      this._pool.delete(session); // R2-H1 无条件全清
     });
   }
 
@@ -48,7 +59,12 @@ class LocalTmuxClient {
       return { send: () => false, detach: () => {} }; // dummy handle(L4)
     }
     let entry = this._pool.get(session);
+    if (entry && entry.timer === null) { // R2-H1 tombstone 守卫:已死 entry 复活 → 强制删,防重放陈旧帧
+      this._pool.delete(session);
+      entry = undefined;
+    }
     if (entry && entry.lastCaptured != null) {
+      if (entry.subs.size >= this._maxSubs) return { send: () => false, detach: () => {} };
       entry.subs.add(onMsg);
       try { onMsg({ type: 'init', data: this._redact(entry.lastCaptured) }); } catch {}
       return this._handle(session, onMsg);
@@ -57,6 +73,7 @@ class LocalTmuxClient {
       entry = { id: ++this._seq, subs: new Set(), timer: null, lastCaptured: null };
       this._pool.set(session, entry);
     }
+    if (entry.subs.size >= this._maxSubs) return { send: () => false, detach: () => {} };
     entry.subs.add(onMsg);
     if (entry.timer) {
       // 首 capture 已在途中 + interval 已 arm:复用,避免重复起轮询(H1 共享池)。
@@ -72,8 +89,11 @@ class LocalTmuxClient {
 
   _handle(session, onMsg) {
     return {
-      // 只读:不调 poke/sendKey(Task 4 加审计)
-      send: () => false,
+      // 只读:不调 poke/sendKey;记审计(M7/L1)
+      send: () => {
+        this._audit.log({ scope: 'local_tmux', runId: null, event: 'input_ignored', detail: { via: 'ws' } });
+        return false;
+      },
       detach: () => {
         const e = this._pool.get(session);
         if (!e) return;
@@ -86,8 +106,8 @@ class LocalTmuxClient {
     };
   }
 
-  async sendOneShot() {
-    // Task 4 加审计
+  async sendOneShot(_session, _msg) { // 对齐 ws_bridge 的 sendOneShot(session, msg) 契约;只读忽略
+    await this._audit.log({ scope: 'local_tmux', runId: null, event: 'input_ignored', detail: { via: 'broadcast' } });
     return { ok: false, error: 'read-only' };
   }
 
