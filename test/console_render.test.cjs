@@ -173,3 +173,17 @@ test('parseCallout: traceback/exception/panic/EACCES/errno 均触发', () => {
     assert.equal(R.parseCallout(t, { now: 1 }).show, true, `应触发: ${t}`);
   }
 });
+
+test('nextBackoff: 退避表 3→6→12→30 秒', () => {
+  assert.equal(R.nextBackoff(0), 3000);
+  assert.equal(R.nextBackoff(1), 6000);
+  assert.equal(R.nextBackoff(2), 12000);
+  assert.equal(R.nextBackoff(3), 30000);
+});
+test('nextBackoff: 超出表上限封顶 30s', () => {
+  assert.equal(R.nextBackoff(4), 30000);
+  assert.equal(R.nextBackoff(99), 30000);
+});
+test('nextBackoff: 负参兜底首档', () => {
+  assert.equal(R.nextBackoff(-1), 3000);
+});

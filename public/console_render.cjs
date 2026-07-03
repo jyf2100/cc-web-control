@@ -120,5 +120,11 @@
     return { show: true, text: display, ts, timeLabel };
   }
 
-  return { statusMeta, escapeHtml, relativeTime, buildCardHTML, sortCardsErroredFirst, summarizeFleet, diffCards, parseCallout };
+  const BACKOFF_TABLE = [3000, 6000, 12000, 30000];
+  function nextBackoff(attempt) {
+    const i = attempt < 0 ? 0 : attempt;
+    return BACKOFF_TABLE[Math.min(i, BACKOFF_TABLE.length - 1)];
+  }
+
+  return { statusMeta, escapeHtml, relativeTime, buildCardHTML, sortCardsErroredFirst, summarizeFleet, diffCards, parseCallout, nextBackoff };
 });
