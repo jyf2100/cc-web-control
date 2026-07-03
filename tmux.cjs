@@ -111,6 +111,11 @@ function buildCreateArgs(sessionName, command = null, opts = {}) {
   return args;
 }
 
+/** 构造 show-environment 的 tmux 参数(查单个 session 环境变量)。 */
+function buildShowEnvArgs(sessionName, key) {
+  return ['show-environment', '-t', sessionName, key];
+}
+
 /**
  * 解析 CC_WEB_CAPTURE_HISTORY 环境变量。
  * 未设/空/非法/负数 → 0(原行为,只抓当前屏);正整数 N → 抓当前屏 + 往上 N 行 scrollback。
@@ -196,6 +201,23 @@ async function killSession(sessionName) {
   }
 }
 
+/**
+ * 查询 session 级环境变量的值(tmux new-session -e 设置的 key 可读)。
+ * @param {string} sessionName
+ * @param {string} key
+ * @returns {Promise<string>} stdout(形如 "CC_WEB_OWNED=1");session/key 不存在则 reject
+ */
+async function showEnvironment(sessionName, key) {
+  if (!sessionName || typeof sessionName !== 'string') {
+    throw new Error('Session name must be a non-empty string');
+  }
+  if (!key || typeof key !== 'string') {
+    throw new Error('Key must be a non-empty string');
+  }
+  const { stdout } = await runTmux(buildShowEnvArgs(sessionName, key), { maxStdoutChars: 1024 });
+  return stdout;
+}
+
 module.exports = {
   checkSession,
   createSession,
@@ -205,7 +227,9 @@ module.exports = {
   sendKey,
   buildCaptureArgs,
   buildCreateArgs,
+  buildShowEnvArgs,
   parseCaptureHistory,
+  showEnvironment,
 };
 
 async function sendKey(sessionName, key) {
