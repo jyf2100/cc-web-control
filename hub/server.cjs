@@ -314,11 +314,9 @@ function startHub(opts) {
   }
 
   // —— 主控 agent 起停端点(只读镜像配套;CSRF + 限流 + 串行锁)——
-  // maSameOrigin:POST/DELETE 校验同源(GET 免校验)。返 true=通过,false=已 res 403。
-  const maSameOrigin = (req, res) => requireSameOriginForUnsafeMethods(req, res);
 
   app.post('/api/main-agent/start', async (req, res) => {
-    if (!maSameOrigin(req, res)) return;
+    if (!requireSameOriginForUnsafeMethods(req, res)) return;
     const { limited } = mainAgentRateLimiter.check(req.ip);
     if (limited) { res.status(429).json({ error: 'rate limited' }); return; }
     if (!mainAgentHandles) { res.status(503).json({ error: 'main agent not ready' }); return; }
@@ -346,22 +344,32 @@ function startHub(opts) {
   });
 
   app.post('/api/main-agent/stop', async (req, res) => {
-    if (!maSameOrigin(req, res)) return;
+    if (!requireSameOriginForUnsafeMethods(req, res)) return;
     const { limited } = mainAgentRateLimiter.check(req.ip);
     if (limited) { res.status(429).json({ error: 'rate limited' }); return; }
     if (!mainAgentHandles) { res.status(503).json({ error: 'main agent not ready' }); return; }
-    const r = await serializeMainAgentOp(async () => {
-      const name = mainAgentHandles.sessionName;
-      const lt = mainAgentHandles.localTmux;
-      if (await lt.hasOwnedSession(name)) {
-        await lt.kill(name);
-        return { running: false, stopped: true };
-      }
-      // M4 + R2-H2:foreign session(hasSession 但非 owned)不杀,如实回报
-      if (await lt.hasSession(name)) return { stopped: false, reason: 'foreign session' };
-      return { running: false, stopped: false };
-    });
-    res.json(r);
+    try {
+      const r = await serializeMainAgentOp(async () => {
+        const name = mainAgentHandles.sessionName;
+        const lt = mainAgentHandles.localTmux;
+        if (await lt.hasOwnedSession(name)) {
+          try {
+            await lt.kill(name);
+          } catch {
+            // race:kill 时会话已消失(claude 自然退出 / TOCTOU)。重查:已非 owned → 视作已停(幂等,非 500)
+            if (!(await lt.hasOwnedSession(name))) return { running: false, stopped: true };
+            throw new Error('kill failed'); // 真失败 → 外层 500(C1:防 unhandledRejection/挂起)
+          }
+          return { running: false, stopped: true };
+        }
+        // M4 + R2-H2:foreign session(hasSession 但非 owned)不杀,如实回报
+        if (await lt.hasSession(name)) return { stopped: false, reason: 'foreign session' };
+        return { running: false, stopped: false };
+      });
+      res.json(r);
+    } catch (e) {
+      res.status(500).json({ error: 'stop failed' });
+    }
   });
 
   app.get('/api/main-agent/status', async (req, res) => {

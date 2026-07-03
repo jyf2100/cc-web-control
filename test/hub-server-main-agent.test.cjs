@@ -27,16 +27,22 @@ function stubTmuxOwned() {
     showEnvironment: async () => 'CC_WEB_OWNED=1',
   };
 }
+function readAudit(auditFile) {
+  try {
+    return fs.readFileSync(auditFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  } catch { return []; }
+}
 async function withMainAgentHub({ tmux, enabled = true }, fn) {
   const { file, cleanup } = tmpMachinesFile();
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ma-data-'));
+  const auditFile = path.join(dataDir, 'audit.jsonl');
   const hub = await startHub({
     machinesFile: file, hubToken: 'T', host: '127.0.0.1', port: 0, intervalMs: 1000,
-    mainAgent: { enabled, tmux, session: 'cc-main-agent', dataDir, settleMs: 60000, maxSettleMs: 900000 },
+    mainAgent: { enabled, tmux, session: 'cc-main-agent', dataDir, auditFile, settleMs: 60000, maxSettleMs: 900000 },
   });
   try {
     await new Promise((r) => setTimeout(r, 80)); // 等 setupMainAgent async 完成
-    await fn(hub);
+    await fn(hub, { auditFile });
   } finally {
     await hub.stop();
     cleanup();
@@ -115,7 +121,7 @@ test('start:foreign 同名 session(hasOwnedSession=false)→ create 抛错 → c
   });
 });
 
-test('R3-H1 start:hasOwnedSession 抛错(非 not-found)→ 审计 cleanup_probe_failed + 500(不泄露 error)', async () => {
+test('R3-H1 start:showEnvironment 抛错 → 500 不泄露内部 error(hasOwnedSession 吞错→false→不进 kill,审计不触发)', async () => {
   const tmux = stubTmuxOwned();
   tmux.showEnvironment = async () => { throw new Error('permission denied'); };
   tmux.createSession = async () => { throw new Error('boom'); };
@@ -123,6 +129,46 @@ test('R3-H1 start:hasOwnedSession 抛错(非 not-found)→ 审计 cleanup_probe_
     const r = await maFetch(hub, '/api/main-agent/start', { method: 'POST', body: '{}' });
     assert.equal(r.status, 500);
     assert.ok(!JSON.stringify(r.body).includes('permission denied'), '不泄露内部 error');
+  });
+});
+
+test('start cleanup:create 抛错 + 二探 owned + kill 抛错 → 审计 cleanup_probe_failed + 500', async () => {
+  const tmux = stubTmuxOwned();
+  // 首探 hasOwnedSession→false(触发 create→抛);catch 二探→true(触发 kill→抛 → 审计)
+  let envCalls = 0;
+  tmux.showEnvironment = async () => { envCalls += 1; return envCalls === 1 ? 'CC_WEB_OWNED=0' : 'CC_WEB_OWNED=1'; };
+  tmux.createSession = async () => { throw new Error('create boom'); };
+  tmux.killSession = async () => { throw new Error('kill boom'); };
+  await withMainAgentHub({ tmux }, async (hub, { auditFile }) => {
+    const r = await maFetch(hub, '/api/main-agent/start', { method: 'POST', body: '{}' });
+    assert.equal(r.status, 500);
+    const entries = readAudit(auditFile);
+    assert.ok(entries.some((e) => e.event === 'cleanup_probe_failed' && e.detail && e.detail.error === 'kill boom'), '应审计 cleanup_probe_failed');
+    assert.ok(!JSON.stringify(r.body).includes('kill boom'), '不泄露内部 error');
+  });
+});
+
+test('stop kill race(C1):owned 但 kill 时会话已消失 → {stopped:true}(幂等,非 500/挂起)', async () => {
+  const tmux = stubTmuxOwned();
+  let envCalls = 0;
+  // 首探 owned→kill 抛;kill 后重查→false(会话消失)→视作已停
+  tmux.showEnvironment = async () => { envCalls += 1; return envCalls <= 1 ? 'CC_WEB_OWNED=1' : 'CC_WEB_OWNED=0'; };
+  tmux.killSession = async () => { throw new Error('session vanished'); };
+  await withMainAgentHub({ tmux }, async (hub) => {
+    const r = await maFetch(hub, '/api/main-agent/stop', { method: 'POST', body: '{}' });
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.body, { running: false, stopped: true });
+  });
+});
+
+test('stop kill 真失败(C1):owned + kill 抛 + 重查仍 owned → 500(防挂起/unhandled,不泄露)', async () => {
+  const tmux = stubTmuxOwned();
+  tmux.showEnvironment = async () => 'CC_WEB_OWNED=1'; // kill 失败后会话仍在(owned)
+  tmux.killSession = async () => { throw new Error('kill perm denied'); };
+  await withMainAgentHub({ tmux }, async (hub) => {
+    const r = await maFetch(hub, '/api/main-agent/stop', { method: 'POST', body: '{}' });
+    assert.equal(r.status, 500);
+    assert.ok(!JSON.stringify(r.body).includes('perm denied'), '不泄露内部 error');
   });
 });
 
