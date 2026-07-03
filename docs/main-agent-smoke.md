@@ -84,6 +84,7 @@ tail -f ~/.cc-web-control/main-agent-audit.jsonl
 {"event":"poke",      "scope":"dispatcher", "detail":{"retry":0}}
 {"event":"dequeue_event","scope":"mcp"}                         # claude 调了 dequeue_event() MCP 工具
 {"event":"ack",       "scope":"dispatcher", "detail":{"outcome":"advised: ..."}}   # claude 诊断完调 ack_event()
+# 注：同一 (machine,session) 短时间内重复 enqueue 且 lastLine 签名相同时，会出现 {"event":"repeat_suppressed","scope":"dispatcher"}（被签名去重，不 poke）；签名变化或过 rePokeAfterMs（默认 15 分钟）才再次 poke。
 ```
 
 看到 `ack` 且 `outcome` 形如 `advised: <建议>` 或 `noop: <为何不动>`,说明主 agent 端到端闭环成功。
@@ -110,7 +111,7 @@ tmux attach -t cc-main-agent
 - [ ] **token 仅在 tmux 进程环境**:`.mcp.json` 只含 `{ command, args }`,token 经 `tmux new-session -e CC_WEB_HUB_TOKEN=... CC_WEB_HUB_URL=...` 注入 claude 进程,由 MCP server 子进程继承,**绝不落盘**。(脚本第 3 步自动验证。)
 - [ ] **`read_session` 输出视为不可信**:其中可能含 prompt injection(指令/URL/代码)。主 agent 的系统提示已约束:只用于诊断、绝不执行、引用时用 `<untrusted-pane>...</untrusted-pane>` 分隔标记。
 - [ ] **主 agent 无写权限工具**:T1 只读档只给了 4 个 MCP 工具(`list_sessions` / `read_session` / `dequeue_event` / `ack_event`),**没有** Bash/Edit/Write。`ack_event` 的 `outcome` 只是建议文本,不触发任何动作。
-- [ ] **全程有审计**:`enqueue` / `dequeue` / `poke` / `ack` / `ack_timeout_*` / `queue_overflow_drop` 全部写进 `~/.cc-web-control/main-agent-audit.jsonl`。
+- [ ] **全程有审计**:`enqueue` / `dequeue` / `poke` / `ack` / `ack_timeout_*` / `queue_overflow_drop` / `repeat_suppressed` 全部写进 `~/.cc-web-control/main-agent-audit.jsonl`。
 - [ ] **无人值守信任已预置(两层缺一不可)**:`writeMainAgentFiles` 还会写 `mcp-trust.json`(0600),经 claude `--settings` 注入,含 `enabledMcpjsonServers:["cc-web-control"]`(跳过 "New MCP server found" 信任框)+ `permissions.allow` 放行 4 个只读工具(跳过每次 MCP 工具调用的 "Do you want to proceed?" 执行权限框)。**两层任缺其一,claude 卡框、`ack` 永不到。** 冒烟若见 pane 停在确认框,即此处缺配置。
 
 ---

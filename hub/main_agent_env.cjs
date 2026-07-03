@@ -7,7 +7,7 @@
  * 默认关闭 —— 必须显式 CC_WEB_HUB_MAIN_AGENT_ENABLED=1 才装配。
  *
  * @param {Record<string, string|undefined>} env
- * @returns {{enabled: boolean, session?: string, claudePath?: string, dataDir?: string, auditFile?: string}}
+ * @returns {{enabled: boolean, session?: string, claudePath?: string, dataDir?: string, auditFile?: string, settleMs: number, maxSettleMs: number, backoffBase: number, staleBump: number}}
  */
 function resolveMainAgentConfig(env) {
   const cfg = { enabled: env.CC_WEB_HUB_MAIN_AGENT_ENABLED === '1' };
@@ -15,6 +15,10 @@ function resolveMainAgentConfig(env) {
   if (env.CC_WEB_HUB_MAIN_AGENT_CLAUDE_PATH) cfg.claudePath = env.CC_WEB_HUB_MAIN_AGENT_CLAUDE_PATH;
   if (env.CC_WEB_HUB_MAIN_AGENT_DATA_DIR) cfg.dataDir = env.CC_WEB_HUB_MAIN_AGENT_DATA_DIR;
   if (env.CC_WEB_HUB_MAIN_AGENT_AUDIT_FILE) cfg.auditFile = env.CC_WEB_HUB_MAIN_AGENT_AUDIT_FILE;
+  cfg.settleMs = env.CC_WEB_HUB_MAIN_AGENT_SETTLE_MS ? Number(env.CC_WEB_HUB_MAIN_AGENT_SETTLE_MS) : 60_000;
+  cfg.maxSettleMs = env.CC_WEB_HUB_MAIN_AGENT_MAX_SETTLE_MS ? Number(env.CC_WEB_HUB_MAIN_AGENT_MAX_SETTLE_MS) : 900_000;
+  cfg.backoffBase = env.CC_WEB_HUB_MAIN_AGENT_BACKOFF_BASE ? Number(env.CC_WEB_HUB_MAIN_AGENT_BACKOFF_BASE) : 2;
+  cfg.staleBump = env.CC_WEB_HUB_MAIN_AGENT_STALE_BUMP ? Number(env.CC_WEB_HUB_MAIN_AGENT_STALE_BUMP) : 1;
   return cfg;
 }
 

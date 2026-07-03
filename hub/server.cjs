@@ -253,8 +253,20 @@ function startHub(opts) {
     const { mcpPath, trustPath } = await writeMainAgentFiles({ dir: dataDir, mcpServerPath });
     const audit = new AuditLog({ filePath: ma.auditFile || path.join(path.dirname(dataDir), 'main-agent-audit.jsonl') });
     const localTmux = createLocalTmux({ tmux: rootTmux });
-    const dispatcherInst = new AgentDispatcher({ tmux: localTmux, audit, session: ma.session || 'cc-main-agent' });
-    const watcher = new EventWatcher({ getLatest: () => aggregator.getLatest(), intervalMs });
+    const watcher = new EventWatcher({
+      getLatest: () => aggregator.getLatest(),
+      intervalMs,
+      settleMs: ma.settleMs,
+      maxSettleMs: ma.maxSettleMs,
+      backoffBase: ma.backoffBase,
+      staleBump: ma.staleBump,
+    });
+    const dispatcherInst = new AgentDispatcher({
+      tmux: localTmux, audit, session: ma.session || 'cc-main-agent',
+      onStaleAck: (m, s) => watcher.markStale(m, s),
+      onProblemChanged: (m, s) => watcher.markProblemChanged(m, s),
+      rePokeAfterMs: ma.maxSettleMs, // 复用 maxSettleMs:A 层「再上报」与 B 层「再 poke」默认对齐 15min(语义不同,有意耦合)
+    });
     watcher.on('event', (evt) => {
       audit.log({ scope: 'event', runId: null, event: 'enqueue', detail: { machine: evt.machine, session: evt.session, type: evt.to } });
       dispatcherInst.enqueue({ machine: evt.machine, session: evt.session, to: evt.to, lastLine: evt.lastLine, lastTs: evt.lastTs });
