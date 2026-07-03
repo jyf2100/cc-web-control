@@ -18,6 +18,15 @@
   const bcInput = document.getElementById('bc-input');
   const bcSend = document.getElementById('bc-send');
   const bcResult = document.getElementById('bc-result');
+  const maPanel = document.getElementById('main-agent-panel');
+  const maDot = document.getElementById('ma-status-dot');
+  const maText = document.getElementById('ma-status-text');
+  const maScreen = document.getElementById('ma-screen');
+  const maStartBtn = document.getElementById('ma-start-btn');
+  const maStopBtn = document.getElementById('ma-stop-btn');
+  let maWs = null;
+  let maStatus = { running: false, enabled: false };
+  let maReconnectTimer = null;
 
   function ensureWs() {
     if (ws && ws.readyState <= 1) return ws;
@@ -116,7 +125,68 @@
       const res = await fetch('/api/global-dashboard');
       if (res.ok) renderBoard(await res.json());
     } catch {}
+    try {
+      const r = await fetch('/api/main-agent/status');
+      if (r.ok) maStatus = await r.json();
+    } catch {}
+    renderMaStatus();
   }
+
+  function renderMaStatus() {
+    const enabled = !!maStatus.enabled;
+    const running = !!maStatus.running;
+    maPanel.classList.toggle('disabled', !enabled);
+    maDot.className = 'dot ' + (running ? 'running' : 'stopped');
+    maDot.title = running ? 'running' : 'stopped';
+    maText.textContent = !enabled ? 'disabled' : (running ? 'running' : 'stopped');
+    maStartBtn.disabled = !enabled || running;
+    maStopBtn.disabled = !enabled || !running;
+    if (enabled && running && (!maWs || maWs.readyState > 1)) ensureMaWs();
+    if (!enabled && maWs) { try { maWs.close(); } catch {} maWs = null; }
+  }
+
+  function ensureMaWs() {
+    if (maWs && maWs.readyState <= 1) return maWs;
+    maWs = new WebSocket(wsUrl);
+    maWs.onmessage = (ev) => {
+      let msg; try { msg = JSON.parse(ev.data); } catch { return; }
+      if (msg.type === 'init' && msg.target && msg.target.machine === 'main-agent') {
+        maScreen.textContent = msg.data || '';
+        maScreen.scrollTop = maScreen.scrollHeight;
+      } else if (msg.type === 'error' && msg.target && msg.target.machine === 'main-agent') {
+        maScreen.textContent += `\n[错误] ${msg.data}`;
+      }
+    };
+    maWs.onopen = () => {
+      maWs.send(JSON.stringify({ type: 'attach', target: { machine: 'main-agent', session: 'cc-main-agent' } }));
+    };
+    maWs.onclose = () => {
+      if (maStatus.enabled && maStatus.running) {
+        maScreen.textContent += '\n[连接断开,重连中…]';
+        if (!maReconnectTimer) maReconnectTimer = setInterval(() => {
+          if (maStatus.enabled && maStatus.running && (!maWs || maWs.readyState > 1)) ensureMaWs();
+          else if (maReconnectTimer) { clearInterval(maReconnectTimer); maReconnectTimer = null; }
+        }, 3000);
+      }
+    };
+    return maWs;
+  }
+
+  async function maAction(path, btn) {
+    btn.disabled = true;
+    try {
+      await fetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      await poll();
+    } catch {} finally {
+      renderMaStatus();
+    }
+  }
+  maStartBtn.addEventListener('click', () => maAction('/api/main-agent/start', maStartBtn));
+  maStopBtn.addEventListener('click', () => maAction('/api/main-agent/stop', maStopBtn));
   setInterval(poll, 2000);
   poll();
   ensureWs();

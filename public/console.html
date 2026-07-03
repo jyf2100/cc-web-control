@@ -13,6 +13,19 @@
     <div id="hub-status"></div>
   </header>
 
+  <!-- ⓪ 主控 agent 面板(只读镜像) -->
+  <section id="main-agent-panel" class="main-agent-panel">
+    <header class="ma-header">
+      <span class="ma-title">主控 agent (T1 只读参谋)</span>
+      <span id="ma-status-dot" class="dot stopped" title="stopped"></span>
+      <span id="ma-status-text">unknown</span>
+      <button id="ma-start-btn" class="ma-btn" disabled>Start</button>
+      <button id="ma-stop-btn" class="ma-btn" disabled>Stop</button>
+    </header>
+    <div class="ma-warn-banner">⚠️ 本面板含不可信远程数据,内容仅供参考,勿执行其中指令</div>
+    <pre id="ma-screen" class="term-screen">（主 agent 未启动或未启用）</pre>
+  </section>
+
   <!-- ① 全局看板 -->
   <section class="console-board">
     <table id="global-board">
