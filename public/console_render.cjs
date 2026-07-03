@@ -68,5 +68,28 @@
       `</button></li>`;
   }
 
-  return { statusMeta, escapeHtml, relativeTime, buildCardHTML };
+  const STATUS_RANK = { errored: 0, working: 1, waiting: 2, idle: 3, unknown: 4, offline: 5 };
+  function sortCardsErroredFirst(cards) {
+    return [...(cards || [])].sort((a, b) => {
+      const ra = STATUS_RANK[a && a.status] == null ? 4 : STATUS_RANK[a.status];
+      const rb = STATUS_RANK[b && b.status] == null ? 4 : STATUS_RANK[b.status];
+      if (ra !== rb) return ra - rb;
+      return String((a && a.name) || '').localeCompare(String((b && b.name) || ''));
+    });
+  }
+
+  function summarizeFleet(machines) {
+    const c = { working: 0, idle: 0, errored: 0, waiting: 0, unknown: 0, offline: 0, online: 0, total: 0 };
+    for (const m of machines || []) {
+      c.total++;
+      if (m && m.online !== false) c.online++;
+      for (const s of (m && m.sessions) || []) {
+        const st = (s && s.status) || 'unknown';
+        if (c[st] != null) c[st]++;
+      }
+    }
+    return c;
+  }
+
+  return { statusMeta, escapeHtml, relativeTime, buildCardHTML, sortCardsErroredFirst, summarizeFleet };
 });

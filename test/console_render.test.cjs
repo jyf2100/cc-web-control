@@ -66,3 +66,47 @@ test('buildCardHTML XSS: name 转义', () => {
   assert.doesNotMatch(html, /data-machine="<x>"/);
   assert.match(html, /data-machine="&lt;x&gt;"/);
 });
+
+test('sortCardsErroredFirst: errored 永远置顶', () => {
+  const cards = [
+    { name: 'a', status: 'working' },
+    { name: 'b', status: 'errored' },
+    { name: 'c', status: 'idle' },
+  ];
+  assert.equal(R.sortCardsErroredFirst(cards)[0].name, 'b');
+});
+test('sortCardsErroredFirst: 同级按 name 字典序', () => {
+  const cards = [{ name: 'b', status: 'working' }, { name: 'a', status: 'working' }];
+  assert.equal(R.sortCardsErroredFirst(cards)[0].name, 'a');
+});
+test('sortCardsErroredFirst: 不修改入参', () => {
+  const cards = [{ name: 'a', status: 'idle' }, { name: 'b', status: 'errored' }];
+  const sorted = R.sortCardsErroredFirst(cards);
+  assert.equal(cards[0].name, 'a');
+  assert.notEqual(sorted, cards);
+});
+test('sortCardsErroredFirst: 全状态优先级链 errored<working<waiting<idle', () => {
+  const cards = [
+    { name: 'i', status: 'idle' }, { name: 'w', status: 'working' },
+    { name: 'e', status: 'errored' }, { name: 't', status: 'waiting' },
+  ];
+  const names = R.sortCardsErroredFirst(cards).map((c) => c.name);
+  assert.deepEqual(names, ['e', 'w', 't', 'i']);
+});
+
+test('summarizeFleet: 计各状态 + online/total', () => {
+  const m = [
+    { id: 'a', online: true, sessions: [{ status: 'working' }, { status: 'errored' }] },
+    { id: 'b', online: false, sessions: [{ status: 'idle' }] },
+  ];
+  const s = R.summarizeFleet(m);
+  assert.equal(s.working, 1);
+  assert.equal(s.errored, 1);
+  assert.equal(s.idle, 1);
+  assert.equal(s.online, 1);
+  assert.equal(s.total, 2);
+});
+test('summarizeFleet: 空/null 兜底', () => {
+  assert.equal(R.summarizeFleet(null).total, 0);
+  assert.equal(R.summarizeFleet([]).online, 0);
+});
