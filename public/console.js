@@ -13,11 +13,13 @@
   const termScreen = document.getElementById('term-screen');
   const termInput = document.getElementById('term-input');
   const termForm = document.getElementById('term-input-form');
-  const bcBar = document.getElementById('broadcast-bar');
   const bcCount = document.getElementById('bc-count');
-  const bcInput = document.getElementById('bc-input');
-  const bcSend = document.getElementById('bc-send');
   const bcResult = document.getElementById('bc-result');
+  const fleetSummary = document.getElementById('fleet-summary');
+  const heroCallout = document.getElementById('hero-callout');
+  const maToggleBtn = document.getElementById('ma-toggle-btn');
+  let lastPayload = null;
+  let lastBoardMachines = [];
   const maPanel = document.getElementById('main-agent-panel');
   const maDot = document.getElementById('ma-status-dot');
   const maText = document.getElementById('ma-status-text');
@@ -83,43 +85,81 @@
     termInput.value = '';
   });
 
-  function renderBoard(payload) {
-    boardBody.innerHTML = '';
-    for (const m of payload.machines) {
-      for (const s of m.sessions) {
-        const key = `${m.id}/${s.name}`;
-        const tr = document.createElement('tr');
-        tr.className = 'row';
-        if (currentTarget && currentTarget.machine === m.id && currentTarget.session === s.name) tr.classList.add('active');
-        const sel = document.createElement('td'); sel.className = 'sel';
-        const cb = document.createElement('input'); cb.type = 'checkbox';
-        cb.checked = selected.has(key);
-        cb.addEventListener('change', () => { cb.checked ? selected.add(key) : selected.delete(key); refreshBroadcast(); });
-        cb.addEventListener('click', (e) => e.stopPropagation());
-        sel.appendChild(cb);
-        const name = document.createElement('td'); name.textContent = `${m.name || m.id} / ${s.name}`;
-        const st = document.createElement('td'); st.className = 'st-' + (s.status || 'unknown'); st.textContent = s.status || 'unknown';
-        const last = document.createElement('td'); last.textContent = s.lastLine || (m.online ? '' : '(离线)');
-        tr.append(sel, name, st, last);
-        tr.addEventListener('click', () => attachTarget({ machine: m.id, session: s.name }));
-        boardBody.appendChild(tr);
+  let prevKeys = new Set();
+
+  function flattenCards(payload) {
+    const cards = [];
+    for (const m of payload.machines || []) {
+      const online = m.online !== false;
+      for (const s of m.sessions || []) {
+        const status = online ? (s.status || 'unknown') : 'offline';
+        cards.push({ machine: m, session: { ...s, status }, key: `${m.id}/${s.name}`, name: m.name || m.id, lastTs: s.lastTs || 0 });
       }
     }
+    return cards;
+  }
+
+  function cssEsc(s) { return String(s).replace(/["\\]/g, '\\$&'); }
+
+  function renderBoard(payload) {
+    lastPayload = payload;
+    lastBoardMachines = payload.machines || [];
+    const sorted = ConsoleRender.sortCardsErroredFirst(flattenCards(payload));
+
+    if (!sorted.length) {
+      boardBody.innerHTML = '<li class="board-empty"><span class="eyebrow">NO MACHINES</span> 尚无机器注册到 hub</li>';
+      prevKeys = new Set();
+      refreshBroadcast();
+      renderFleetSummary(lastBoardMachines);
+      return;
+    }
+
+    const nextKeys = sorted.map((c) => c.key);
+    const diff = ConsoleRender.diffCards(prevKeys, nextKeys);
+    for (const key of diff.removed) {
+      const node = boardBody.querySelector(`[data-key="${cssEsc(key)}"]`);
+      if (node) node.remove();
+    }
+    for (const c of sorted) {
+      let li = boardBody.querySelector(`[data-key="${cssEsc(c.key)}"]`);
+      const btnHtml = ConsoleRender.buildCardHTML(c.machine, c.session, {
+        active: currentTarget && currentTarget.machine === c.machine.id && currentTarget.session === c.session.name,
+        selected: selected.has(c.key),
+        lastTs: c.lastTs,
+        now: Date.now(),
+      }).match(/<button[\s\S]*<\/button>/)[0];
+      if (!li) {
+        li = document.createElement('li');
+        li.className = 'card-row';
+        li.dataset.key = c.key;
+        boardBody.appendChild(li);
+      }
+      li.innerHTML = btnHtml;
+    }
+    // 按 sorted 顺序重排(appendChild 移动已存在节点,不重建 → 保留 scrollTop/focus)
+    for (const c of sorted) {
+      const li = boardBody.querySelector(`[data-key="${cssEsc(c.key)}"]`);
+      if (li) boardBody.appendChild(li);
+    }
+    prevKeys = new Set(nextKeys);
+    refreshBroadcast();
+    renderFleetSummary(lastBoardMachines);
+  }
+
+  function renderFleetSummary(machines) {
+    const s = ConsoleRender.summarizeFleet(machines);
+    fleetSummary.innerHTML =
+      `<span><span class="s-icon" aria-hidden="true">▶</span> ${s.working}</span>` +
+      `<span><span class="s-icon" aria-hidden="true">⏸</span> ${s.idle}</span>` +
+      `<span><span class="s-icon" aria-hidden="true">✕</span> ${s.errored}</span>` +
+      `<span>在线 ${s.online}/${s.total}</span>`;
   }
 
   function refreshBroadcast() {
-    if (bcBar) bcBar.hidden = selected.size < 2;
-    if (bcCount) bcCount.textContent = `已选 ${selected.size} 个会话`;
+    if (!bcCount) return;
+    bcCount.hidden = selected.size < 2;
+    if (selected.size >= 2) bcCount.textContent = `已选 ${selected.size}`;
   }
-
-  if (bcSend) bcSend.addEventListener('click', () => {
-    const targets = Array.from(selected).map((k) => { const [machine, session] = k.split('/'); return { machine, session }; });
-    if (!targets.length || !bcInput.value) return;
-    bcResult.textContent = '扇出中…';
-    ensureWs();
-    sendWhenOpen({ type: 'broadcast', targets, data: bcInput.value, enter: true });
-    bcInput.value = '';
-  });
 
   async function poll() {
     try {
@@ -208,6 +248,28 @@
   }
   maStartBtn.addEventListener('click', () => maAction('/api/main-agent/start', maStartBtn));
   maStopBtn.addEventListener('click', () => maAction('/api/main-agent/stop', maStopBtn));
+  boardBody.addEventListener('click', (e) => {
+    const card = e.target.closest('.card');
+    if (!card) return;
+    const machine = card.dataset.machine, session = card.dataset.session;
+    const key = `${machine}/${session}`;
+    if (e.target.closest('.card__select')) {
+      e.stopPropagation();
+      selected.has(key) ? selected.delete(key) : selected.add(key);
+      refreshBroadcast();
+      if (lastPayload) renderBoard(lastPayload);
+      return;
+    }
+    attachTarget({ machine, session });
+  });
+  boardBody.addEventListener('keydown', (e) => {
+    const card = e.target.closest('.card');
+    if (!card) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      attachTarget({ machine: card.dataset.machine, session: card.dataset.session });
+    }
+  });
   setInterval(poll, 2000);
   poll();
   ensureWs();

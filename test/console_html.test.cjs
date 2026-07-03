@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'console.html'), 'utf8');
+const js = fs.readFileSync(path.join(__dirname, '..', 'public', 'console.js'), 'utf8');
 
 test('加载 terminal_cleaner + console_render 脚本(顺序)', () => {
   const idxTC = html.indexOf('terminal_cleaner.cjs');
@@ -47,4 +48,19 @@ test('保留功能挂点(ma-* / hub-status / bc-result)', () => {
 });
 test('图标 span 标注 aria-hidden', () => {
   assert.match(html, /aria-hidden="true"/);
+});
+
+test('console.js 引用 ConsoleRender 纯函数', () => {
+  assert.match(js, /ConsoleRender\.(sortCardsErroredFirst|buildCardHTML|diffCards)/);
+});
+test('console.js 移除旧 bcSend/bcInput 引用', () => {
+  assert.doesNotMatch(js, /bcSend\.addEventListener/);
+  assert.doesNotMatch(js, /getElementById\('bc-input'\)/);
+});
+test('renderBoard 用 keyed-diff(非全量 innerHTML="")', () => {
+  assert.match(js, /diffCards/);
+  assert.doesNotMatch(js, /boardBody\.innerHTML\s*=\s*''/);
+});
+test('空态渲染 board-empty', () => {
+  assert.match(js, /board-empty/);
 });
