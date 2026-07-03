@@ -31,3 +31,18 @@ test('writeMainAgentFiles: 写两个 0600 文件', async () => {
   const cfg = JSON.parse(await fs.readFile(mcpPath, 'utf8'));
   assert.ok(cfg.mcpServers['cc-web-control']);
 });
+
+test('writeMainAgentFiles: 写信任文件(跳 MCP 确认框,无人值守必需)', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'ma-cfg-'));
+  const { trustPath } = await writeMainAgentFiles({ dir, mcpServerPath: '/x.cjs' });
+  const t = JSON.parse(await fs.readFile(trustPath, 'utf8'));
+  assert.deepEqual(t.enabledMcpjsonServers, ['cc-web-control']);
+  assert.deepEqual(t.permissions.allow, [
+    'mcp__cc-web-control__list_sessions',
+    'mcp__cc-web-control__read_session',
+    'mcp__cc-web-control__dequeue_event',
+    'mcp__cc-web-control__ack_event',
+  ]);
+  const tstat = await fs.stat(trustPath);
+  assert.equal(tstat.mode & 0o777, 0o600);
+});

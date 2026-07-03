@@ -250,7 +250,7 @@ function startHub(opts) {
   async function setupMainAgent({ realHost, realPort }) {
     const dataDir = ma.dataDir || path.join(process.env.HOME || '/tmp', '.cc-web-control', 'main-agent');
     const mcpServerPath = path.join(__dirname, '..', 'bin', 'cc-web-control-mcp.cjs');
-    const { mcpPath } = await writeMainAgentFiles({ dir: dataDir, mcpServerPath });
+    const { mcpPath, trustPath } = await writeMainAgentFiles({ dir: dataDir, mcpServerPath });
     const audit = new AuditLog({ filePath: ma.auditFile || path.join(path.dirname(dataDir), 'main-agent-audit.jsonl') });
     const localTmux = createLocalTmux({ tmux: rootTmux });
     const dispatcherInst = new AgentDispatcher({ tmux: localTmux, audit, session: ma.session || 'cc-main-agent' });
@@ -263,7 +263,7 @@ function startHub(opts) {
     const hubUrl = `http://${realHost}:${realPort}`;
     if (!(await localTmux.hasSession(sessionName))) {
       // token/url 经 tmux -e 注入 claude 进程 → MCP server 子进程继承;不落 mcp-config 文件
-      await localTmux.create(sessionName, `${ma.claudePath || 'claude'} --mcp-config ${mcpPath}`, {
+      await localTmux.create(sessionName, `${ma.claudePath || 'claude'} --mcp-config ${mcpPath} --strict-mcp-config --settings ${trustPath}`, {
         cwd: dataDir,
         env: { CC_WEB_HUB_TOKEN: hubToken, CC_WEB_HUB_URL: hubUrl },
       });

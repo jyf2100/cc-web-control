@@ -8,6 +8,28 @@ function genMcpConfig({ mcpServerPath }) {
   return { mcpServers: { 'cc-web-control': { command: process.execPath, args: [mcpServerPath] } } };
 }
 
+/**
+ * 信任设置:经 claude --settings 注入。让 claude 启动时自动信任 cc-web-control MCP server,
+ * 跳过 "New MCP server found" 交互确认框 —— 无人值守常驻 agent 必需(否则卡框、ack 永不到)。
+ * 用具名列表(enabledMcpjsonServers)而非 enableAllProjectMcpServers,最小权限。
+ */
+function genTrustSettings() {
+  return {
+    // 跳过 "New MCP server found" 信任框(无人值守必需)
+    enabledMcpjsonServers: ['cc-web-control'],
+    // 跳过每个 MCP 工具调用的执行权限框:只放行 T1 的 4 个只读/确认工具,
+    // 不含 Bash/Edit/Write(T1 安全边界)。用具名列表,最小权限。
+    permissions: {
+      allow: [
+        'mcp__cc-web-control__list_sessions',
+        'mcp__cc-web-control__read_session',
+        'mcp__cc-web-control__dequeue_event',
+        'mcp__cc-web-control__ack_event',
+      ],
+    },
+  };
+}
+
 const SYSTEM_PROMPT = `# 主控 agent(只读参谋 T1)
 
 你是 cc-web-control 的值班主控 agent,当前处于 T1 只读参谋档。
@@ -36,9 +58,11 @@ async function writeMainAgentFiles({ dir, mcpServerPath }) {
   await fs.promises.mkdir(dir, { recursive: true });
   const mcpPath = path.join(dir, '.mcp.json');
   const promptPath = path.join(dir, 'CLAUDE.md');
+  const trustPath = path.join(dir, 'mcp-trust.json');
   await fs.promises.writeFile(mcpPath, JSON.stringify(genMcpConfig({ mcpServerPath }), null, 2) + '\n', { mode: 0o600 });
   await fs.promises.writeFile(promptPath, genSystemPrompt(), { mode: 0o600 });
-  return { mcpPath, promptPath };
+  await fs.promises.writeFile(trustPath, JSON.stringify(genTrustSettings(), null, 2) + '\n', { mode: 0o600 });
+  return { mcpPath, promptPath, trustPath };
 }
 
-module.exports = { genMcpConfig, genSystemPrompt, writeMainAgentFiles };
+module.exports = { genMcpConfig, genTrustSettings, genSystemPrompt, writeMainAgentFiles };
