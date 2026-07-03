@@ -51,9 +51,11 @@ fi
 
 echo
 echo "===== 2. 配置文件已生成(应 0600)? ====="
+# 三个文件:.mcp.json(MCP server 声明)+ CLAUDE.md(系统提示)+ mcp-trust.json(无人值守信任)。
+# mcp-trust.json 缺失 → claude 卡在 MCP 信任/工具权限确认框、ack 永不到(见 smoke.md 故障排查)。
 # shellcheck disable=SC2012
-ls -la "$DATA_DIR/.mcp.json" "$DATA_DIR/CLAUDE.md" 2>/dev/null \
-  && echo "(确认上面两行权限均为 -rw------- 即 0600)" \
+ls -la "$DATA_DIR/.mcp.json" "$DATA_DIR/CLAUDE.md" "$DATA_DIR/mcp-trust.json" 2>/dev/null \
+  && echo "(确认上面三行权限均为 -rw------- 即 0600)" \
   || echo "FAIL: 配置文件未生成(检查 $DATA_DIR 是否可写)"
 
 echo
