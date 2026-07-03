@@ -281,23 +281,25 @@ function startHub(opts) {
     });
     const sessionName = ma.session || 'cc-main-agent';
     const hubUrl = `http://${realHost}:${realPort}`;
+    // 复用:首次 spawn 与 start 端点的 spawn 句柄共用同一 command/env(提取防漂移)
+    const buildSpawnArgs = () => ({
+      command: `${ma.claudePath || 'claude'} --mcp-config ${mcpPath} --strict-mcp-config --settings ${trustPath}`,
+      opts: { cwd: dataDir, env: { CC_WEB_HUB_TOKEN: hubToken, CC_WEB_HUB_URL: hubUrl, CC_WEB_OWNED: '1' } },
+    });
+    // 首次用 hasSession:任何同名会话都不破坏(保护用户既有工作);spawn 句柄用 hasOwnedSession(只认本系统 spawn 的,见下)
     if (!(await localTmux.hasSession(sessionName))) {
       // token/url 经 tmux -e 注入 claude 进程 → MCP server 子进程继承;不落 mcp-config 文件
-      await localTmux.create(sessionName, `${ma.claudePath || 'claude'} --mcp-config ${mcpPath} --strict-mcp-config --settings ${trustPath}`, {
-        cwd: dataDir,
-        env: { CC_WEB_HUB_TOKEN: hubToken, CC_WEB_HUB_URL: hubUrl, CC_WEB_OWNED: '1' },
-      });
+      const { command, opts } = buildSpawnArgs();
+      await localTmux.create(sessionName, command, opts);
     }
     watcher.start();
     const localClient = new LocalTmuxClient({ localTmux, sessionName, audit });
-    // spawn 句柄:start 端点复用(不重新算 mcpPath/trustPath/cwd/token——首次已写)
+    // spawn 句柄:start 端点复用(不重新算 mcpPath/trustPath/cwd/token——首次已写)。
+    // ⚠️ MUST 经 serializeMainAgentOp 调用:否则 hasOwnedSession→create 窗口与并发 stop/close 竞争。
     const spawn = async () => {
       if (await localTmux.hasOwnedSession(sessionName)) return { running: true, started: false };
-      await localTmux.create(
-        sessionName,
-        `${ma.claudePath || 'claude'} --mcp-config ${mcpPath} --strict-mcp-config --settings ${trustPath}`,
-        { cwd: dataDir, env: { CC_WEB_HUB_TOKEN: hubToken, CC_WEB_HUB_URL: hubUrl, CC_WEB_OWNED: '1' } },
-      );
+      const { command, opts } = buildSpawnArgs();
+      await localTmux.create(sessionName, command, opts);
       return { running: true, started: true };
     };
     return {
@@ -361,13 +363,14 @@ function startHub(opts) {
         port: addr.port,
         url: `http://${displayHost}:${addr.port}`,
         close: async () => {
-          await mainAgentOpChain; // M3:等起停操作串行完,防 close 中途 start 留孤儿
-          if (mainAgentHandles) {
+          // M3:把 main-agent 清理纳入串行链,与任何在途/后到的 start/stop op 严格排序(防 close 中途 start 留孤儿)。
+          await serializeMainAgentOp(async () => {
+            if (!mainAgentHandles) return;
             mainAgentHandles.watcher.stop();
             mainAgentHandles.dispatcher.freeze();
             mainAgentHandles.localClient.close(); // R2-M1:清 capture interval
             try { await mainAgentHandles.localTmux.kill(mainAgentHandles.sessionName); } catch {}
-          }
+          });
           aggregator.stop();
           for (const ac of clients.values()) ac.close();
           wss.close();
