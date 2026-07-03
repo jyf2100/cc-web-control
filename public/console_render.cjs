@@ -57,7 +57,7 @@
     const time = escapeHtml(relativeTime(o.lastTs, o.now));
     const label = escapeHtml(`${m.name || m.id} / ${s.name},${meta.label},${last ? last.slice(0, 40) : '无输出'}`);
     return `<li class="card-row" data-key="${escapeHtml(key)}">` +
-      `<button type="button" class="${classes.join(' ')}" data-machine="${escapeHtml(m.id)}" data-session="${escapeHtml(s.name)}" aria-label="${label}">` +
+      `<button type="button" class="${classes.join(' ')}" data-machine="${escapeHtml(m.id)}" data-session="${escapeHtml(s.name)}" data-status="${escapeHtml(s.status || 'unknown')}" aria-label="${label}">` +
       `<span class="card__select" role="checkbox" aria-checked="${o.selected ? 'true' : 'false'}" tabindex="-1" aria-hidden="true">☐</span>` +
       `<span class="s-dot ${meta.dot}" aria-hidden="true"></span>` +
       `<span class="s-icon" aria-hidden="true">${meta.icon}</span>` +

@@ -7,6 +7,7 @@ const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'dashboard.css'
 const CONSOLE_SECTION = css.slice(css.indexOf('===== 多机控制台'));
 
 test('console 段无硬编码 Tailwind 状态色', () => {
+  assert.ok(css.indexOf('===== 多机控制台') > 0, 'console 段锚点注释丢失,console_style 测试可能误判');
   for (const hex of ['#34d399', '#fbbf24', '#f87171', '#94a3b8', '#64748b', '#22c55e', '#9ca3af', '#f59e0b', '#000', '#b45309']) {
     assert.ok(!CONSOLE_SECTION.includes(hex), `不应残留硬编码色 ${hex}`);
   }
@@ -41,4 +42,19 @@ test('waiting 卡底用独立 --waiting-bg', () => {
 });
 test('prefers-reduced-motion 降级存在', () => {
   assert.match(CONSOLE_SECTION, /prefers-reduced-motion:\s*reduce/);
+});
+test('.console-hero.disabled 存在(连接态视觉,Task 10 toggle 目标)', () => {
+  assert.match(CONSOLE_SECTION, /\.console-hero\.disabled\s*\{[^}]*opacity:\s*\.5/);
+});
+test('errored 卡片与 selected 叠加不被覆盖', () => {
+  assert.match(CONSOLE_SECTION, /\.card\.card--selected\[data-status="errored"\]/);
+});
+test('console_render.buildCardHTML 输出的 class 在 markup 中齐全(跨 task 契约)', () => {
+  const r = require('../public/console_render.cjs');
+  const html = r.buildCardHTML({ id: 'm1', name: 'M1' }, { name: 's1', status: 'errored' }, { active: true, selected: true });
+  for (const sel of ['card', 'card--selected', 'active', 'card__select', 'card__name', 'card__session', 'card__last', 'card__time', 's-dot--errored', 's-icon']) {
+    assert.ok(html.includes(sel), `buildCardHTML 应输出含 "${sel}"`);
+  }
+  assert.match(html, /data-status="errored"/);
+  assert.match(html, /aria-label=/);
 });

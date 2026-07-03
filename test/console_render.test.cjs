@@ -51,6 +51,16 @@ test('buildCardHTML 含 s-dot 变体 + 图标 + aria-label', () => {
   assert.match(html, /aria-label="machine-a \/ ses-1,working,/);
   assert.match(html, /data-machine="m1"/);
   assert.match(html, /data-session="ses-1"/);
+  assert.match(html, /data-status="working"/);
+});
+test('buildCardHTML button 输出 data-status(随 status 变化,缺省 unknown)', () => {
+  const m = { id: 'm1', name: 'M1' };
+  let html = R.buildCardHTML(m, { name: 's1', status: 'errored' }, {});
+  assert.match(html, /data-status="errored"/);
+  html = R.buildCardHTML(m, { name: 's1', status: 'waiting' }, {});
+  assert.match(html, /data-status="waiting"/);
+  html = R.buildCardHTML(m, { name: 's1' }, {}); // status 缺省
+  assert.match(html, /data-status="unknown"/);
 });
 test('buildCardHTML selected 加 card--selected', () => {
   const html = R.buildCardHTML({ id: 'm1', name: 'a', online: true }, { name: 's', status: 'idle' }, { selected: true });
