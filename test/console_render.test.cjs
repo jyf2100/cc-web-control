@@ -197,3 +197,88 @@ test('nextBackoff: 超出表上限封顶 30s', () => {
 test('nextBackoff: 负参兜底首档', () => {
   assert.equal(R.nextBackoff(-1), 3000);
 });
+
+// ---- 业务边界补充(branch 覆盖) ----
+
+test('relativeTime: 缺 now 参数走 Date.now() 兜底分支', () => {
+  // 只传 ts,触发 `now || Date.now()` 的 falsy 分支;不锁具体值(依赖当前时刻),只验不抛 + 落在合理档位
+  const out = R.relativeTime(Date.now() - 3000);
+  assert.match(out, /^(now|\d+s 前|\d+m 前|\d+h 前)$/);
+});
+
+test('statusMeta: offline 命中已知表(锁 dot+icon 契约)', () => {
+  const m = R.statusMeta('offline');
+  assert.equal(m.dot, 's-dot--offline');
+  assert.equal(m.icon, '⌽');
+  assert.equal(m.label, 'offline');
+});
+
+test('statusMeta: undefined 回退 DEFAULT', () => {
+  const m = R.statusMeta(undefined);
+  assert.equal(m.dot, 's-dot--unknown');
+  assert.equal(m.icon, '?');
+  assert.equal(m.label, 'unknown');
+});
+
+test('buildCardHTML: active+selected 叠加 → class 顺序 active 在 selected 前', () => {
+  const html = R.buildCardHTML(
+    { id: 'm1', name: 'M1' },
+    { name: 's1', status: 'errored' },
+    { active: true, selected: true }
+  );
+  assert.match(html, /class="card active card--selected"/);
+  assert.match(html, /data-status="errored"/);
+  assert.match(html, /role="checkbox" aria-checked="true"/);
+});
+
+test('buildCardHTML: 离线机器无 lastLine → 兜底 (离线)', () => {
+  const html = R.buildCardHTML(
+    { id: 'm1', online: false },
+    { name: 's1', status: 'working' },
+    {}
+  );
+  assert.match(html, /\(离线\)/);
+});
+
+test('buildCardHTML: machine 缺 name → 回退到 id', () => {
+  const html = R.buildCardHTML({ id: 'm1' }, { name: 's1', status: 'idle' }, {});
+  assert.match(html, /<span class="card__name">m1<\/span>/);
+});
+
+test('diffCards: 全同输入 → added/removed 均空(走两条循环的 false 分支)', () => {
+  const r = R.diffCards(['a', 'b'], ['a', 'b']);
+  assert.deepEqual(r.added, []);
+  assert.deepEqual(r.removed, []);
+});
+
+test('parseCallout: text===lastText 但 lastChangeTs=0 → ts 走 now 兜底', () => {
+  const now = 5000;
+  const r = R.parseCallout('Error: a', { lastText: 'Error: a', lastChangeTs: 0, now });
+  assert.equal(r.ts, now);            // 0 || now → now
+  assert.equal(r.timeLabel, '实时输出中…'); // stableMs=0,未超 10s
+});
+
+test('sortCardsErroredFirst: null 元素兜底 rank 4 + 同 status 按名排', () => {
+  const sorted = R.sortCardsErroredFirst([
+    { status: 'working', name: 'b' },
+    { status: 'errored', name: 'z' },
+    null,
+    { status: 'errored', name: 'a' },
+  ]);
+  assert.equal(sorted[0].name, 'a'); // errored(0) 优先,同级 a<z
+  assert.equal(sorted[1].name, 'z');
+  assert.equal(sorted[2].name, 'b'); // working(1) 次之
+  assert.equal(sorted.length, 4);
+  assert.equal(sorted[3], null);     // null 兜底 rank 4,排末位
+});
+
+test('summarizeFleet: online 未显式声明计为在线 + 未识别 status 被忽略', () => {
+  const c = R.summarizeFleet([
+    { id: 'm1', sessions: [{ status: 'bogus' }] }, // online 缺省→true;status 'bogus' 不在表→跳过
+    { id: 'm2', online: true, sessions: [{ status: 'unknown' }] },
+  ]);
+  assert.equal(c.total, 2);
+  assert.equal(c.online, 2);    // m1(online 缺省) + m2
+  assert.equal(c.unknown, 1);   // 仅 m2 的 unknown session 计入
+  assert.equal(c.bogus, undefined); // 未识别 status 不污染计数表
+});
