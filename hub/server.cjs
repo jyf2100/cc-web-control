@@ -64,6 +64,11 @@ function startHub(opts) {
     max: Number.parseInt(process.env.CC_WEB_LOGIN_MAX || '', 10) || 5,
     windowMs: Number.parseInt(process.env.CC_WEB_LOGIN_WINDOW_MS || '', 10) || 15 * 60 * 1000,
   });
+  // ★ M1:主控 agent 起停端点限流(默认 6/min,起停低频操作)
+  const mainAgentRateLimiter = createRateLimiter({
+    max: Number.parseInt(process.env.CC_WEB_MAIN_AGENT_MAX || '', 10) || 6,
+    windowMs: Number.parseInt(process.env.CC_WEB_MAIN_AGENT_WINDOW_MS || '', 10) || 60 * 1000,
+  });
 
   const expectedOriginForHttp = (req) => ({
     protocol: req.protocol,
@@ -307,6 +312,64 @@ function startHub(opts) {
       handles: { audit, watcher, dispatcher: dispatcherInst, localTmux, localClient, sessionName, spawn },
     };
   }
+
+  // —— 主控 agent 起停端点(只读镜像配套;CSRF + 限流 + 串行锁)——
+  // maSameOrigin:POST/DELETE 校验同源(GET 免校验)。返 true=通过,false=已 res 403。
+  const maSameOrigin = (req, res) => requireSameOriginForUnsafeMethods(req, res);
+
+  app.post('/api/main-agent/start', async (req, res) => {
+    if (!maSameOrigin(req, res)) return;
+    const { limited } = mainAgentRateLimiter.check(req.ip);
+    if (limited) { res.status(429).json({ error: 'rate limited' }); return; }
+    if (!mainAgentHandles) { res.status(503).json({ error: 'main agent not ready' }); return; }
+    try {
+      // ★ M6 + R2-H2 + R3-H1:create 抛错 → 仅清 owned session,foreign 不动;探测失败写审计。
+      //   cleanup_probe_failed 分支经 kill 抛错可达(hasOwnedSession 内部吞 showEnvironment 错→false 不抛)。
+      const r = await serializeMainAgentOp(() => mainAgentHandles.spawn().catch(async (e) => {
+        try {
+          if (await mainAgentHandles.localTmux.hasOwnedSession(mainAgentHandles.sessionName)) {
+            await mainAgentHandles.localTmux.kill(mainAgentHandles.sessionName);
+          }
+        } catch (probeErr) {
+          mainAgentHandles.audit.log({
+            scope: 'local_tmux', runId: null, event: 'cleanup_probe_failed',
+            detail: { name: mainAgentHandles.sessionName, error: probeErr.message },
+          });
+        }
+        throw e;
+      }));
+      res.json(r);
+    } catch (e) {
+      // R3-H1:不泄露内部 error message
+      res.status(500).json({ error: 'start failed' });
+    }
+  });
+
+  app.post('/api/main-agent/stop', async (req, res) => {
+    if (!maSameOrigin(req, res)) return;
+    const { limited } = mainAgentRateLimiter.check(req.ip);
+    if (limited) { res.status(429).json({ error: 'rate limited' }); return; }
+    if (!mainAgentHandles) { res.status(503).json({ error: 'main agent not ready' }); return; }
+    const r = await serializeMainAgentOp(async () => {
+      const name = mainAgentHandles.sessionName;
+      const lt = mainAgentHandles.localTmux;
+      if (await lt.hasOwnedSession(name)) {
+        await lt.kill(name);
+        return { running: false, stopped: true };
+      }
+      // M4 + R2-H2:foreign session(hasSession 但非 owned)不杀,如实回报
+      if (await lt.hasSession(name)) return { stopped: false, reason: 'foreign session' };
+      return { running: false, stopped: false };
+    });
+    res.json(r);
+  });
+
+  app.get('/api/main-agent/status', async (req, res) => {
+    // M2:handles 未就绪 → 200 {running:false,enabled:false}(非 error;门控挡 start/stop→503)
+    if (!mainAgentHandles) { res.json({ running: false, enabled: false }); return; }
+    const running = await mainAgentHandles.localTmux.hasOwnedSession(mainAgentHandles.sessionName);
+    res.json({ running, enabled: !!(ma && ma.enabled) });
+  });
 
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server });
