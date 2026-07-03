@@ -131,3 +131,45 @@ test('diffCards: null 兜底', () => {
   assert.deepEqual(r.added, []);
   assert.deepEqual(r.removed, []);
 });
+
+test('parseCallout: 空屏 → 隐藏', () => {
+  assert.equal(R.parseCallout('', {}).show, false);
+  assert.equal(R.parseCallout(null, {}).show, false);
+});
+test('parseCallout: 纯进度行(无关键词)→ 隐藏', () => {
+  const r = R.parseCallout('building modules…\n80% done', {});
+  assert.equal(r.show, false);
+});
+test('parseCallout: 含 error → 点亮 + 截断省略', () => {
+  const longErr = 'x'.repeat(200);
+  const r = R.parseCallout(`npm install\nError: ${longErr}`, { now: 1000 });
+  assert.equal(r.show, true);
+  assert.match(r.text, /Error:/);
+  assert.ok(r.text.length <= 121); // 120 + 省略号
+});
+test('parseCallout: ANSI 残留被 strip', () => {
+  const r = R.parseCallout('\x1b[31mError: boom\x1b[0m', { now: 1000 });
+  assert.equal(r.show, true);
+  assert.doesNotMatch(r.text, /\x1b/);
+  assert.match(r.text, /Error: boom$/);
+});
+test('parseCallout: 文本变化时重置 ts', () => {
+  const now = 5000;
+  const r1 = R.parseCallout('Error: a', { lastText: '', lastChangeTs: 0, now });
+  assert.equal(r1.ts, now);
+  const r2 = R.parseCallout('Error: a', { lastText: 'Error: a', lastChangeTs: 1000, now });
+  assert.equal(r2.ts, 1000); // 不变
+});
+test('parseCallout: 稳定<10s 显示 实时输出中', () => {
+  const r = R.parseCallout('Error: a', { lastText: 'Error: a', lastChangeTs: 5000, now: 8000 });
+  assert.equal(r.timeLabel, '实时输出中…');
+});
+test('parseCallout: 稳定>10s 显示相对时间', () => {
+  const r = R.parseCallout('Error: a', { lastText: 'Error: a', lastChangeTs: 1000, now: 15000 });
+  assert.match(r.timeLabel, /s 前/);
+});
+test('parseCallout: traceback/exception/panic/EACCES/errno 均触发', () => {
+  for (const t of ['Traceback (most recent)', 'Exception in thread', 'panic: x', 'EACCES: permission', 'errno -2']) {
+    assert.equal(R.parseCallout(t, { now: 1 }).show, true, `应触发: ${t}`);
+  }
+});

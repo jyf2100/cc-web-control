@@ -4,11 +4,11 @@
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
-    module.exports = factory();
+    module.exports = factory(require('./terminal_cleaner.cjs'));
   } else {
-    root.ConsoleRender = factory();
+    root.ConsoleRender = factory(root.TerminalCleaner || { cleanOutput: (s) => s });
   }
-})(typeof window !== 'undefined' ? window : globalThis, function () {
+})(typeof window !== 'undefined' ? window : globalThis, function (TC) {
   'use strict';
 
   const STATUS_META = {
@@ -101,5 +101,24 @@
     return { added, removed };
   }
 
-  return { statusMeta, escapeHtml, relativeTime, buildCardHTML, sortCardsErroredFirst, summarizeFleet, diffCards };
+  const stripAnsi = (s) => (TC && TC.cleanOutput ? TC.cleanOutput(s) : String(s || ''));
+  const ERROR_RE = /\b(error|fail(?:ed)?|traceback|exception|EACCES|errno|panic|✕)\b/i;
+
+  function parseCallout(rawScreen, state) {
+    const st = state || {};
+    const clean = stripAnsi(rawScreen || '');
+    const lines = clean.split('\n').map((l) => l.trim()).filter(Boolean);
+    if (!lines.length) return { show: false };
+    const fullLast = lines[lines.length - 1];
+    const text = fullLast.slice(0, 120);
+    if (!ERROR_RE.test(text)) return { show: false };
+    const now = st.now || Date.now();
+    const ts = (text === st.lastText) ? (st.lastChangeTs || now) : now;
+    const stableMs = ts ? now - ts : 0;
+    const display = fullLast.length > 120 ? text + '…' : text;
+    const timeLabel = stableMs > 10000 ? relativeTime(ts, now) : '实时输出中…';
+    return { show: true, text: display, ts, timeLabel };
+  }
+
+  return { statusMeta, escapeHtml, relativeTime, buildCardHTML, sortCardsErroredFirst, summarizeFleet, diffCards, parseCallout };
 });
