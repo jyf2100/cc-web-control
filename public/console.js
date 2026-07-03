@@ -27,6 +27,7 @@
   let maWs = null;
   let maStatus = { running: false, enabled: false };
   let maReconnectTimer = null;
+  let maDisconnectedLogged = false; // M1:仅断开状态转换时记一次,防重连失败循环刷屏
 
   function ensureWs() {
     if (ws && ws.readyState <= 1) return ws;
@@ -142,7 +143,13 @@
     maStartBtn.disabled = !enabled || running;
     maStopBtn.disabled = !enabled || !running;
     if (enabled && running && (!maWs || maWs.readyState > 1)) ensureMaWs();
-    if (!enabled && maWs) { try { maWs.close(); } catch {} maWs = null; }
+    // L1:running 转 false(用户 Stop)时主动关 maWs + 重置断开标记,免留陈旧连接/陈旧提示
+    if (enabled && !running && maWs) { try { maWs.close(); } catch {} maWs = null; maDisconnectedLogged = false; }
+    // L2:!enabled 时关 maWs 并清重连 timer(原仅关 maWs,timer 靠下 tick 自清)
+    if (!enabled) {
+      if (maWs) { try { maWs.close(); } catch {} maWs = null; }
+      if (maReconnectTimer) { clearInterval(maReconnectTimer); maReconnectTimer = null; }
+    }
   }
 
   function ensureMaWs() {
@@ -158,11 +165,16 @@
       }
     };
     maWs.onopen = () => {
+      maDisconnectedLogged = false; // M1:重连成功,允许下次断开再记
       maWs.send(JSON.stringify({ type: 'attach', target: { machine: 'main-agent', session: 'cc-main-agent' } }));
     };
     maWs.onclose = () => {
       if (maStatus.enabled && maStatus.running) {
-        maScreen.textContent += '\n[连接断开,重连中…]';
+        // M1:仅断开"状态转换"时记一次;重连失败循环里每个新 WS 的 onclose 不再重复追加
+        if (!maDisconnectedLogged) {
+          maScreen.textContent += '\n[连接断开,重连中…]';
+          maDisconnectedLogged = true;
+        }
         if (!maReconnectTimer) maReconnectTimer = setInterval(() => {
           if (maStatus.enabled && maStatus.running && (!maWs || maWs.readyState > 1)) ensureMaWs();
           else if (maReconnectTimer) { clearInterval(maReconnectTimer); maReconnectTimer = null; }
@@ -175,14 +187,23 @@
   async function maAction(path, btn) {
     btn.disabled = true;
     try {
-      await fetch(path, {
+      const res = await fetch(path, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: '{}',
       });
-      await poll();
-    } catch {} finally {
-      renderMaStatus();
+      if (!res.ok) {
+        // M2:HTTP 失败(429 限流/503 未就绪/500)给瞬态提示;不立即 renderMaStatus(会覆盖提示)。
+        // 按钮保持 disabled ~2s 直到下次 poll 的 renderMaStatus 按真实状态恢复(兼防双击)。
+        const detail = res.status === 429 ? '请求过频,请稍候'
+          : res.status === 503 ? 'agent 未就绪'
+          : `HTTP ${res.status}`;
+        maText.textContent = `操作失败:${detail}`;
+        return;
+      }
+      await poll(); // 成功 → poll 末尾 renderMaStatus 更新按钮 + 状态
+    } catch {
+      maText.textContent = '网络错误,请重试';
     }
   }
   maStartBtn.addEventListener('click', () => maAction('/api/main-agent/start', maStartBtn));
