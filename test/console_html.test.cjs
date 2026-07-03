@@ -1,0 +1,50 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'console.html'), 'utf8');
+
+test('加载 terminal_cleaner + console_render 脚本(顺序)', () => {
+  const idxTC = html.indexOf('terminal_cleaner.cjs');
+  const idxCR = html.indexOf('console_render.cjs');
+  const idxJS = html.indexOf('console.js');
+  assert.ok(idxTC > 0, '应加载 terminal_cleaner.cjs');
+  assert.ok(idxCR > 0, '应加载 console_render.cjs');
+  assert.ok(idxTC < idxCR, 'terminal_cleaner 须在 console_render 前');
+  assert.ok(idxCR < idxJS, 'console_render 须在 console.js 前');
+});
+test('顶层 .console-app 容器(非 #app)', () => {
+  assert.match(html, /class="console-app"/);
+  assert.doesNotMatch(html, /id="app"/);
+});
+test('topbar 含返回入口 + fleet 摘要挂点', () => {
+  assert.match(html, /class="console-topbar"/);
+  assert.match(html, /href="\/dashboard\.html"/);
+  assert.match(html, /id="fleet-summary"/);
+});
+test('卡片网格是 <ul id="board-body">(非 table)', () => {
+  assert.match(html, /<ul[^>]*id="board-body"/);
+  assert.doesNotMatch(html, /<table id="global-board"/);
+});
+test('HERO L2 callout 默认 hidden', () => {
+  assert.match(html, /id="hero-callout"[^>]*hidden/);
+});
+test('终端 term-target 支持 data-state + 融合输入', () => {
+  assert.match(html, /id="term-target"/);
+  assert.match(html, /id="term-input"/);
+  assert.match(html, /id="term-input-form"/);
+});
+test('废弃广播栏已移除(单输入融合)', () => {
+  assert.doesNotMatch(html, /id="broadcast-bar"/);
+  assert.doesNotMatch(html, /id="bc-send"/);
+  assert.doesNotMatch(html, /id="bc-input"/);
+});
+test('保留功能挂点(ma-* / hub-status / bc-result)', () => {
+  for (const id of ['hub-status', 'main-agent-panel', 'ma-status-dot', 'ma-status-text', 'ma-screen', 'ma-start-btn', 'ma-stop-btn', 'bc-result']) {
+    assert.match(html, new RegExp(`id="${id}"`), `应保留 #${id}`);
+  }
+});
+test('图标 span 标注 aria-hidden', () => {
+  assert.match(html, /aria-hidden="true"/);
+});

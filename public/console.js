@@ -108,11 +108,11 @@
   }
 
   function refreshBroadcast() {
-    bcBar.hidden = selected.size < 2;
-    bcCount.textContent = `已选 ${selected.size} 个会话`;
+    if (bcBar) bcBar.hidden = selected.size < 2;
+    if (bcCount) bcCount.textContent = `已选 ${selected.size} 个会话`;
   }
 
-  bcSend.addEventListener('click', () => {
+  if (bcSend) bcSend.addEventListener('click', () => {
     const targets = Array.from(selected).map((k) => { const [machine, session] = k.split('/'); return { machine, session }; });
     if (!targets.length || !bcInput.value) return;
     bcResult.textContent = '扇出中…';

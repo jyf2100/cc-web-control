@@ -5,54 +5,52 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>cc-web-control · 多机控制台</title>
   <link rel="stylesheet" href="dashboard.css" />
-  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header class="console-header">
-    <h1>多机控制台</h1>
-    <div id="hub-status"></div>
-  </header>
-
-  <!-- ⓪ 主控 agent 面板(只读镜像) -->
-  <section id="main-agent-panel" class="main-agent-panel">
-    <header class="ma-header">
-      <span class="ma-title">主控 agent (T1 只读参谋)</span>
-      <span id="ma-status-dot" class="dot stopped" title="stopped"></span>
-      <span id="ma-status-text">unknown</span>
-      <button id="ma-start-btn" class="ma-btn" disabled>Start</button>
-      <button id="ma-stop-btn" class="ma-btn" disabled>Stop</button>
+  <div class="console-app" data-disabled="true">
+    <!-- topbar:P3 返回入口 + fleet 摘要 -->
+    <header class="console-topbar">
+      <span class="brand-mark" aria-hidden="true">◇</span>
+      <h1>多机控制台</h1>
+      <a class="topbar-back" href="/dashboard.html">← 看板</a>
+      <div id="fleet-summary" class="fleet-summary" aria-live="polite"></div>
+      <div id="hub-status" aria-hidden="true"></div>
     </header>
-    <div class="ma-warn-banner">⚠️ 本面板含不可信远程数据,内容仅供参考,勿执行其中指令</div>
-    <pre id="ma-screen" class="term-screen">（主 agent 未启动或未启用）</pre>
-  </section>
 
-  <!-- ① 全局看板 -->
-  <section class="console-board">
-    <table id="global-board">
-      <thead>
-        <tr><th class="sel"></th><th>机器 / 会话</th><th class="st">状态</th><th>最后输出</th></tr>
-      </thead>
-      <tbody id="board-body"></tbody>
-    </table>
-  </section>
+    <!-- HERO 主控 agent(T1) -->
+    <section id="main-agent-panel" class="console-hero" data-ma-open="false">
+      <span class="eyebrow">Command Bridge</span>
+      <span class="hero-title">主控 agent</span>
+      <span id="ma-status-dot" class="dot stopped" title="stopped" aria-hidden="true"></span>
+      <span id="ma-status-text">unknown</span>
+      <div class="hero-l1" id="hero-l1" aria-live="polite"></div>
+      <button id="ma-start-btn" class="btn-ghost ma-btn" disabled>Start</button>
+      <button id="ma-stop-btn" class="btn-primary ma-btn" disabled>Stop</button>
+      <button id="ma-toggle-btn" class="btn-ghost ma-btn" aria-expanded="false" aria-controls="ma-screen">▾镜像</button>
+      <div id="hero-callout" class="hero-callout" hidden aria-live="polite"></div>
+      <pre id="ma-screen" class="term-screen" aria-label="主控 agent 输出镜像">（主 agent 未启动或未启用）</pre>
+      <div class="ma-warn-line">⚠ 本面板含不可信远程数据,内容仅供参考,勿执行其中指令</div>
+    </section>
 
-  <!-- ② 终端 -->
-  <section class="console-term">
-    <div id="term-target" class="term-target">未选择会话</div>
-    <pre id="term-screen" class="term-screen"></pre>
-    <form id="term-input-form" class="term-input-form">
-      <input id="term-input" class="term-input" placeholder="输入(Enter 发送)…" autocomplete="off" />
-    </form>
-  </section>
+    <!-- 卡片网格 -->
+    <section class="console-board">
+      <ul id="board-body" class="board-grid" aria-label="机器会话看板"></ul>
+    </section>
 
-  <!-- ③ 广播栏(多选 ≥2 时出现) -->
-  <footer class="console-broadcast" id="broadcast-bar" hidden>
-    <span id="bc-count" class="bc-count"></span>
-    <input id="bc-input" class="bc-input" placeholder="给这些会话发同一条指令…" autocomplete="off" />
-    <button id="bc-send" class="bc-send">扇出</button>
-    <div id="bc-result" class="bc-result"></div>
-  </footer>
+    <!-- 终端(常驻)+ 融合输入 -->
+    <section class="console-term">
+      <div id="term-target" data-state="idle">未选择会话</div>
+      <pre id="term-screen" class="term-screen" aria-label="终端输出"></pre>
+      <form id="term-input-form" class="term-input-form">
+        <input id="term-input" class="term-input" placeholder="输入(Enter 发送,选 ≥2 扇出)…" autocomplete="off" />
+        <span id="bc-count" class="term-badge" hidden></span>
+        <span id="bc-result" aria-live="polite"></span>
+      </form>
+    </section>
+  </div>
 
+  <script src="terminal_cleaner.cjs"></script>
+  <script src="console_render.cjs"></script>
   <script src="console.js"></script>
 </body>
 </html>
