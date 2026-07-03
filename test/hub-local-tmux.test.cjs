@@ -6,6 +6,7 @@ const { createLocalTmux } = require('../hub/local_tmux.cjs');
 
 function stubTmux() {
   const calls = [];
+  let envOut = 'CC_WEB_OWNED=1';
   return {
     calls,
     sendKeys: async (s, k, o) => { calls.push({ fn: 'sendKeys', s, k, o }); return true; },
@@ -14,6 +15,13 @@ function stubTmux() {
     createSession: async (s, c) => { calls.push({ fn: 'createSession', s, c }); return true; },
     killSession: async (s) => { calls.push({ fn: 'killSession', s }); return true; },
     sendKey: async (s, k) => { calls.push({ fn: 'sendKey', s, k }); return true; },
+    setEnv(v) { envOut = v; },
+    setEnvThrow(e) { envOut = undefined; this._envErr = e; },
+    showEnvironment: async (s, k) => {
+      calls.push({ fn: 'showEnvironment', s, k });
+      if (envOut === undefined) throw this._envErr || new Error('no such session');
+      return envOut;
+    },
   };
 }
 
@@ -39,4 +47,24 @@ test('capture: 透传 scrollback', async () => {
   const out = await lt.capture('s', 100);
   assert.equal(out, 'PANE');
   assert.equal(st.calls[0].sb, 100);
+});
+
+test('hasOwnedSession: CC_WEB_OWNED=1 → true', async () => {
+  const st = stubTmux();
+  const lt = createLocalTmux({ tmux: st });
+  assert.equal(await lt.hasOwnedSession('cc-main-agent'), true);
+  assert.equal(st.calls[0].fn, 'showEnvironment');
+  assert.equal(st.calls[0].k, 'CC_WEB_OWNED');
+});
+
+test('hasOwnedSession: CC_WEB_OWNED=0 → false(R3-L2 防误判)', async () => {
+  const st = stubTmux(); st.setEnv('CC_WEB_OWNED=0');
+  const lt = createLocalTmux({ tmux: st });
+  assert.equal(await lt.hasOwnedSession('s'), false);
+});
+
+test('hasOwnedSession: showEnvironment 抛错(session 不存在/无键)→ false', async () => {
+  const st = stubTmux(); st.setEnvThrow(new Error("can't find session: nope"));
+  const lt = createLocalTmux({ tmux: st });
+  assert.equal(await lt.hasOwnedSession('nope'), false);
 });

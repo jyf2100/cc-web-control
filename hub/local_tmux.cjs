@@ -19,6 +19,15 @@ function createLocalTmux({ tmux } = {}) {
     async create(session, command, opts) { return t.createSession(session, command, opts); },
     async kill(session) { return t.killSession(session); },
     async sendKey(session, key) { return t.sendKey(session, key); },
+    /** 判定 session 是否由 hub 拥有(创建时注入了 CC_WEB_OWNED=1)。非 owned/不存在 → false。 */
+    async hasOwnedSession(session) {
+      try {
+        const line = await t.showEnvironment(session, 'CC_WEB_OWNED');
+        return String(line).trim().split('=')[1] === '1';
+      } catch {
+        return false;
+      }
+    },
   };
 }
 
