@@ -26,6 +26,7 @@
   const termForm = document.getElementById('term-input-form');
   const termSection = document.querySelector('.console-term');
   const termCollapseBtn = document.getElementById('term-collapse-btn');
+  const termFullscreenBtn = document.getElementById('term-fullscreen-btn');
   const bcCount = document.getElementById('bc-count');
   const bcResult = document.getElementById('bc-result');
   const fleetSummary = document.getElementById('fleet-summary');
@@ -429,6 +430,20 @@
     termCollapseBtn.setAttribute('aria-expanded', String(!collapsed));
     // 切前 collapsed:true → 切后展开(▾);false → 切后收起(▸)
     termCollapseBtn.textContent = collapsed ? '▾终端' : '▸终端';
+  });
+  // 终端全屏:切 data-fullscreen,.console-term position:fixed 覆盖视口(隐藏 topbar/hero/board),
+  // 再点按钮或按 Esc 退出。aria-pressed 反映切换态,aria-label/文案同步给读屏。
+  const setFullscreen = (fs) => {
+    termSection.setAttribute('data-fullscreen', String(fs));
+    termFullscreenBtn.setAttribute('aria-pressed', String(fs));
+    termFullscreenBtn.textContent = fs ? '✕退出全屏' : '⛶全屏';
+    termFullscreenBtn.setAttribute('aria-label', fs ? '退出终端全屏' : '终端全屏');
+  };
+  termFullscreenBtn.addEventListener('click', () => {
+    setFullscreen(termSection.getAttribute('data-fullscreen') !== 'true');
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && termSection.getAttribute('data-fullscreen') === 'true') setFullscreen(false);
   });
   setInterval(renderMaCallout, 30000);
   setInterval(poll, 2000);

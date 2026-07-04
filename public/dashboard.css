@@ -185,6 +185,10 @@ html, body {
 .term-collapse-btn { font:inherit; font-size:.75em; color:var(--fg-2); background:transparent; border:none; padding:2px 8px; min-height:44px; cursor:pointer; touch-action:manipulation; }
 .term-collapse-btn:hover { color:var(--accent-2); }
 .term-collapse-btn:focus-visible { outline:2px solid var(--accent-2); outline-offset:2px; }
+.term-fullscreen-btn { font:inherit; font-size:.75em; color:var(--fg-2); background:transparent; border:none; padding:2px 8px; min-height:44px; cursor:pointer; touch-action:manipulation; }
+.term-fullscreen-btn:hover { color:var(--accent-2); }
+.term-fullscreen-btn:focus-visible { outline:2px solid var(--accent-2); outline-offset:2px; }
+.term-fullscreen-btn[aria-pressed="true"] { color:var(--accent-2); font-weight:600; }
 #term-screen { margin:0; flex:1; min-height:0; padding:8px 12px; background:var(--term-bg); color:var(--term-fg); font-family:var(--mono); font-size:.8em; overflow:auto; white-space:pre-wrap; }
 .term-input-form { display:flex; gap:6px; padding:6px 16px; border-top:1px solid var(--border); align-items:center; }
 #term-input { flex:1; }
@@ -195,6 +199,10 @@ html, body {
 .console-term[data-collapsed="true"] { flex-basis:auto; min-height:0; }
 .console-term[data-collapsed="true"] #term-screen,
 .console-term[data-collapsed="true"] .term-input-form { display:none; }
+/* 全屏态:终端覆盖整个视口(position:fixed inset:0),topbar/hero/board 被遮在底下 */
+.console-term[data-fullscreen="true"] { position:fixed; inset:0; z-index:200; flex-basis:auto; min-height:0; border:none; border-radius:0; }
+.console-term[data-fullscreen="true"] .term-header { padding:6px 16px; background:var(--surface); border-bottom:1px solid var(--border); }
+.console-term[data-fullscreen="true"] #term-screen { font-size:.9em; }
 
 @media (max-width: 768px) {
   /* HERO 折叠入顶部栏(P1 §4.2 A6):fleet 详情已在 #fleet-summary,只留状态点 + 文字 + 镜像按钮 */
