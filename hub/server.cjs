@@ -175,12 +175,6 @@ function startHub(opts) {
   // 已授权 / → 302 /console.html → 浏览器再请求 /console.html(requireAuth 通过)→ static 发文件。
   app.get('/', (req, res) => res.redirect('/console.html'));
 
-  // 单机看板页 dashboard.html 在 hub 上无 /api/dashboard 数据源(且其底部「切换」tab
-  // 写 openSwitchSheet 后跳 /,依赖单机 client.js 消费,而 console.js 不消费)→
-  // 一律重定向到多机控制台,避免用户落入"看板报错 / 切换直接回主页"的坏页。
-  // 注:console.html 的 topbar-back 仍指向 /dashboard.html(测试契约),由此重定向兜底。
-  app.get('/dashboard.html', (req, res) => res.redirect('/console.html'));
-
   // 静态:控制台前端(复用 public/);requireAuth 之后,控制台资源需登录
   const publicDir = path.join(__dirname, '..', 'public');
   // 前端 html/js/cjs 设 Cache-Control: no-store:防浏览器缓存旧版

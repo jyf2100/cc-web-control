@@ -307,7 +307,7 @@ test('已授权 GET / → 302 重定向到 /console.html(避免落入单机 inde
   }
 });
 
-test('已授权 GET /dashboard.html → 302 /console.html(单机看板页在 hub 无 /api/dashboard 数据源,导回多机控制台)', async () => {
+test('已授权 GET /dashboard.html 直服 HTML(不再重定向到 /console.html,bug 3 根治)', async () => {
   const s1 = await new StubMachine({ token: 't1' }).start();
   try {
     await withHub([s1], 'hubtok', async (hub) => {
@@ -315,8 +315,10 @@ test('已授权 GET /dashboard.html → 302 /console.html(单机看板页在 hub
         redirect: 'manual',
         headers: { Cookie: 'cc_web_auth=hubtok' },
       });
-      assert.equal(res.status, 302);
-      assert.equal(res.headers.get('location'), '/console.html');
+      assert.equal(res.status, 200);
+      const body = await res.text();
+      assert.match(body, /<!DOCTYPE html>/i, '应是 HTML 文档');
+      assert.match(body, /board-body|sessionList|console-app|fleet-summary/, '应含 dashboard.html 内容');
     });
   } finally {
     await s1.stop();
