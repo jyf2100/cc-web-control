@@ -17,7 +17,7 @@
     + (queryToken ? `?token=${encodeURIComponent(queryToken)}` : '');
   let ws = null;
   let currentTarget = null;       // {machine,session}
-  const selected = new Set();     // "machine/session"
+  const selected = new Map();     // key → {machine,session}(Set 字符串 + split('/') 在 id/name 含 / 时被截断 → 改 Map 直存对象)
 
   const termTarget = document.getElementById('term-target');
   const termScreen = document.getElementById('term-screen');
@@ -115,6 +115,8 @@
 
   function attachTarget(t) {
     currentTarget = t;
+    // H1:单选 attach 清空多选 selection,防陈旧勾选偷偷把命令路由到错机
+    selected.clear(); refreshBroadcast();
     termTarget.textContent = t ? `${t.machine} / ${t.session}` : '未选择会话';
     termScreen.textContent = '';
     if (!t) return;
@@ -128,9 +130,14 @@
     if (!termInput.value) return;
     ensureWs();
     if (selected.size >= 2) {
-      const targets = Array.from(selected).map((k) => { const [machine, session] = k.split('/'); return { machine, session }; });
+      // M1:直读 Map.values() 的 {machine,session} 对象,不再 split('/')(id/name 含 / 会被截断)
+      const targets = Array.from(selected.values());
       bcResult.textContent = '扇出中…';
       sendWhenOpen({ type: 'broadcast', targets, data: termInput.value, enter: true });
+    } else if (selected.size === 1) {
+      // H2:多选模式只勾 1 个时,命令发到该勾选项(否则会落到 currentTarget,可能路由到错机)
+      const only = Array.from(selected.values())[0];
+      sendWhenOpen({ type: 'input', target: only, data: termInput.value, enter: true });
     } else if (currentTarget) {
       sendWhenOpen({ type: 'input', target: currentTarget, data: termInput.value, enter: true });
     } else {
@@ -279,11 +286,8 @@
   let switchSheet = null;
   let multiSelectMode = false;
 
-  async function openSwitchSheet() {
-    if (!window.SwitchSheet || !switchTab) return;
-    let machines = [];
-    try { const r = await fetch('/api/machines'); if (r.ok) machines = (await r.json()).machines || []; } catch {}
-    // 扁平化 machine/session
+  // 扁平化 machine/session 列表 → 渲染项(含 key 与离线后缀)
+  function flattenItems(machines) {
     const items = [];
     for (const m of machines) {
       const online = m.online !== false;
@@ -295,6 +299,12 @@
         });
       }
     }
+    return items;
+  }
+
+  async function openSwitchSheet() {
+    if (!window.SwitchSheet || !switchTab) return;
+    // M2:先创建/打开 sheet 再 fetch —— 避免 fetch 期间用户已关闭抽屉,.then 又把它掀开
     if (!switchSheet) {
       switchSheet = window.SwitchSheet.createSwitchSheet({
         trigger: switchTab,
@@ -302,23 +312,51 @@
         // 不用 onPick:交互全在 renderMachineItems 内(支持多选不关闭);createSwitchSheet 默认 onPick 为 noop
       });
     }
-    renderMachineItems(items);
+    renderMachineItems([], { loading: true });     // 即时"加载中…"
     switchSheet.open();
     switchTab.setAttribute('aria-expanded', 'true');
+    let machines = [], loadError = false;
+    try {
+      const r = await fetch('/api/machines');
+      if (r.ok) machines = (await r.json()).machines || []; else loadError = true;
+    } catch (e) {
+      // M4:fetch / JSON 解析失败不再静默 —— 记一条 warn 便于排障
+      loadError = true;
+      console.warn('openSwitchSheet fetch 失败', e);
+    }
+    renderMachineItems(flattenItems(machines), { loading: false, error: loadError });
   }
 
-  // 渲染机器项到 sheet(单选 attach+关 / 多选 toggle selected);每次 toggle 重建列表刷新选中态
-  function renderMachineItems(items) {
+  // 渲染机器项到 sheet(单选 attach+关 / 多选 toggle selected);每次 toggle 重建列表刷新选中态。
+  // state={loading,error} 控制加载/失败/正常三态(M2/M4:与"暂无机器"区分);restoreKey 用于重建后还原焦点(M5)。
+  function renderMachineItems(items, state, restoreKey) {
     const sheetEl = document.getElementById('switchSheet'); // createSwitchSheet 注入的根元素(id 见 switch_sheet.cjs)
     if (!sheetEl) return;
+    const loading = !!(state && state.loading);
+    const errored = !!(state && state.error);
+    // M5:重建前抓活动按钮 key,重建后还原焦点(否则焦点掉回 <body>)
+    const focusBtn = sheetEl.querySelector('.switch-sheet-btn:focus[data-key]');
+    const focusKey = restoreKey || (focusBtn ? focusBtn.getAttribute('data-key') : null);
     const old = sheetEl.querySelector('.switch-sheet-machines'); if (old) old.remove();
     const oldToggle = sheetEl.querySelector('.switch-sheet-multitoggle'); if (oldToggle) oldToggle.remove();
     const wrap = document.createElement('div'); wrap.className = 'switch-sheet-machines';
     const title = document.createElement('p'); title.className = 'switch-sheet-section-title';
-    title.textContent = multiSelectMode ? `机器(已选 ${selected.size} · 扇出)` : '机器';
+    title.textContent = loading ? '机器(加载中…)'
+      : (multiSelectMode ? `机器(已选 ${selected.size} · 扇出)` : '机器');
     wrap.appendChild(title);
     const list = document.createElement('ul'); list.className = 'switch-sheet-list'; list.setAttribute('role', 'list');
-    if (!items.length) {
+    if (loading) {
+      const tip = document.createElement('p'); tip.className = 'switch-sheet-projects-empty';
+      tip.textContent = '加载中…'; wrap.appendChild(tip);
+    } else if (errored) {
+      // M4:加载失败态(DISTINCT 于"暂无机器")—— 不静默,给一个重试按钮
+      const li = document.createElement('li'); li.className = 'switch-sheet-item';
+      const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'switch-sheet-btn';
+      retry.textContent = '加载失败,点此重试';
+      retry.setAttribute('data-key', '__retry__');
+      retry.addEventListener('click', () => { openSwitchSheet(); });
+      li.appendChild(retry); list.appendChild(li);
+    } else if (!items.length) {
       const empty = document.createElement('p'); empty.className = 'switch-sheet-projects-empty';
       empty.textContent = '暂无机器'; wrap.appendChild(empty);
     } else {
@@ -327,12 +365,14 @@
         const li = document.createElement('li'); li.className = 'switch-sheet-item';
         const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'switch-sheet-btn';
         btn.setAttribute('aria-pressed', String(isSel));
+        btn.setAttribute('data-key', it.key); // M5:重建后还原焦点
         btn.textContent = (multiSelectMode ? (isSel ? '☑ ' : '☐ ') : '') + it.label;
         btn.addEventListener('click', () => {
           if (multiSelectMode) {
-            selected.has(it.key) ? selected.delete(it.key) : selected.add(it.key);
+            // Map 化:存 {machine,session} 对象,不再依赖 key 字符串(避免 split('/'))
+            selected.has(it.key) ? selected.delete(it.key) : selected.set(it.key, { machine: it.machine, session: it.session });
             refreshBroadcast();
-            renderMachineItems(items); // 重建刷新选中态(避免陈旧闭包)
+            renderMachineItems(items, state, it.key); // 重建刷新选中态(避免陈旧闭包)+ 还原焦点
             return;
           }
           attachTarget({ machine: it.machine, session: it.session });
@@ -345,8 +385,19 @@
     // 多选模式开关
     const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'switch-sheet-btn switch-sheet-multitoggle';
     toggle.textContent = multiSelectMode ? '✓ 多选模式(广播)' : '切多选模式';
-    toggle.addEventListener('click', () => { multiSelectMode = !multiSelectMode; renderMachineItems(items); });
+    toggle.setAttribute('data-key', '__multi_toggle__'); // M5:模式切换后还原焦点到此按钮
+    toggle.addEventListener('click', () => {
+      multiSelectMode = !multiSelectMode;
+      // H1:退出多选模式清空 selected,防陈旧勾选偷偷路由命令
+      if (!multiSelectMode) { selected.clear(); refreshBroadcast(); }
+      renderMachineItems(items, state, '__multi_toggle__');
+    });
     sheetEl.appendChild(toggle);
+    // M5:还原焦点到刚操作的按钮(key 可能含特殊字符 → CSS.escape)
+    if (focusKey) {
+      const target = sheetEl.querySelector(`.switch-sheet-btn[data-key="${CSS.escape(focusKey)}"]`);
+      if (target && typeof target.focus === 'function') target.focus({ preventScroll: true });
+    }
   }
 
   if (switchTab) switchTab.addEventListener('click', openSwitchSheet);
@@ -363,20 +414,31 @@
         termScreen.textContent = `机器 ${urlM} 未注册或会话 ${urlS} 不存在。点底部「切换」选择机器。`;
         setTermState('disconnected');
       }
-    }).catch(() => { /* 网络失败:静默,WS 后续重试 */ });
+    }).catch((e) => {
+      // M4:网络失败不再完全静默 —— UI 留在合理状态(等 ensureWs 重试),仅记一条 warn 便于排障
+      console.warn('tryAttachFromUrl fetch 失败', e);
+    });
   }
 
   // ---- 跨页 openSwitchSheet flag(看板「切换」tab 写入)----
   if (sessionStorage.getItem('openSwitchSheet') === '1') {
     sessionStorage.removeItem('openSwitchSheet');
-    setTimeout(openSwitchSheet, 300); // 等 createSwitchSheet 可用
+    // M3:switch_sheet.cjs 同步先于 console.js 加载,window.SwitchSheet 通常已就绪。
+    //     去掉魔法 300ms,留 5 × 50ms 重试预算以防未来改成异步加载。
+    let attempts = 0;
+    const tryOpenSwitchSheet = () => {
+      if (window.SwitchSheet) { openSwitchSheet(); return; }
+      if (++attempts < 5) setTimeout(tryOpenSwitchSheet, 50);
+    };
+    tryOpenSwitchSheet();
   }
 
   // ---- topbar 当前机告警(替代旧 fleet 摘要;复用 #fleet-summary 挂点)----
   function renderTopbarAlert() {
     if (!fleetSummary) return;
-    if (!currentTarget) { fleetSummary.innerHTML = '<span>未选机器</span>'; return; }
-    fleetSummary.innerHTML = `<span>${currentTarget.machine} / ${currentTarget.session}</span>`;
+    // C1:textContent 写 currentTarget.machine/session(来自 /api/machines 自注册机器,不可信)——
+    //     innerHTML 是存储型 XSS 面。textContent 自身安全,合并 null 分支后也无需 <span> 包装。
+    fleetSummary.textContent = currentTarget ? `${currentTarget.machine} / ${currentTarget.session}` : '未选机器';
   }
 
   setInterval(renderMaCallout, 30000);
