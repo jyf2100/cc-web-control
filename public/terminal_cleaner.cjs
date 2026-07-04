@@ -36,5 +36,24 @@
     return filteredLines.join('\n');
   }
 
-  return { cleanOutput };
+  function cleanSummary(raw, maxLen) {
+    if (raw == null) return '';
+    const max = (typeof maxLen === 'number' && maxLen > 0) ? maxLen : 60;
+    let s = cleanOutput(String(raw));
+    // 去 markdown 行内/行首标记(保留文字内容)
+    s = s
+      .replace(/^#{1,6}\s+/gm, '')          // ## / ### 标题前缀
+      .replace(/^\s{0,3}[-*+]\s+/gm, '')    // - * + 列表符
+      .replace(/^\s{0,3}>\s?/gm, '')        // > 引用
+      .replace(/\*\*(.+?)\*\*/g, '$1')      // **粗体**
+      .replace(/__(.+?)__/g, '$1')          // __粗体__
+      .replace(/`([^`]+)`/g, '$1');         // `行内码`
+    // 折叠连续空白(含换行)为单空格
+    s = s.replace(/\s+/g, ' ').trim();
+    // 截断 + 省略号
+    if (s.length > max) s = s.slice(0, max).trimEnd() + '…';
+    return s;
+  }
+
+  return { cleanOutput, cleanSummary };
 });
