@@ -62,9 +62,10 @@
     const primaryName = o.singleMachine ? escapeHtml(s.name) : name;
     const secondary = o.singleMachine ? escapeHtml(s.cwd || '') : sess;
     const lastRaw = s.lastLine || (m.online === false ? '(离线)' : '');
+    const lastCleanRaw = TC.cleanSummary ? TC.cleanSummary(lastRaw, 40) : lastRaw;  // aria-label 净化口径
     const last = escapeHtml(TC.cleanSummary ? TC.cleanSummary(lastRaw, 60) : lastRaw);
     const time = escapeHtml(relativeTime(o.lastTs, o.now));
-    const label = escapeHtml(`${m.name || m.id} / ${s.name},${meta.label},${lastRaw ? lastRaw.slice(0, 40) : '无输出'}`);
+    const label = escapeHtml(`${m.name || m.id} / ${s.name},${meta.label},${lastCleanRaw || '无输出'}`);
     // href:query 值先 encodeURIComponent(< → %3C,& → %26 防参数边界混淆),
     // 再整体 escapeHtml 放入属性(& 分隔符 → &amp;,防 " breakout)。
     // 浏览器解析:HTML 解码(&amp;→&)→ URL 解码(%3C→<),最终 m/s 参数值还原。

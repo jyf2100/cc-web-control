@@ -206,6 +206,17 @@ test('buildCardInner lastLine 经 cleanSummary:markdown 标记剥离', () => {
   assert.doesNotMatch(html, /card__last[^<]*##/); // 不残留 ## 标记
 });
 
+test('buildCardInner: aria-label 用 cleanSummary 净化后文本(不含 markdown 残留)', () => {
+  const html = B.buildCardInner(
+    { id: 'm1', name: 'mac' },
+    { name: 'ses', status: 'waiting', lastLine: '## 收尾 `mem`' },
+    {}
+  );
+  const label = (html.match(/aria-label="([^"]*)"/) || [])[1];
+  assert.ok(!label.includes('##'), 'aria-label 不应含标题标记');
+  assert.ok(!label.includes('`'), 'aria-label 不应含反引号');
+});
+
 test('isStale: waiting+>24h → true; 23h/无lastTs/非waiting → false', () => {
   const now = 1000000000;
   assert.equal(B.isStale({ status: 'waiting', lastTs: now - 25 * 3600000 }, now), true);  // 25h
