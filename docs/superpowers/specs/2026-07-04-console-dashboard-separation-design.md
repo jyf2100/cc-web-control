@@ -25,30 +25,39 @@
 - `dashboard.html` 在 hub 上**恢复为独立多机看板**(不再重定向)
 - **单机行为不动**(已分离)
 
-## 3. 方案(已确认:方案 A + 切换抽屉)
+## 3. 方案(已确认:方案 A + 切换抽屉 + 抽屉多选)
 
 ### 3.1 两页职责(hub)
 
 | | `/dashboard.html` 看板 | `/console.html` 控制台 |
 |---|---|---|
-| topbar | 品牌 + fleet 摘要(工作/等待/错误/空闲计数) | 品牌 + 返回看板 + fleet 摘要 |
-| 主体 | **卡片网格**(全机器,错误优先排序,只读监控) | **main-agent panel**(状态/Start-Stop/镜像/callout)+ **终端区**(含全屏) |
+| topbar | 品牌 + fleet 摘要(工作/等待/错误/空闲计数)+ **board-stale 提示**(poll 过期时,暖琥珀 span,见 §8) | 品牌 + 返回看板 + **当前 attach 机状态告警**(WS 推送;非 fleet 计数) |
+| 主体 | **卡片网格**(全机器,错误优先排序,只读监控,**click-to-navigate**,无 ☐/☑ 多选) | **main-agent panel**(状态/Start-Stop/镜像/callout)+ **终端区**(含全屏) |
 | 底部 tab | 控制台 / **看板**(active) / 切换 | **控制台**(active) / 看板 / 切换 |
-| 关键交互 | 卡片点击 → `/console.html?m=<machine>&s=<session>` | 机器选择走「切换」抽屉 |
+| 关键交互 | 卡片点击 → `/console.html?m=<machine>&s=<session>`;「切换」tab → 跨页开控制台抽屉(§3.4) | 机器选择/多选/广播走「切换」抽屉(§3.2、§3.4) |
 
 **main-agent 归控制台**:Start/Stop 是操作,与终端同属控制台;看板纯监控,职责清晰。
+**fleet 计数只在看板 topbar**:控制台 topbar 只显示当前机告警(WS),避免控制台额外 poll global-dashboard。
 
-### 3.2 机器切换抽屉(新组件)
+### 3.2 机器切换抽屉(复用 createSwitchSheet,模态)
 
-控制台页底部「切换」tab 点击 → 弹出机器列表抽屉(类似单机 `switch_sheet.cjs` 的 switchSheet):
-- 数据复用 `/api/global-dashboard` 的 machines
-- 每项:状态点 + 机器名 + session
-- 选中 → attach 终端 + 关抽屉
-- 与单机 switchSheet 概念一致 → 实现全局统一
+**契约**:复用单机 `switch_sheet.cjs` 的 `createSwitchSheet`(模态:backdrop + 背景 `inert` + 焦点陷阱 + Esc/Ctrl-C 关闭 + focus return),不另造裸浮层。与单机 switchSheet 对称 → 真正全局统一。
+- **入口**:控制台页底部「切换」tab(`aria-haspopup="dialog"`/`aria-expanded`,非纯文字 hint);也可被看板「切换」tab 跨页触发(§3.4)
+- **backdropRoot 参数化**:hub 控制台根是 `.console-app`,把 `createSwitchSheet` 的 backdropRoot 参数化(单机仍传原选择器,hub 传 `.console-app`),不改单机调用
+- **内容**:hub 抽屉**只含机器列表段**(机器名 + 状态点 + session),**无项目段**(hub 无本地项目概念,与单机不对称,显式声明)
+- **数据源**:抽屉打开时按需 `fetch('/api/machines')` 单次拉快照(非 poll);控制台页日常不 poll global-dashboard
+- **safe-area**:抽屉定位 `bottom: calc(60px + env(safe-area-inset-bottom))`,吸附底部 tabbar 上沿(避免 iPhone 主屏指示器重叠)
 
-### 3.3 卡片跳转
+### 3.3 卡片跳转(看板 → 控制台)
 
-看板卡片点击 → `/console.html?m=<machine>&s=<session>`(URL query,可书签 + sessionStorage 兜底)。`console.js` 读 param 自动 attach 选中机器。
+看板卡片点击 → `/console.html?m=<machine>&s=<session>`(URL query,可书签)。`console.js` 读 param 自动 attach。**失败兜底**(§8):机器未注册 → 终端态「机器 X 未注册」;offline → `data-state="disconnected"` + 允许抽屉选他机。
+
+### 3.4 广播/扇出 + 跨页切换信号
+
+**广播保留**(多机控制核心能力),入口收进切换抽屉:
+- 抽屉默认单选(选 1 机 → attach + 关抽屉);**「多选模式」开关**开启后可选 ≥2 机 → 终端输入框 Enter 扇出广播(复用 `console.js` 现有广播分支),抽屉显示「已选 N · 扇出」
+- 看板纯监控,**不承载多选**;卡片 `select`(☐/☑)字段从 `board_render.cjs` 删除(§4.1),多选语义只在抽屉
+- **跨页切换信号**(沿用单机 `dashboard.html` 模式):看板页「切换」tab → 写 `sessionStorage.openSwitchSheet='1'` → 跳 `/console.html` → `console.js` init 检测 flag → 开抽屉 → 清 flag
 
 ## 4. 文件组织与模块迁移
 
@@ -58,6 +67,7 @@
 
 从 `console_render.cjs` 抽出卡片渲染纯函数:
 - `buildCardHTML(c)` / `updateCardNode(li, c)` / `parseCallout(text)` 及卡片状态/排序相关
+- **删除 `select`(☐/☑)多选语义**:看板纯监控、click-to-navigate,卡片不再承载多选(多选移到切换抽屉,§3.4)。迁移时从 `buildCardHTML`/`updateCardNode` 移除 `.card__select`/check 字符/「已选」前缀
 
 由看板页(`dashboard.html`)加载。遵循现有 UMD 纯模块模式(浏览器 `root.BoardRender=factory(...)` + Node `module.exports`),测试 `require` 纯函数。
 
@@ -97,10 +107,11 @@
 
 ## 6. 数据流
 
-- **看板页 poll**:hub `/api/global-dashboard`(2s)/ 单机 `/api/dashboard`(2s)
-- **控制台页**:终端 WS(attach 选中机器,指数退避重连)+ main-agent poll `/api/main-agent/*`
-- **切换抽屉**:复用 `/api/global-dashboard` 的 machines 字段(单一数据源,与看板一致;不再额外调 `/api/machines`)
-- **卡片跳转**:`?m=&s=` → console.js 读取 → 自动 attach
+- **看板页 poll**:hub `/api/global-dashboard`(2s,卡片网格 + fleet 摘要 + stale)/ 单机 `/api/dashboard`(2s,session-list)
+- **控制台页**(日常零额外 poll):终端 WS(attach 机,指数退避重连)+ main-agent poll `/api/main-agent/*`;topbar 当前机告警由 WS 推送
+- **切换抽屉**:打开时按需 `fetch('/api/machines')` 单次快照(非 poll;控制台不 poll global-dashboard)
+- **卡片跳转**:`?m=&s=` → console.js 读取 → 自动 attach(失败兜底见 §8)
+- **跨页切换信号**:`sessionStorage.openSwitchSheet`(看板→控制台,§3.4)
 
 ## 7. hub 路由反转(关键决策)
 
@@ -110,17 +121,20 @@
 
 ## 8. 错误处理
 
-- **双模式探测**:`global-dashboard` 200=hub / 404=单机 fallback;两者都失败 → 错误态(复用 `dashboard.js` 现有 `showState`)
-- **WS 断连**:指数退避重连(已有)
-- **看板 poll 失败**:重试 + stale 提示(已有 `pollFailCount`/`hero-stale` 机制迁移到看板页)
+- **双模式探测**:`global-dashboard` 200=hub / 404=单机 fallback;两者都失败 → 错误态(复用 `dashboard.js` 现有 `showState`);探测期间显示 loading(避免空屏)
+- **看板 stale 提示落点**(P0-2):poll 失败/过期时,在**看板 topbar fleet 摘要末**追加 `<span class="board-stale" aria-live="polite">数据 Ns 前</span>`(暖琥珀 `--accent-2`);不复用 `.console-hero #hero-l1`(hero 留控制台页)
+- **WS 断连**:指数退避重连(已有);断连时控制台 topbar 告警 `data-state="disconnected"`
+- **看板 poll 失败**:重试 + 上述 board-stale(迁移 `pollFailCount` 计数,显示位置改 topbar)
+- **卡片跳转失败兜底**(P2-4):`?m=` 机器未注册 → 终端态「机器 X 未注册」+ 提示开抽屉;offline → `data-state="disconnected"` + 允许抽屉选他机
 - **切换抽屉空**:无机器时显示空态
-- **探测时序**:首次加载探测期间显示 loading(避免空屏)
+- **unknown 状态点对比度**(P2-3):`--fg-3`(0.35)描边在浅底约 1.5:1 不达标,看板卡片 unknown 描边提到 `--fg-2`(≥3:1,SC 1.4.11)
+- **双模式 title**(P2-5):hub 模式 `<title>` 带 fleet 数(如「(3) CC 看板 · 多机」),与单机模式区分
 
 ## 9. 测试策略
 
 - `board_render.cjs` 纯函数测试(从 `console_render.test.cjs` 迁移:`buildCardHTML`/`updateCardNode`/`parseCallout`)
 - `dashboard.html` 双模式探测测试(`global-dashboard` 200→hub / 404→单机)
-- `console.html` 结构测试(移除 board,含 tab + 抽屉 + URL param 读取)
+- `console.html` 结构测试(移除 board,含 tab + 抽屉 + URL param 读取);**契约:console.html 不再含 `.console-board` / `#board-body`**(更新 `console_html.test.cjs` 断言)
 - hub 路由测试更新(`/dashboard.html` 直服,不再 302)
 - a11y/console_style 测试(切换抽屉触摸目标/对比度/reduced-motion)
 - 全量 `node --test test/*.test.cjs` 保持绿
@@ -150,3 +164,8 @@
 | main-agent 归属 | 控制台页 | Start/Stop 是操作,与终端同属控制台;看板纯监控 |
 | 机器选择形式 | 切换抽屉 + 三项 tab | 与单机 switchSheet 对称,真正全局统一 |
 | hub 路由 | 移除重定向,恢复直服 | bug 3 根治,让 dashboard.html 真正可用 |
+| 广播/扇出 | 抽屉多选模式保留 | 多机控制核心能力;看板纯监控不承载多选,入口收进控制台抽屉 |
+| 切换抽屉 | 复用 createSwitchSheet(模态) | 与单机对称、WCAG 友好(backdrop/inert/focus trap);hub 无项目段 |
+| 控制台 topbar | 当前机告警(WS),非 fleet 计数 | 避免控制台额外 poll global-dashboard;fleet 计数只在看板 |
+| 抽屉数据源 | 打开时按需 /api/machines 单次 | 控制台日常零额外 poll,抽屉低频按需拉 |
+| board select | 看板删 ☐/☑,纯 click-to-navigate | 看板纯监控;多选语义只在抽屉 |
