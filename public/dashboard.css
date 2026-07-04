@@ -195,6 +195,15 @@ html, body {
   list-style: none;
 }
 .board-stale-group > details > summary::-webkit-details-marker { display: none; }
+.board-stale-group > details > summary::before {
+  content: '▶'; margin-right: 8px; transition: transform .15s ease;
+}
+.board-stale-group > details[open] > summary::before {
+  transform: rotate(90deg);                       /* ▶ 旋成 ▼,对齐 ASCII 目标视觉 */
+}
+.board-stale-group > details > summary:focus-visible {
+  outline: 2px solid var(--accent-2); outline-offset: 2px;   /* WCAG 2.4.7,与 .tab/.card 一致 */
+}
 .board-stale-group > details[open] > summary { margin-bottom: 8px; }
 .board-stale-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; list-style: none; padding: 0; margin: 0; }
 

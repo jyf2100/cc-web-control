@@ -86,3 +86,12 @@ test('单机卡片 + 陈旧折叠区 + stale-grid CSS 契约', () => {
 test('fleet summary 提权(字体 ≥ .9em,原 .85em)', () => {
   assert.match(CONSOLE_SECTION, /\.fleet-summary\s*\{[^}]*font-size:\s*\.9/);
 });
+test('陈旧折叠 summary 有展开指示符 + 展开态旋转(对齐 ASCII ▼ 目标)', () => {
+  assert.match(CONSOLE_SECTION, /\.board-stale-group\s*>\s*details\s*>\s*summary::before/);
+  assert.match(CONSOLE_SECTION, /content:\s*['"]▶['"]/);
+  assert.match(CONSOLE_SECTION, /\.board-stale-group\s*>\s*details\[open\]\s*>\s*summary::before[\s\S]*?rotate/);
+});
+test('陈旧折叠 summary 有 focus-visible 焦点环(WCAG 2.4.7)', () => {
+  assert.match(CONSOLE_SECTION, /\.board-stale-group\s*>\s*details\s*>\s*summary:focus-visible/);
+  assert.match(CONSOLE_SECTION, /\.board-stale-group\s*>\s*details\s*>\s*summary:focus-visible[\s\S]*?outline/);
+});
