@@ -20,26 +20,33 @@
                 <img class="app-logo" src="logo.png" alt="Roc-CC" width="24" height="24" onerror="this.hidden=true;">
                 <span id="title">CC 看板</span>
             </div>
+            <div id="fleet-summary" class="fleet-summary" aria-live="polite" hidden></div>
+            <span id="board-stale" class="board-stale" aria-live="polite" hidden></span>
         </header>
         <main class="main">
             <h1 class="visually-hidden">CC 看板</h1>
+            <!-- 单机模式:session-list(dashboard_render 渲染) -->
             <ul id="sessionList" class="session-list" aria-label="会话列表"></ul>
+            <!-- hub 模式:卡片网格(board_render 渲染) -->
+            <ul id="board-body" class="board-grid" aria-label="机器会话看板" hidden></ul>
             <div id="stateMessage" class="state-message" hidden></div>
         </main>
 
         <nav class="bottom-tabbar" aria-label="主导航">
-            <a class="tab" href="/"><span class="tab-icon" aria-hidden="true">▤</span><span class="tab-label">控制台</span></a>
+            <a class="tab" id="tab-console" href="/"><span class="tab-icon" aria-hidden="true">▤</span><span class="tab-label">控制台</span></a>
             <a class="tab tab--active" href="/dashboard.html" aria-current="page"><span class="tab-icon" aria-hidden="true">◫</span><span class="tab-label">看板</span></a>
             <button class="tab" type="button" id="switchTab" aria-haspopup="dialog" aria-expanded="false"><span class="tab-icon" aria-hidden="true">⇄</span><span class="tab-label">切换</span></button>
         </nav>
     </div>
     <script>
-        // 看板页「切换」tab:写跨页标志后跳控制台,由控制台 init 检测并打开抽屉
-        document.getElementById('switchTab').addEventListener('click', () => {
+        // 看板页「切换」tab:写跨页标志后跳控制台(hub→/console.html,单机→/),由控制台 init 检测开抽屉
+        document.getElementById('switchTab').addEventListener('click', function () {
             sessionStorage.setItem('openSwitchSheet', '1');
-            window.location.href = '/';
+            var isHubMode = document.getElementById('board-body') && !document.getElementById('board-body').hidden;
+            window.location.href = isHubMode ? '/console.html' : '/';
         });
     </script>
+    <script src="board_render.cjs"></script>
     <script src="dashboard_render.cjs"></script>
     <script src="dashboard.js"></script>
 </body>

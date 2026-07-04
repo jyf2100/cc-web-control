@@ -118,6 +118,16 @@ html, body {
 .session--flash { animation: session-flash 1.1s cubic-bezier(0.22, 1, 0.36, 1) 1; }
 @media (prefers-reduced-motion: reduce) { .session--flash { animation: none; } }
 
+/* === hub 看板 topbar:fleet 摘要 + board-stale + unknown 对比度(双模式新增)=== */
+/* .fleet-summary 几何已在 console 段定义;此处仅补 dashboard 段的 [hidden] 降级
+   (display:flex 会盖过 UA 的 [hidden],需显式 display:none)。 */
+.fleet-summary[hidden] { display: none; }
+.board-stale { color: var(--accent-2); font-size: .8em; font-weight: 600; }
+.board-stale[hidden] { display: none; }
+/* unknown 描边达 SC 1.4.11 非文字元素对比度 3:1(原 --fg-3 约 1.5:1,浅底不可辨)。
+   与 .s-dot--idle 同款 1.5px --fg-2 描边。 */
+.s-dot--unknown { box-shadow: 0 0 0 1.5px var(--fg-2); }
+
 /* ===== 多机控制台 Fleet Dashboard(token 化,删除原硬编码)===== */
 .console-app {
   height: 100dvh; height: var(--vh, 100dvh); display: flex; flex-direction: column; overflow: hidden;
