@@ -77,17 +77,39 @@ test('buildCardHTML: machine 缺 name → 回退到 id', () => {
   assert.match(html, /<span class="card__name">m1<\/span>/);
 });
 
-// ---- sortCardsErroredFirst / summarizeFleet / diffCards(从 console_render.test.cjs 原样迁)----
-test('sortCardsErroredFirst: errored 置顶 + 同级字典序 + 不改入参', () => {
-  const cards = [{ name: 'a', status: 'working' }, { name: 'b', status: 'errored' }, { name: 'c', status: 'idle' }];
-  assert.equal(B.sortCardsErroredFirst(cards)[0].name, 'b');
-  assert.equal(cards[0].name, 'a'); // 不改入参
+// ---- sortCardsByRelevance / summarizeFleet / diffCards(从 console_render.test.cjs 原样迁)----
+test('sortCardsByRelevance: errored 置顶 + 同级按 lastTs 降序 + 不改入参', () => {
+  const now = 1000000000;
+  const cards = [
+    { name: 'a', status: 'working', lastTs: 100 },
+    { name: 'b', status: 'errored', lastTs: 50 },
+    { name: 'c', status: 'working', lastTs: 200 },
+  ];
+  const sorted = B.sortCardsByRelevance(cards, now);
+  assert.equal(sorted[0].name, 'b');  // errored 首
+  assert.equal(sorted[1].name, 'c');  // working: lastTs 200 > 100
+  assert.equal(sorted[2].name, 'a');
+  assert.equal(cards[0].name, 'a');   // 不改入参
 });
-test('sortCardsErroredFirst: 全链 errored<working<waiting<idle + null 兜底', () => {
-  const names = B.sortCardsErroredFirst([
-    { status: 'idle', name: 'i' }, { status: 'working', name: 'w' },
-    { status: 'errored', name: 'e' }, { status: 'waiting', name: 't' }, null,
-  ]).map((c) => c && c.name);
+
+test('sortCardsByRelevance: 陈旧 waiting 降到活跃 waiting 与 idle 之后', () => {
+  const now = 1000000000;
+  const sorted = B.sortCardsByRelevance([
+    { status: 'waiting', name: 'stale', lastTs: now - 25 * 3600000 }, // 陈旧 → rank 4.5
+    { status: 'waiting', name: 'fresh', lastTs: now - 1000 },          // 活跃 → rank 2
+    { status: 'idle', name: 'idle1', lastTs: 0 },                     // rank 3
+  ], now);
+  assert.equal(sorted[0].name, 'fresh');
+  assert.equal(sorted[1].name, 'idle1');
+  assert.equal(sorted[2].name, 'stale');
+});
+
+test('sortCardsByRelevance: 全链 errored<working<waiting<idle + null 兜底', () => {
+  const now = 1000000000;
+  const names = B.sortCardsByRelevance([
+    { status: 'idle', name: 'i', lastTs: 0 }, { status: 'working', name: 'w', lastTs: 0 },
+    { status: 'errored', name: 'e', lastTs: 0 }, { status: 'waiting', name: 't', lastTs: 0 }, null,
+  ], now).map((c) => c && c.name);
   assert.deepEqual(names, ['e', 'w', 't', 'i', null]);
 });
 test('summarizeFleet: 计各状态 + online/total + 未识别 status 跳过', () => {
@@ -143,7 +165,8 @@ test('flattenFleet: 缺 session.status → unknown', () => {
 });
 
 // 集成测试(原 sort bug 会被这条抓到:errored 必须冒到首位)
-test('INTEGRATION: flattenFleet → sortCardsErroredFirst 把 errored 冒到首位', () => {
+test('INTEGRATION: flattenFleet → sortCardsByRelevance 把 errored 冒到首位', () => {
+  const now = 1000000000;
   const machines = [
     { id: 'm1', name: 'alpha', online: true, sessions: [
       { name: 's1', status: 'idle', lastLine: '', lastTs: 0 },
@@ -153,7 +176,7 @@ test('INTEGRATION: flattenFleet → sortCardsErroredFirst 把 errored 冒到首�
       { name: 's3', status: 'working', lastLine: 'running', lastTs: 0 },
     ]},
   ];
-  const sorted = B.sortCardsErroredFirst(B.flattenFleet(machines));
+  const sorted = B.sortCardsByRelevance(B.flattenFleet(machines), now);
   assert.equal(sorted[0].status, 'errored');
   assert.equal(sorted[0].key, 'm1/s2');
 });

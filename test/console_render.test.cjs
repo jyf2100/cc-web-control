@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const R = require('../public/console_render.cjs');
 
-// 卡片渲染相关(escapeHtml/statusMeta/buildCardHTML/sortCardsErroredFirst/
+// 卡片渲染相关(escapeHtml/statusMeta/buildCardHTML/sortCardsByRelevance/
 // summarizeFleet/diffCards)已随 board_render.cjs 迁出,本文件只测 main-agent 相关:
 // parseCallout / nextBackoff(relativeTime 由 parseCallout 间接覆盖)。
 

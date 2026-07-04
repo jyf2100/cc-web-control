@@ -85,7 +85,7 @@
     return `<li class="card-row" data-key="${escapeHtml(key)}">` + buildCardInner(machine, session, opts) + `</li>`;
   }
 
-  // hub fleet → 卡片数组:把 status 提升到顶层(供 sortCardsErroredFirst 读取),
+  // hub fleet → 卡片数组:把 status 提升到顶层(供 sortCardsByRelevance 读取),
   // 离线机 → 'offline'。null/undefined → []。纯函数。
   function flattenFleet(machines) {
     const out = [];
@@ -122,12 +122,19 @@
   }
 
   const STATUS_RANK = { errored: 0, working: 1, waiting: 2, idle: 3, unknown: 4, offline: 5 };
-  function sortCardsErroredFirst(cards) {
+  function rankOf(card, now) {
+    if (!card) return 4;
+    const base = STATUS_RANK[card.status];
+    if (base == null) return 4;
+    if (isStale(card, now)) return 4.5; // 陈旧 waiting 降到 unknown 之后
+    return base;
+  }
+  function sortCardsByRelevance(cards, now) {
     return [...(cards || [])].sort((a, b) => {
-      const ra = STATUS_RANK[a && a.status] == null ? 4 : STATUS_RANK[a.status];
-      const rb = STATUS_RANK[b && b.status] == null ? 4 : STATUS_RANK[b.status];
+      const ra = rankOf(a, now), rb = rankOf(b, now);
       if (ra !== rb) return ra - rb;
-      return String((a && a.name) || '').localeCompare(String((b && b.name) || ''));
+      const ta = (a && a.lastTs) || 0, tb = (b && b.lastTs) || 0;
+      return tb - ta; // 同级:新→旧(lastTs 降序)
     });
   }
 
@@ -153,5 +160,5 @@
     return { added, removed };
   }
 
-  return { statusMeta, escapeHtml, relativeTime, buildCardHTML, buildCardInner, flattenFleet, sortCardsErroredFirst, summarizeFleet, diffCards, isStale, partitionStale };
+  return { statusMeta, escapeHtml, relativeTime, buildCardHTML, buildCardInner, flattenFleet, sortCardsByRelevance, summarizeFleet, diffCards, isStale, partitionStale };
 });

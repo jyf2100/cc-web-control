@@ -131,9 +131,9 @@
         var titleEl2 = document.getElementById('title'); if (titleEl2) titleEl2.textContent = t;
     }
     function renderBoard(payload) {
-        // Fix 1:BR.flattenFleet 把 status 提升到顶层 → BR.sortCardsErroredFirst 才能把 errored 冒到首位
+        // Fix 1:BR.flattenFleet 把 status 提升到顶层 → BR.sortCardsByRelevance 才能把 errored 冒到首位
         // (原 flattenCards 把 status 嵌在 .session.status,sort 读 a.status 永远 undefined → errored 不冒泡)
-        var sorted = BR.sortCardsErroredFirst(BR.flattenFleet(payload.machines || []));
+        var sorted = BR.sortCardsByRelevance(BR.flattenFleet(payload.machines || []));
         if (!sorted.length) {
             boardBody.innerHTML = '<li class="board-empty"><span class="eyebrow">NO MACHINES</span> 尚无机器注册到 hub</li>';
             cardByKey = new Map(); prevKeys = new Set();
