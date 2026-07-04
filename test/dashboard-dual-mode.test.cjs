@@ -37,14 +37,11 @@ test('dashboard.js hub title 带 fleet 数', () => {
 // ---- Re-review regression locks(NEW-H1/H2/M1/M2):字符串级断言,锁定具体修复点 ----
 // 说明:真正的行为级 DOM 测试需 JSDOM/Playwright(Task 7);此处仅锁源码结构,确保回退即被抓到。
 
-// NEW-H1:renderBoard 卡片循环须有 else 分支刷新已存在卡片内容(否则同 key 状态变更后,
-// 重排移到 errored 位但内容仍显旧 status dot/lastLine)。
-test('NEW-H1: renderBoard 已存在卡片走 else 更新路径(cardByKey.get(...).innerHTML = BR.buildCardInner)', () => {
-  // 修复前卡片循环只有 if(创建新卡片)无 else —— 同 key 状态变更后重排位置正确但内容陈旧。
-  // 此表达式为 else 分支专属:if 分支重建用 li.innerHTML = BR.buildCardInner(变量名 li),
-  // 重排循环用 boardBody.appendChild(existing) —— 均不命中。修复前全文件不存在此表达式。
-  assert.match(js, /cardByKey\.get\(card\.key\)\.innerHTML\s*=\s*BR\.buildCardInner/);
-});
+// Task 8(单机看板重设计)以全量重建取代 keyed-diff renderBoard,以下两个源码结构锁因锁定的
+// 代码路径已移除而删除:
+// - NEW-H1(else 分支刷新同 key 卡片):全量重建每帧 buildCardLi 重建所有卡片 → 内容总是最新(意图无条件满足)。
+// - NEW-ISSUE-1(cardByKey.size===0 守卫清 ERROR 残留):全量重建无条件 boardBody.innerHTML='' → ERROR 不可能残留。
+// 行为保护由新架构结构性保证;若未来回退 keyed-diff,需重新引入这些锁。
 
 // NEW-H2:showBoardError 须重置 cardByKey Map(否则恢复时命中分离节点 + ERROR <li> 残留),
 // 且恢复路径(renderFleetSummary)须复位 fleetSummary.hidden = false。
@@ -72,15 +69,4 @@ test('NEW-M1: visibility 恢复 loop() 守卫 !hubModeActive', () => {
 test('NEW-M2: detectMode 含 probe.status === 401 重定向分支', () => {
   // 用 probe(非 res)限定 detectMode 上下文;pollHub 用 res.status,不会误命中。
   assert.match(js, /probe\.status\s*===\s*401/);
-});
-
-// NEW-ISSUE-1:showBoardError 注入 ERROR <li> 后,renderBoard 恢复路径须在 cardByKey 为空时
-// 清空 boardBody.innerHTML,否则 ERROR <li> 在恢复卡片之上残留直到整页重载。
-// (showBoardError 已重置 cardByKey,故恢复首帧 cardByKey.size === 0;正常更新非空 → 不触发,免重建。)
-test('NEW-ISSUE-1: renderBoard 非空分支以 cardByKey.size === 0 守卫清空 boardBody.innerHTML', () => {
-  // 锚定 renderBoard 函数体(声明后 1100 字符窗口),内含 `cardByKey.size === 0)` 后紧跟
-  // `boardBody.innerHTML = ''`(窗口 40 字符,刚好覆盖 `if (...) ` 单行写法)。
-  // 修复前 renderBoard 内全无 `cardByKey.size === 0` 表达式 → 此式不存在 → 失败(已本地 sanity 验证)。
-  // showBoardError 内虽有 boardBody.innerHTML = '...',但其前无 cardByKey.size === 0,不误命中。
-  assert.match(js, /function renderBoard[\s\S]{0,1100}cardByKey\.size\s*===\s*0\)[\s\S]{0,40}boardBody\.innerHTML\s*=\s*''/);
 });

@@ -116,63 +116,86 @@
     var hubPolling = false;
     var cardByKey = new Map();            // Fix 9:key → <li>,O(1) 查找/重排,免 CSS 转义
 
-    function renderFleetSummary(machines) {
+    function renderFleetSummary(machines, singleMachine, partition) {
         var s = BR.summarizeFleet(machines);
         // NEW-H2:showBoardError 把 fleetSummary.hidden=true;恢复时(任意 renderBoard 路径均经此)
         // 必须复位 hidden=false,否则摘要区在错误恢复后永久隐藏。
         fleetSummary.hidden = false;
-        fleetSummary.innerHTML =
-            '<span><span class="s-icon" aria-hidden="true">▶</span> ' + s.working + '</span>' +
-            '<span><span class="s-icon" aria-hidden="true">⏸</span> ' + s.idle + '</span>' +
-            '<span><span class="s-icon" aria-hidden="true">✕</span> ' + s.errored + '</span>' +
-            '<span>在线 ' + s.online + '/' + s.total + '</span>';
-        var t = '(' + s.online + ') CC 看板 · 多机';
+        if (singleMachine && partition) {
+            // 单机:会话维度(活跃/陈旧/异常),机器数无信息量故略
+            fleetSummary.innerHTML =
+                '<span>' + partition.active.length + ' 活跃</span>' +
+                '<span>' + partition.stale.length + ' 陈旧</span>' +
+                '<span><span class="s-icon" aria-hidden="true">✕</span> ' + s.errored + ' 异常</span>';
+        } else {
+            // 多机:机器维度(现状)
+            fleetSummary.innerHTML =
+                '<span><span class="s-icon" aria-hidden="true">▶</span> ' + s.working + '</span>' +
+                '<span><span class="s-icon" aria-hidden="true">⏸</span> ' + s.idle + '</span>' +
+                '<span><span class="s-icon" aria-hidden="true">✕</span> ' + s.errored + '</span>' +
+                '<span>在线 ' + s.online + '/' + s.total + '</span>';
+        }
+        var t = singleMachine ? 'CC 看板 · 单机' : '(' + s.online + ') CC 看板 · 多机';
         document.title = t;
         var titleEl2 = document.getElementById('title'); if (titleEl2) titleEl2.textContent = t;
     }
+    function buildCardLi(card, singleMachine) {
+        var li = document.createElement('li');
+        li.className = 'card-row'; li.dataset.key = card.key;
+        // Fix 2:BR.buildCardInner 直接返回 <a href="/console.html?m=&s=">…</a>(click-to-navigate)
+        li.innerHTML = BR.buildCardInner(card.machine, card.session, {
+            lastTs: card.lastTs, now: Date.now(), singleMachine: singleMachine
+        });
+        return li;
+    }
     function renderBoard(payload) {
-        // Fix 1:BR.flattenFleet 把 status 提升到顶层 → BR.sortCardsByRelevance 才能把 errored 冒到首位
-        // (原 flattenCards 把 status 嵌在 .session.status,sort 读 a.status 永远 undefined → errored 不冒泡)
-        var sorted = BR.sortCardsByRelevance(BR.flattenFleet(payload.machines || []));
+        var machines = payload.machines || [];
+        var flat = BR.flattenFleet(machines);
+        // 单机判定:不同 machine.id ≤ 1 → 单机模式(弱化机器维度,强化会话/项目维度)
+        var machineIds = {};
+        for (var mi = 0; mi < machines.length; mi++) machineIds[machines[mi].id] = true;
+        var singleMachine = Object.keys(machineIds).length <= 1;
+        var sorted = BR.sortCardsByRelevance(flat);
+        var partition = BR.partitionStale(sorted);
         if (!sorted.length) {
             boardBody.innerHTML = '<li class="board-empty"><span class="eyebrow">NO MACHINES</span> 尚无机器注册到 hub</li>';
             cardByKey = new Map(); prevKeys = new Set();
-            renderFleetSummary(payload.machines || []);
+            renderFleetSummary(machines, singleMachine, partition);
             return;
         }
-        var nextKeys = sorted.map(function (c) { return c.key; });
-        var diff = BR.diffCards(prevKeys, nextKeys);
-        // NEW-ISSUE-1:showBoardError 注入的 ERROR <li>(及首次渲染前的空板)在 cardByKey 空时仍占位;
-        // 恢复/首渲时 cardByKey 为空,先清掉残留 <li>,再 append 新卡片。正常更新 cardByKey 非空 → 不触发,
-        // 避免无谓重建。(空数组分支已自带 innerHTML 重置,无需此行。)
-        if (cardByKey.size === 0) boardBody.innerHTML = '';
-        // Fix 9:Map<key,<li>> 替代 querySelector('[data-key=…]')—— O(1) 查找/重排,无 CSS 转义风险(M4/M5)
-        for (var k = 0; k < diff.removed.length; k++) {
-            var node = cardByKey.get(diff.removed[k]);
-            if (node) { node.remove(); cardByKey.delete(diff.removed[k]); }
+        // 展开状态保持:轮询全量重建前记录陈旧折叠区 open 状态,重建后继承(免每次轮询重折叠打扰)
+        var prevStaleOpen = false;
+        var prevDetails = boardBody.querySelector('li.board-stale-group > details');
+        if (prevDetails) prevStaleOpen = !!prevDetails.open;
+        // 全量重建:单机规模无 keyed-diff 性能压力。cardByKey 保留供 showBoardError 重置。
+        boardBody.innerHTML = '';
+        cardByKey = new Map();
+        for (var ai = 0; ai < partition.active.length; ai++) {
+            var liA = buildCardLi(partition.active[ai], singleMachine);
+            cardByKey.set(partition.active[ai].key, liA);
+            boardBody.appendChild(liA);
         }
-        for (var c = 0; c < sorted.length; c++) {
-            var card = sorted[c];
-            if (!cardByKey.has(card.key)) {
-                var li = document.createElement('li');
-                li.className = 'card-row'; li.dataset.key = card.key;
-                // Fix 2:BR.buildCardInner 直接返回 <a href="/console.html?m=&s=">…</a>(click-to-navigate;原 .match 正则贪婪+null 风险)
-                li.innerHTML = BR.buildCardInner(card.machine, card.session, { lastTs: card.lastTs, now: Date.now() });
-                cardByKey.set(card.key, li);
-                boardBody.appendChild(li);
-            } else {
-                // NEW-H1:同 key(同 m.id/s.name)卡片状态已变(如 working→errored)—— 重排会把旧节点移到
-                // errored 位,但内容(status dot/icon/data-status/lastLine/相对时间)仍是旧的。此处刷新 innerHTML。
-                cardByKey.get(card.key).innerHTML = BR.buildCardInner(
-                    card.machine, card.session, { lastTs: card.lastTs, now: Date.now() }
-                );
+        if (partition.stale.length) {
+            var groupLi = document.createElement('li');
+            groupLi.className = 'board-stale-group';
+            var details = document.createElement('details'); // 默认 closed(无 open 属性)
+            if (prevStaleOpen) details.open = true; // 继承上次展开状态
+            var sum = document.createElement('summary');
+            sum.textContent = partition.stale.length + ' 个陈旧会话(>24h)';
+            details.appendChild(sum);
+            var grid = document.createElement('ul');
+            grid.className = 'board-grid board-stale-grid';
+            for (var si = 0; si < partition.stale.length; si++) {
+                var liS = buildCardLi(partition.stale[si], singleMachine);
+                cardByKey.set(partition.stale[si].key, liS);
+                grid.appendChild(liS);
             }
+            details.appendChild(grid);
+            groupLi.appendChild(details);
+            boardBody.appendChild(groupLi);
         }
-        for (var r = 0; r < sorted.length; r++) { // 重排到 errored-first 顺序(appendChild 移动已有节点,O(1))
-            var existing = cardByKey.get(sorted[r].key); if (existing) boardBody.appendChild(existing);
-        }
-        prevKeys = new Set(nextKeys);
-        renderFleetSummary(payload.machines || []);
+        prevKeys = new Set(sorted.map(function (c) { return c.key; }));
+        renderFleetSummary(machines, singleMachine, partition);
     }
     // Fix 6:hub 降级(5xx/格式异常)时把错误消息显式呈现到看板区,替代静默回退单机
     function showBoardError(msg) {
@@ -243,7 +266,6 @@
         hubModeActive = true;                              // Fix 7:标记 hub 模式,visibility 恢复时重启 hubLoop
         hubPolling = true;
         renderBoard(data);
-        renderFleetSummary(data.machines || []);
         hubLoop();
     }
 
