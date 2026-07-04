@@ -217,24 +217,27 @@ test('buildCardInner: aria-label 用 cleanSummary 净化后文本(不含 markdow
   assert.ok(!label.includes('`'), 'aria-label 不应含反引号');
 });
 
-test('isStale: waiting+>24h → true; 23h/无lastTs/非waiting → false', () => {
+test('isStale: waiting/unknown +>24h → true; 23h/无lastTs/其他状态 → false', () => {
   const now = 1000000000;
-  assert.equal(B.isStale({ status: 'waiting', lastTs: now - 25 * 3600000 }, now), true);  // 25h
-  assert.equal(B.isStale({ status: 'waiting', lastTs: now - 23 * 3600000 }, now), false); // 23h
-  assert.equal(B.isStale({ status: 'waiting', lastTs: 0 }, now), false);                  // 无 lastTs
-  assert.equal(B.isStale({ status: 'working', lastTs: now - 100 * 86400000 }, now), false); // 非 waiting
+  assert.equal(B.isStale({ status: 'waiting', lastTs: now - 25 * 3600000 }, now), true);   // 25h waiting
+  assert.equal(B.isStale({ status: 'unknown', lastTs: now - 25 * 3600000 }, now), true);   // 25h unknown(§1 痛点数据含 unknown)
+  assert.equal(B.isStale({ status: 'waiting', lastTs: now - 23 * 3600000 }, now), false);  // 23h waiting
+  assert.equal(B.isStale({ status: 'unknown', lastTs: now - 23 * 3600000 }, now), false);  // 23h unknown
+  assert.equal(B.isStale({ status: 'waiting', lastTs: 0 }, now), false);                   // 无 lastTs
+  assert.equal(B.isStale({ status: 'working', lastTs: now - 100 * 86400000 }, now), false); // 非 waiting/unknown
   assert.equal(B.isStale(null, now), false);
 });
 
 test('partitionStale: 按 isStale 分 active/stale 两组', () => {
   const now = 1000000000;
   const { active, stale } = B.partitionStale([
-    { status: 'waiting', lastTs: now - 25 * 3600000 },  // stale
+    { status: 'waiting', lastTs: now - 25 * 3600000 },  // stale(陈旧 waiting)
+    { status: 'unknown', lastTs: now - 25 * 3600000 },  // stale(陈旧 unknown)
     { status: 'working', lastTs: now - 1000 },           // active
     { status: 'waiting', lastTs: now - 1000 },           // active
   ], now);
   assert.equal(active.length, 2);
-  assert.equal(stale.length, 1);
+  assert.equal(stale.length, 2);                          // waiting + unknown 陈旧
   assert.equal(B.partitionStale(null).active.length, 0);
 });
 

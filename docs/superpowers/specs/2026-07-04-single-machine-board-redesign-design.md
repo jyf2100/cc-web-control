@@ -31,7 +31,7 @@
 1. **单机时弱化机器维度,强化会话/项目维度** —— 机器名 `mac-pro` 重复无信息量;会话名 / 项目路径才是主语。
 2. **lastLine 净化为干净摘要** —— 去终端 ANSI + markdown 标记,截断 1 行。
 3. **时间分级友好** —— 加天 / 周档,告别 `633h 前`。
-4. **陈旧会话降权 / 折叠** —— 实时状态(working / errored / waiting<24h)置顶,陈旧 waiting(>24h)折叠。
+4. **陈旧会话降权 / 折叠** —— 实时状态(working / errored / waiting/unknown<24h)置顶,陈旧 waiting/unknown(>24h)折叠(§1 痛点:633h unknown 与 waiting 同为死会话,一并折叠)。
 5. **保留多机扩展性** —— ≥2 台机器自动恢复机器维度(机器名 + 分组),响应式。
 
 ## 3. 单机判定
@@ -78,7 +78,8 @@
 - `flattenFleet` 透传 `cwd`(若 hub 提供)到 session,供单机副行。
 
 #### A6. 新增 `isStale(card, now)` 纯函数
-- `card.status === 'waiting' && card.lastTs && (now - card.lastTs) > 24h` → `true`。
+- `(card.status === 'waiting' || card.status === 'unknown')` 且 `card.lastTs && (now - card.lastTs) > 24h` → `true`。
+- waiting 与 unknown 同为"挂起无进展"语义(§1 痛点:633h unknown 与 waiting 并列),陈旧阈值统一,一并折叠。
 - 供 `sortCardsByRelevance` 与 dashboard.js 分组折叠共用,单一真相源。
 
 ### B. 看板渲染(`dashboard.js` / `dashboard.css` / `dashboard.html`)

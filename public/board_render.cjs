@@ -113,7 +113,9 @@
 
   const STALE_MS = 24 * 60 * 60 * 1000; // 24h
   function isStale(card, now) {
-    if (!card || card.status !== 'waiting') return false;
+    if (!card) return false;
+    // waiting/unknown 且 >24h 视为陈旧(§1 痛点:633h unknown 与 waiting 同为死会话,一并折叠)
+    if (card.status !== 'waiting' && card.status !== 'unknown') return false;
     if (!card.lastTs) return false;
     const n = now || Date.now();
     return (n - card.lastTs) > STALE_MS;
