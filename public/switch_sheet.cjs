@@ -129,7 +129,8 @@
     let openState = false, savedOverflow = '', lastFocused = null;
     const focusables = () => Array.from(sheet.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])')).filter((el) => el.offsetParent !== null);
     // 抽屉打开时把背景卡片 inert(补 aria-modal 跨 AT 缺陷);关闭移除
-    const backdropRoot = () => doc.querySelector('.console-card');
+    const rootSel = (opts && typeof opts.backdropRoot === 'string' && opts.backdropRoot) || '.console-card';
+    const backdropRoot = () => doc.querySelector(rootSel);
     const onKeydown = (e) => {
       if (!openState) return;
       if (shouldCloseOnKey(e)) { e.preventDefault(); close(); return; }

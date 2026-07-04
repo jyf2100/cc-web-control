@@ -111,3 +111,10 @@ test('buildSessionItems 纯函数保留(向后兼容)', () => {
     [{name:'a',label:'a',attached:false,isCurrent:true}]
   );
 });
+
+test('createSwitchSheet backdropRoot 可经 opts 注入(默认 .console-card 兼容单机)', () => {
+  const src = fs.readFileSync('public/switch_sheet.cjs', 'utf8');
+  assert.match(src, /opts\.backdropRoot/);                             // 读 opts
+  assert.match(src, /\.console-card/);                                 // 默认回退单机根
+  assert.doesNotMatch(src, /querySelector\(['"]\.console-card['"]\)/); // 不再写死
+});
