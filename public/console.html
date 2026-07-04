@@ -32,11 +32,6 @@
       <div class="ma-warn-line">⚠ 本面板含不可信远程数据,内容仅供参考,勿执行其中指令</div>
     </section>
 
-    <!-- 卡片网格 -->
-    <section class="console-board">
-      <ul id="board-body" class="board-grid" aria-label="机器会话看板"></ul>
-    </section>
-
     <!-- 终端(可折叠,P1 §4.2 A6)+ 融合输入 -->
     <section class="console-term" data-collapsed="false">
       <div class="term-header">
@@ -51,10 +46,18 @@
         <span id="bc-result" aria-live="polite"></span>
       </form>
     </section>
+
+    <!-- 底部三项 tab(控制台 active/看板/切换),与单机全局统一 -->
+    <nav class="bottom-tabbar" aria-label="主导航">
+      <a class="tab tab--active" href="/console.html" aria-current="page"><span class="tab-icon" aria-hidden="true">▤</span><span class="tab-label">控制台</span></a>
+      <a class="tab" href="/dashboard.html"><span class="tab-icon" aria-hidden="true">◫</span><span class="tab-label">看板</span></a>
+      <button class="tab" type="button" id="switchTab" aria-haspopup="dialog" aria-expanded="false"><span class="tab-icon" aria-hidden="true">⇄</span><span class="tab-label">切换</span></button>
+    </nav>
   </div>
 
   <script src="terminal_cleaner.cjs"></script>
   <script src="console_render.cjs"></script>
+  <script src="switch_sheet.cjs"></script>
   <script src="console.js"></script>
 </body>
 </html>
