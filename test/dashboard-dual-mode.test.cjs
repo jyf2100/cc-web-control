@@ -66,3 +66,12 @@ test('NEW-M2: detectMode 含 probe.status === 401 重定向分支', () => {
   // 用 probe(非 res)限定 detectMode 上下文;pollHub 用 res.status,不会误命中。
   assert.match(js, /probe\.status\s*===\s*401/);
 });
+
+// Fix 5:0 机器误标单机 + 空态混淆(看板重设计 re-review)
+test('renderBoard: 0 机器不标单机(singleMachine 需 machines.length > 0)', () => {
+  assert.match(js, /singleMachine\s*=\s*machines\.length\s*>\s*0\s*&&/);
+});
+test('renderBoard: 区分「无机器」与「无会话」空态', () => {
+  assert.match(js, /machines\.length\s*===\s*0/);
+  assert.match(js, /NO SESSIONS/);
+});

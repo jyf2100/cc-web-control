@@ -152,11 +152,18 @@
         // 单机判定:不同 machine.id ≤ 1 → 单机模式(弱化机器维度,强化会话/项目维度)
         var machineIds = {};
         for (var mi = 0; mi < machines.length; mi++) machineIds[machines[mi].id] = true;
-        var singleMachine = Object.keys(machineIds).length <= 1;
+        // 0 机器不标单机(避免标题「单机」与正文「NO MACHINES」矛盾);单机 = 有机器且不同 id ≤ 1
+        var singleMachine = machines.length > 0 && Object.keys(machineIds).length <= 1;
         var sorted = BR.sortCardsByRelevance(flat);
         var partition = BR.partitionStale(sorted);
-        if (!sorted.length) {
+        if (machines.length === 0) {
             boardBody.innerHTML = '<li class="board-empty"><span class="eyebrow">NO MACHINES</span> 尚无机器注册到 hub</li>';
+            renderFleetSummary(machines, false, partition);   // 0 机器走多机空态,不标单机
+            return;
+        }
+        if (!sorted.length) {
+            // 有机器但无会话:区分于「无机器」,引导启动会话而非查 hub 注册
+            boardBody.innerHTML = '<li class="board-empty"><span class="eyebrow">NO SESSIONS</span> 暂无运行中的会话,在控制台启动一个。</li>';
             renderFleetSummary(machines, singleMachine, partition);
             return;
         }
