@@ -77,3 +77,12 @@ test('switch-sheet 焦点陷阱 + Esc/Ctrl-C 关闭 + focus return', () => {
   assert.match(switchSheetSrc, /shouldCloseOnKey/);
   assert.match(switchSheetSrc, /lastFocused\.focus/);
 });
+test('单机卡片 + 陈旧折叠区 + stale-grid CSS 契约', () => {
+  assert.match(CONSOLE_SECTION, /\.card--single\b/);
+  assert.match(CONSOLE_SECTION, /\.board-stale-group\b/);
+  assert.match(CONSOLE_SECTION, /\.board-stale-grid\b/);
+  assert.match(CONSOLE_SECTION, /\.board-stale-group[\s\S]*?grid-column:\s*1\s*\/\s*-1/); // 折叠区占整行
+});
+test('fleet summary 提权(字体 ≥ .9em,原 .85em)', () => {
+  assert.match(CONSOLE_SECTION, /\.fleet-summary\s*\{[^}]*font-size:\s*\.9/);
+});

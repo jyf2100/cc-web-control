@@ -141,7 +141,7 @@ html, body {
 .console-topbar h1 { font-size:1rem; margin:0; }
 .console-topbar .topbar-back { color:var(--fg-2); text-decoration:none; font-size:.85em; }
 .console-topbar .topbar-back:hover { color:var(--accent-2); }
-.fleet-summary { margin-left:auto; display:flex; gap:10px; align-items:center; color:var(--fg-2); font-size:.85em; }
+.fleet-summary { margin-left:auto; display:flex; gap:10px; align-items:center; color:var(--fg-2); font-size:.95em; }
 .fleet-summary .s-icon { font-size:.9em; }
 
 .console-hero { position:relative; padding:10px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
@@ -182,6 +182,22 @@ html, body {
 .card__time { grid-column:5; grid-row:1; color:var(--fg-2); font-size:.7em; }
 .card__session { grid-column:4; grid-row:2; color:var(--fg-2); font-size:.75em; }
 .card__last { grid-column:1 / -1; grid-row:3; color:var(--fg-2); font-size:.75em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* 单机卡片:会话名当主标题(字号/字重沿用 .card__name),锚点 class 供契约测试 */
+.card--single { /* 单机态标记,布局同 .card */ }
+
+/* 陈旧会话折叠区:<li> 占整行,<details> 默认 closed 收起 */
+.board-stale-group { grid-column: 1 / -1; list-style: none; margin-top: 4px; }
+.board-stale-group > details > summary {
+  min-height: 44px; display: flex; align-items: center; cursor: pointer;
+  color: var(--fg-2); font-size: .8em; padding: 8px 12px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r);
+  list-style: none;
+}
+.board-stale-group > details > summary::-webkit-details-marker { display: none; }
+.board-stale-group > details[open] > summary { margin-bottom: 8px; }
+.board-stale-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; list-style: none; padding: 0; margin: 0; }
+
 /* 状态点:几何 + working/idle/errored/waiting/unknown 色统一在 tokens.css;此处仅 console 局部增强(idle 描边达 WCAG 3:1)+ 补 offline */
 .s-dot--idle { box-shadow:0 0 0 1.5px var(--fg-2); }
 .s-dot--offline { background:var(--fg-3); }
