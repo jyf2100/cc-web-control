@@ -5,11 +5,11 @@
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
-    module.exports = factory();
+    module.exports = factory(require('./terminal_cleaner.cjs'));
   } else {
-    root.BoardRender = factory();
+    root.BoardRender = factory(root.TerminalCleaner || { cleanSummary: function (s) { return s; } });
   }
-})(typeof window !== 'undefined' ? window : globalThis, function () {
+})(typeof window !== 'undefined' ? window : globalThis, function (TC) {
   'use strict';
 
   const STATUS_META = {
@@ -58,7 +58,7 @@
     const sess = escapeHtml(s.name);
     const mid = escapeHtml(m.id);
     const lastRaw = s.lastLine || (m.online === false ? '(离线)' : '');
-    const last = escapeHtml(lastRaw);
+    const last = escapeHtml(TC.cleanSummary ? TC.cleanSummary(lastRaw, 60) : lastRaw);
     const time = escapeHtml(relativeTime(o.lastTs, o.now));
     const label = escapeHtml(`${m.name || m.id} / ${s.name},${meta.label},${lastRaw ? lastRaw.slice(0, 40) : '无输出'}`);
     // href:query 值先 encodeURIComponent(< → %3C,& → %26 防参数边界混淆),

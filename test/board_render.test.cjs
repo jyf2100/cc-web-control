@@ -178,3 +178,13 @@ test('buildCardHTML = <li data-key> + buildCardInner 组合', () => {
   assert.match(full, /<\/a><\/li>$/);
   assert.ok(full.indexOf(inner) > 0, 'buildCardHTML 必须包含 buildCardInner 输出');
 });
+
+test('buildCardInner lastLine 经 cleanSummary:markdown 标记剥离', () => {
+  const html = B.buildCardInner(
+    { id: 'm1', name: 'M1', online: true },
+    { name: 's1', status: 'idle', lastLine: '## 收尾 ✅ `mem`' },
+    {}
+  );
+  assert.match(html, /<span class="card__last">收尾 ✅ mem<\/span>/);
+  assert.doesNotMatch(html, /card__last[^<]*##/); // 不残留 ## 标记
+});
