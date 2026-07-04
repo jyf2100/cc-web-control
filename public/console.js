@@ -19,7 +19,6 @@
   let currentTarget = null;       // {machine,session}
   const selected = new Set();     // "machine/session"
 
-  const boardBody = document.getElementById('board-body');
   const termTarget = document.getElementById('term-target');
   const termScreen = document.getElementById('term-screen');
   const termInput = document.getElementById('term-input');
@@ -31,10 +30,7 @@
   const bcResult = document.getElementById('bc-result');
   const fleetSummary = document.getElementById('fleet-summary');
   const heroCallout = document.getElementById('hero-callout');
-  const heroL1 = document.getElementById('hero-l1');
   const maToggleBtn = document.getElementById('ma-toggle-btn');
-  let lastPayload = null;
-  let lastBoardMachines = [];
   const maPanel = document.getElementById('main-agent-panel');
   const maDot = document.getElementById('ma-status-dot');
   const maText = document.getElementById('ma-status-text');
@@ -55,9 +51,11 @@
     if (state === 'disconnected') {
       termTarget.textContent = (currentTarget ? `${currentTarget.machine} / ${currentTarget.session} · ` : '') + '● 断线,重连中…';
       termInput.disabled = true;
+      renderTopbarAlert();
     } else if (state === 'live') {
       termInput.disabled = false;
       if (currentTarget) termTarget.textContent = `${currentTarget.machine} / ${currentTarget.session}`;
+      renderTopbarAlert();
     }
   }
 
@@ -122,6 +120,7 @@
     if (!t) return;
     ensureWs();
     sendWhenOpen({ type: 'attach', target: t });
+    renderTopbarAlert();
   }
 
   termForm.addEventListener('submit', (e) => {
@@ -140,117 +139,6 @@
     termInput.value = '';
   });
 
-  let prevKeys = new Set();
-
-  function flattenCards(payload) {
-    const cards = [];
-    for (const m of payload.machines || []) {
-      const online = m.online !== false;
-      for (const s of m.sessions || []) {
-        const status = online ? (s.status || 'unknown') : 'offline';
-        cards.push({ machine: m, session: { ...s, status }, key: `${m.id}/${s.name}`, name: m.name || m.id, lastTs: s.lastTs || 0 });
-      }
-    }
-    return cards;
-  }
-
-  function cssEsc(s) { return String(s).replace(/["\\]/g, '\\$&'); }
-
-  // 已存在卡片的 diff 更新:只改变化的属性/文本,避免单卡 innerHTML 整体重建
-  // 丢键盘焦点/中断点击(P0 a11y)。字段派生对齐 ConsoleRender.buildCardHTML。
-  function updateCardNode(li, c) {
-    const active = !!(currentTarget && currentTarget.machine === c.machine.id && currentTarget.session === c.session.name);
-    const isSel = selected.has(c.key);
-    const status = c.session.status || 'unknown';
-    const meta = ConsoleRender.statusMeta(status);
-    const name = c.machine.name || c.machine.id;
-    const lastRaw = c.session.lastLine || (c.machine.online === false ? '(离线)' : '');
-    const lastDisp = lastRaw || '—';
-    const time = ConsoleRender.relativeTime(c.lastTs, Date.now());
-    const label = `${isSel ? '已选,' : ''}${name} / ${c.session.name},${meta.label},${lastRaw ? lastRaw.slice(0, 40) : '无输出'}`;
-
-    const btn = li.querySelector('.card');
-    if (!btn) return; // 兜底:异常空 li,等下次 poll 重建
-    if (btn.getAttribute('data-status') !== status) btn.setAttribute('data-status', status);
-    if (btn.getAttribute('aria-label') !== label) btn.setAttribute('aria-label', label);
-    // class 重算整串比对(active/card--selected 与 data-status 组合由 CSS 接管左色条)
-    const cls = 'card' + (active ? ' active' : '') + (isSel ? ' card--selected' : '');
-    if (btn.className !== cls) btn.className = cls;
-    const check = isSel ? '☑' : '☐';
-    const selEl = li.querySelector('.card__select');
-    if (selEl && selEl.textContent !== check) selEl.textContent = check;
-    const dotEl = li.querySelector('.s-dot');
-    const dotCls = 's-dot ' + meta.dot;
-    if (dotEl && dotEl.className !== dotCls) dotEl.className = dotCls;
-    const iconEl = li.querySelector('.s-icon');
-    if (iconEl && iconEl.textContent !== meta.icon) iconEl.textContent = meta.icon;
-    const nameEl = li.querySelector('.card__name');
-    if (nameEl && nameEl.textContent !== name) nameEl.textContent = name;
-    const sessEl = li.querySelector('.card__session');
-    if (sessEl && sessEl.textContent !== c.session.name) sessEl.textContent = c.session.name;
-    const lastEl = li.querySelector('.card__last');
-    if (lastEl && lastEl.textContent !== lastDisp) lastEl.textContent = lastDisp;
-    const timeEl = li.querySelector('.card__time');
-    if (timeEl && timeEl.textContent !== time) timeEl.textContent = time;
-  }
-
-  function renderBoard(payload) {
-    lastPayload = payload;
-    lastBoardMachines = payload.machines || [];
-    const sorted = ConsoleRender.sortCardsErroredFirst(flattenCards(payload));
-
-    if (!sorted.length) {
-      boardBody.innerHTML = '<li class="board-empty"><span class="eyebrow">NO MACHINES</span> 尚无机器注册到 hub</li>';
-      prevKeys = new Set();
-      refreshBroadcast();
-      renderFleetSummary(lastBoardMachines);
-      return;
-    }
-
-    const nextKeys = sorted.map((c) => c.key);
-    const diff = ConsoleRender.diffCards(prevKeys, nextKeys);
-    for (const key of diff.removed) {
-      const node = boardBody.querySelector(`[data-key="${cssEsc(key)}"]`);
-      if (node) node.remove();
-    }
-    for (const c of sorted) {
-      const li = boardBody.querySelector(`[data-key="${cssEsc(c.key)}"]`);
-      if (!li) {
-        // 新增卡片:buildCardHTML 初始化(新节点无焦点可丢)
-        const node = document.createElement('li');
-        node.className = 'card-row';
-        node.dataset.key = c.key;
-        node.innerHTML = ConsoleRender.buildCardHTML(c.machine, c.session, {
-          active: currentTarget && currentTarget.machine === c.machine.id && currentTarget.session === c.session.name,
-          selected: selected.has(c.key),
-          lastTs: c.lastTs,
-          now: Date.now(),
-        }).match(/<button[\s\S]*<\/button>/)[0];
-        boardBody.appendChild(node);
-      } else {
-        // 已存在:diff 更新属性/文本,保留键盘焦点 & 动画
-        updateCardNode(li, c);
-      }
-    }
-    // 按 sorted 顺序重排(appendChild 移动已存在节点,不重建 → 保留 scrollTop/focus)
-    for (const c of sorted) {
-      const li = boardBody.querySelector(`[data-key="${cssEsc(c.key)}"]`);
-      if (li) boardBody.appendChild(li);
-    }
-    prevKeys = new Set(nextKeys);
-    refreshBroadcast();
-    renderFleetSummary(lastBoardMachines);
-  }
-
-  function renderFleetSummary(machines) {
-    const s = ConsoleRender.summarizeFleet(machines);
-    fleetSummary.innerHTML =
-      `<span><span class="s-icon" aria-hidden="true">▶</span> ${s.working}</span>` +
-      `<span><span class="s-icon" aria-hidden="true">⏸</span> ${s.idle}</span>` +
-      `<span><span class="s-icon" aria-hidden="true">✕</span> ${s.errored}</span>` +
-      `<span>在线 ${s.online}/${s.total}</span>`;
-  }
-
   function refreshBroadcast() {
     const broadcasting = selected.size >= 2;
     bcCount.hidden = selected.size < 2;
@@ -258,20 +146,13 @@
     termInput.placeholder = broadcasting ? `给 ${selected.size} 个会话发同一条指令…` : '输入(Enter 发送)…';
   }
 
+  // 控制台只 poll main-agent 状态;看板数据(global dashboard)归 dashboard.html,此处不再拉取
   async function poll() {
-    let boardOk = false;
-    try {
-      const res = await fetch('/api/global-dashboard');
-      if (res.ok) { const p = await res.json(); renderBoard(p); boardOk = true; }
-    } catch {}
     try {
       const r = await fetch('/api/main-agent/status');
       if (r.ok) maStatus = await r.json();
     } catch {}
-    pollFailCount = boardOk ? 0 : pollFailCount + 1;
-    if (boardOk) lastPollOkTs = Date.now();
     renderMaStatus();
-    // stale 提示位置见 renderHeroL1:fleet 数据过期应在 HERO 健康摘要,而非 main-agent 状态栏
   }
 
   function renderMaStatus() {
@@ -291,33 +172,11 @@
       if (maWs) { try { maWs.close(); } catch {} maWs = null; }
       if (maReconnectTimer) { clearInterval(maReconnectTimer); maReconnectTimer = null; }
     }
-    renderHeroL1();
     renderMaCallout();
   }
 
-  // HERO L1/L2 渲染:calloutState 跨 poll 保持,供 parseCallout 算 stable 相对时间
+  // HERO L2 渲染:calloutState 跨 poll 保持,供 parseCallout 算 stable 相对时间
   let calloutState = { lastText: '', lastChangeTs: 0 };
-  let pollFailCount = 0;
-  let lastPollOkTs = 0;
-
-  function renderHeroL1() {
-    // stale:fleet 数据连续失败(>2 次 ≈ 6s+)&& 最后成功 >10s 前 → HERO L1 覆盖
-    // 显示"数据 Ns 前"+ 暖琥珀,提示整个 fleet 数据过期(原误写在 #ma-status-text)
-    if (pollFailCount > 2 && lastPollOkTs) {
-      const ago = Math.floor((Date.now() - lastPollOkTs) / 1000);
-      if (ago > 10) {
-        heroL1.innerHTML = `<span class="hero-stale"><span class="s-icon" aria-hidden="true">⏳</span> 数据 ${ago}s 前</span>`;
-        heroL1.classList.add('hero-l1--stale');
-        return;
-      }
-    }
-    heroL1.classList.remove('hero-l1--stale');
-    const s = ConsoleRender.summarizeFleet(lastBoardMachines);
-    heroL1.innerHTML =
-      `<span><span class="s-icon" aria-hidden="true">▶</span> ${s.working} working</span>` +
-      `<span><span class="s-icon" aria-hidden="true">⏸</span> ${s.idle} idle</span>` +
-      `<span><span class="s-icon" aria-hidden="true">✕</span> ${s.errored} errored</span>`;
-  }
 
   function renderMaCallout() {
     const r = ConsoleRender.parseCallout(maScreen.textContent, { ...calloutState, now: Date.now() });
@@ -383,37 +242,6 @@
   }
   maStartBtn.addEventListener('click', () => maAction('/api/main-agent/start', maStartBtn));
   maStopBtn.addEventListener('click', () => maAction('/api/main-agent/stop', maStopBtn));
-  boardBody.addEventListener('click', (e) => {
-    const card = e.target.closest('.card');
-    if (!card) return;
-    const machine = card.dataset.machine, session = card.dataset.session;
-    const key = `${machine}/${session}`;
-    if (e.target.closest('.card__select')) {
-      e.stopPropagation();
-      selected.has(key) ? selected.delete(key) : selected.add(key);
-      refreshBroadcast();
-      if (lastPayload) renderBoard(lastPayload);
-      return;
-    }
-    attachTarget({ machine, session });
-  });
-  boardBody.addEventListener('keydown', (e) => {
-    const card = e.target.closest('.card');
-    if (!card) return;
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      const machine = card.dataset.machine, session = card.dataset.session;
-      // Shift+Enter/Space:切该卡片 selected(键盘多选 → 广播可达,广播需 selected.size>=2)
-      if (e.shiftKey) {
-        const key = `${machine}/${session}`;
-        selected.has(key) ? selected.delete(key) : selected.add(key);
-        refreshBroadcast();
-        if (lastPayload) renderBoard(lastPayload);
-      } else {
-        attachTarget({ machine, session });
-      }
-    }
-  });
   maToggleBtn.addEventListener('click', () => {
     // data-ma-open 浮层显隐(CSS [data-ma-open="true"] 控 main-agent-panel 内 ma-screen 浮层)
     const open = maPanel.getAttribute('data-ma-open') === 'true';
@@ -424,14 +252,14 @@
     maScreen.setAttribute('aria-hidden', String(open));
   });
   termCollapseBtn.addEventListener('click', () => {
-    // 终端可折叠(P1 §4.2 A6):收起时仅留 .term-header 单行,腾空间给卡片网格
+    // 终端可折叠(P1 §4.2 A6):收起时仅留 .term-header 单行,腾空间给主控区
     const collapsed = termSection.getAttribute('data-collapsed') === 'true';
     termSection.setAttribute('data-collapsed', String(!collapsed));
     termCollapseBtn.setAttribute('aria-expanded', String(!collapsed));
     // 切前 collapsed:true → 切后展开(▾);false → 切后收起(▸)
     termCollapseBtn.textContent = collapsed ? '▾终端' : '▸终端';
   });
-  // 终端全屏:切 data-fullscreen,.console-term position:fixed 覆盖视口(隐藏 topbar/hero/board),
+  // 终端全屏:切 data-fullscreen,.console-term position:fixed 覆盖视口(隐藏 topbar/hero),
   // 再点按钮或按 Esc 退出。aria-pressed 反映切换态,aria-label/文案同步给读屏。
   const setFullscreen = (fs) => {
     termSection.setAttribute('data-fullscreen', String(fs));
@@ -445,8 +273,116 @@
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && termSection.getAttribute('data-fullscreen') === 'true') setFullscreen(false);
   });
+
+  // ---- 切换抽屉(createSwitchSheet,数据 /api/machines 按需,多选 → 广播)----
+  const switchTab = document.getElementById('switchTab');
+  let switchSheet = null;
+  let multiSelectMode = false;
+
+  async function openSwitchSheet() {
+    if (!window.SwitchSheet || !switchTab) return;
+    let machines = [];
+    try { const r = await fetch('/api/machines'); if (r.ok) machines = (await r.json()).machines || []; } catch {}
+    // 扁平化 machine/session
+    const items = [];
+    for (const m of machines) {
+      const online = m.online !== false;
+      for (const s of (m.sessions || [])) {
+        items.push({
+          machine: m.id, session: s.name,
+          label: `${m.name || m.id} / ${s.name}${online ? '' : ' · 离线'}`,
+          key: `${m.id}/${s.name}`,
+        });
+      }
+    }
+    if (!switchSheet) {
+      switchSheet = window.SwitchSheet.createSwitchSheet({
+        trigger: switchTab,
+        backdropRoot: '.console-app',
+        // 不用 onPick:交互全在 renderMachineItems 内(支持多选不关闭);createSwitchSheet 默认 onPick 为 noop
+      });
+    }
+    renderMachineItems(items);
+    switchSheet.open();
+    switchTab.setAttribute('aria-expanded', 'true');
+  }
+
+  // 渲染机器项到 sheet(单选 attach+关 / 多选 toggle selected);每次 toggle 重建列表刷新选中态
+  function renderMachineItems(items) {
+    const sheetEl = document.getElementById('switchSheet'); // createSwitchSheet 注入的根元素(id 见 switch_sheet.cjs)
+    if (!sheetEl) return;
+    const old = sheetEl.querySelector('.switch-sheet-machines'); if (old) old.remove();
+    const oldToggle = sheetEl.querySelector('.switch-sheet-multitoggle'); if (oldToggle) oldToggle.remove();
+    const wrap = document.createElement('div'); wrap.className = 'switch-sheet-machines';
+    const title = document.createElement('p'); title.className = 'switch-sheet-section-title';
+    title.textContent = multiSelectMode ? `机器(已选 ${selected.size} · 扇出)` : '机器';
+    wrap.appendChild(title);
+    const list = document.createElement('ul'); list.className = 'switch-sheet-list'; list.setAttribute('role', 'list');
+    if (!items.length) {
+      const empty = document.createElement('p'); empty.className = 'switch-sheet-projects-empty';
+      empty.textContent = '暂无机器'; wrap.appendChild(empty);
+    } else {
+      items.forEach((it) => {
+        const isSel = selected.has(it.key);
+        const li = document.createElement('li'); li.className = 'switch-sheet-item';
+        const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'switch-sheet-btn';
+        btn.setAttribute('aria-pressed', String(isSel));
+        btn.textContent = (multiSelectMode ? (isSel ? '☑ ' : '☐ ') : '') + it.label;
+        btn.addEventListener('click', () => {
+          if (multiSelectMode) {
+            selected.has(it.key) ? selected.delete(it.key) : selected.add(it.key);
+            refreshBroadcast();
+            renderMachineItems(items); // 重建刷新选中态(避免陈旧闭包)
+            return;
+          }
+          attachTarget({ machine: it.machine, session: it.session });
+          if (switchSheet) switchSheet.close();
+        });
+        li.appendChild(btn); list.appendChild(li);
+      });
+    }
+    wrap.appendChild(list); sheetEl.appendChild(wrap);
+    // 多选模式开关
+    const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'switch-sheet-btn switch-sheet-multitoggle';
+    toggle.textContent = multiSelectMode ? '✓ 多选模式(广播)' : '切多选模式';
+    toggle.addEventListener('click', () => { multiSelectMode = !multiSelectMode; renderMachineItems(items); });
+    sheetEl.appendChild(toggle);
+  }
+
+  if (switchTab) switchTab.addEventListener('click', openSwitchSheet);
+
+  // ---- URL ?m=&s= 读取 + 失败兜底 ----
+  const params = new URLSearchParams(location.search);
+  const urlM = params.get('m'), urlS = params.get('s');
+  function tryAttachFromUrl() {
+    if (!urlM || !urlS) return;
+    fetch('/api/machines').then((r) => r.ok ? r.json() : { machines: [] }).then((d) => {
+      const found = (d.machines || []).some((m) => m.id === urlM && (m.sessions || []).some((s) => s.name === urlS));
+      if (found) attachTarget({ machine: urlM, session: urlS });
+      else {
+        termScreen.textContent = `机器 ${urlM} 未注册或会话 ${urlS} 不存在。点底部「切换」选择机器。`;
+        setTermState('disconnected');
+      }
+    }).catch(() => { /* 网络失败:静默,WS 后续重试 */ });
+  }
+
+  // ---- 跨页 openSwitchSheet flag(看板「切换」tab 写入)----
+  if (sessionStorage.getItem('openSwitchSheet') === '1') {
+    sessionStorage.removeItem('openSwitchSheet');
+    setTimeout(openSwitchSheet, 300); // 等 createSwitchSheet 可用
+  }
+
+  // ---- topbar 当前机告警(替代旧 fleet 摘要;复用 #fleet-summary 挂点)----
+  function renderTopbarAlert() {
+    if (!fleetSummary) return;
+    if (!currentTarget) { fleetSummary.innerHTML = '<span>未选机器</span>'; return; }
+    fleetSummary.innerHTML = `<span>${currentTarget.machine} / ${currentTarget.session}</span>`;
+  }
+
   setInterval(renderMaCallout, 30000);
   setInterval(poll, 2000);
   poll();
   ensureWs();
+  tryAttachFromUrl();
+  renderTopbarAlert();
 })();

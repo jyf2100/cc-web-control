@@ -58,9 +58,35 @@ test('图标 span 标注 aria-hidden', () => {
   assert.match(html, /aria-hidden="true"/);
 });
 
-test('console.js 移除旧 bcSend/bcInput 引用', () => {
-  assert.doesNotMatch(js, /bcSend\.addEventListener/);
-  assert.doesNotMatch(js, /getElementById\('bc-input'\)/);
+test('console.js 不再渲染卡片(无 buildCardHTML/renderBoard/global-dashboard)', () => {
+  assert.doesNotMatch(js, /ConsoleRender\.(buildCardHTML|sortCardsErroredFirst|diffCards|summarizeFleet)/);
+  assert.doesNotMatch(js, /function renderBoard/);
+  assert.doesNotMatch(js, /\/api\/global-dashboard/);  // 控制台不 poll 看板数据
+});
+test('console.js 切换抽屉:createSwitchSheet + /api/machines 按需', () => {
+  assert.match(js, /createSwitchSheet/);
+  assert.match(js, /\/api\/machines/);
+  assert.match(js, /backdropRoot:\s*['"].console-app['"]/);  // hub 根
+});
+test('console.js 多选广播(抽屉 selected.size >= 2 扇出)', () => {
+  assert.match(js, /selected\.size/);
+  assert.match(js, /type:\s*['"]broadcast['"]/);
+  assert.match(js, /多选|multiSelect/);  // 多选模式开关
+});
+test('console.js URL ?m=&s= 读取自动 attach', () => {
+  assert.match(js, /URLSearchParams/);
+  assert.match(js, /['"]m['"]/);
+  assert.match(js, /['"]s['"]/);
+});
+test('console.js 跨页 openSwitchSheet flag 检测开抽屉', () => {
+  assert.match(js, /openSwitchSheet/);
+  assert.match(js, /sessionStorage/);
+});
+test('console.js 保留终端/main-agent(ensureWs / main-agent poll / parseCallout / nextBackoff)', () => {
+  assert.match(js, /function ensureWs/);
+  assert.match(js, /\/api\/main-agent\/status/);
+  assert.match(js, /parseCallout/);
+  assert.match(js, /nextBackoff/);
 });
 
 test('ensureWs 补 onclose/onerror + 重连', () => {

@@ -5,6 +5,8 @@ const path = require('node:path');
 
 const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'dashboard.css'), 'utf8');
 const CONSOLE_SECTION = css.slice(css.indexOf('===== 多机控制台'));
+const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'console.html'), 'utf8');
+const switchSheetSrc = fs.readFileSync(path.join(__dirname, '..', 'public', 'switch_sheet.cjs'), 'utf8');
 
 test('console 段无硬编码 Tailwind 状态色', () => {
   assert.ok(css.indexOf('===== 多机控制台') > 0, 'console 段锚点注释丢失,console_style 测试可能误判');
@@ -59,4 +61,19 @@ test('board_render.buildCardHTML 输出的 class 在 markup 中齐全(看板卡�
   }
   assert.match(html, /data-status="errored"/);
   assert.match(html, /aria-label=/);
+});
+test('切换抽屉 trigger 44pt 触摸目标 + aria-haspopup', () => {
+  assert.match(html, /id="switchTab"[^>]*aria-haspopup="dialog"/);
+  assert.match(css, /\.tab\b[\s\S]*?min-height:\s*44/);  // 复用 .tab 44pt
+});
+test('switch-sheet a11y:role=dialog + aria-modal + inert 背景', () => {
+  // switch_sheet.cjs 用 setAttribute('role','dialog') 两参形式,非属性字面量 → 按实际源码匹配
+  assert.match(switchSheetSrc, /['"]role['"],\s*['"]dialog['"]/);
+  assert.match(switchSheetSrc, /['"]aria-modal['"],\s*['"]true['"]/);
+  assert.match(switchSheetSrc, /setAttribute\(['"]inert['"]/);
+});
+test('switch-sheet 焦点陷阱 + Esc/Ctrl-C 关闭 + focus return', () => {
+  assert.match(switchSheetSrc, /handleTabTrap/);
+  assert.match(switchSheetSrc, /shouldCloseOnKey/);
+  assert.match(switchSheetSrc, /lastFocused\.focus/);
 });
