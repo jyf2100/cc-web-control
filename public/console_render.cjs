@@ -1,7 +1,7 @@
 /**
  * Console render pure functions (shared between browser and tests).
  * 对齐范本:dashboard_render.cjs / terminal_cleaner.cjs(UMD)。
- * 卡片渲染相关(buildCardHTML/sortCardsByRelevance/summarizeFleet/diffCards/
+ * 卡片渲染相关(buildCardHTML/sortCardsByRelevance/summarizeFleet/
  * statusMeta/escapeHtml/STATUS_META 等)已抽到 board_render.cjs(看板用)。
  * 本模块只留 main-agent 相关:relativeTime / parseCallout / nextBackoff。
  */
