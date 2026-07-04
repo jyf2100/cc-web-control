@@ -35,6 +35,8 @@ const { cleanSummary } = require('../public/terminal_cleaner.cjs');
 test('cleanSummary: 去 markdown 标记(## 标题 / **粗** / `行内码`)', () => {
   assert.equal(cleanSummary('## 收尾完成 ✅ `memory → harness-memory`'), '收尾完成 ✅ memory → harness-memory');
   assert.equal(cleanSummary('全部测试通过(**73/73 绿**)'), '全部测试通过(73/73 绿)');
+  assert.equal(cleanSummary('see *note* here').trim(), 'see note here');
+  assert.equal(cleanSummary('see _note_ here').trim(), 'see note here');
 });
 
 test('cleanSummary: 去列表符 / 引用 / 折叠空白', () => {
