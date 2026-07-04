@@ -76,3 +76,13 @@ test('parseCallout: text===lastText 但 lastChangeTs=0 → ts 走 now 兜底', (
   assert.equal(r.ts, now);            // 0 || now → now
   assert.equal(r.timeLabel, '实时输出中…'); // stableMs=0,未超 10s
 });
+
+test('relativeTime: 秒/分/时/天/周/月档 + 无 ts 空串', () => {
+  const now = 1000000;
+  assert.equal(R.relativeTime(now - 30000, now), '30s 前');
+  assert.equal(R.relativeTime(now - 7200000, now), '2h 前');
+  assert.equal(R.relativeTime(now - 3 * 86400000, now), '3d 前');
+  assert.equal(R.relativeTime(now - 14 * 86400000, now), '2w 前');
+  assert.equal(R.relativeTime(now - 60 * 86400000, now), '2个月前');
+  assert.equal(R.relativeTime(0, now), '');
+});
