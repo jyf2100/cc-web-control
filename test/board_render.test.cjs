@@ -232,3 +232,33 @@ test('partitionStale: 按 isStale 分 active/stale 两组', () => {
   assert.equal(stale.length, 1);
   assert.equal(B.partitionStale(null).active.length, 0);
 });
+
+// ---- buildCardInner 单机感知 + flattenFleet 透传 cwd ----
+test('buildCardInner singleMachine:true → card__name=会话名 + card--single class + cwd 副行', () => {
+  const html = B.buildCardInner(
+    { id: 'm1', name: 'mac-pro', online: true },
+    { name: 'cc-web-control', status: 'working', cwd: '~/ws/cc-web-control' },
+    { singleMachine: true }
+  );
+  assert.match(html, /class="card card--single"/);
+  assert.match(html, /<span class="card__name">cc-web-control<\/span>/); // 会话名当主标题
+  assert.match(html, /<span class="card__session">~\/ws\/cc-web-control<\/span>/); // cwd 副行
+  assert.match(html, /data-machine="m1"/); // 导航属性保留
+});
+
+test('buildCardInner 默认(多机)→ card__name=机器名(现状不变)', () => {
+  const html = B.buildCardInner(
+    { id: 'm1', name: 'mac-pro', online: true },
+    { name: 'cc-web-control', status: 'working' },
+    {}
+  );
+  assert.match(html, /class="card"/); // 无 card--single
+  assert.doesNotMatch(html, /card--single/);
+  assert.match(html, /<span class="card__name">mac-pro<\/span>/);
+  assert.match(html, /<span class="card__session">cc-web-control<\/span>/);
+});
+
+test('flattenFleet 透传 session.cwd', () => {
+  const cards = B.flattenFleet([{ id: 'm1', name: 'm', online: true, sessions: [{ name: 's', status: 'idle', cwd: '/proj' }] }]);
+  assert.equal(cards[0].session.cwd, '/proj');
+});

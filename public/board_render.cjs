@@ -54,9 +54,13 @@
     const meta = statusMeta(s.status);
     const classes = ['card'];
     if (o.active) classes.push('active');
+    if (o.singleMachine) classes.push('card--single');
     const name = escapeHtml(m.name || m.id);
     const sess = escapeHtml(s.name);
     const mid = escapeHtml(m.id);
+    // 单机:会话名当主标题、cwd 当副行;多机:机器名主标题、会话名副行(现状)。
+    const primaryName = o.singleMachine ? escapeHtml(s.name) : name;
+    const secondary = o.singleMachine ? escapeHtml(s.cwd || '') : sess;
     const lastRaw = s.lastLine || (m.online === false ? '(离线)' : '');
     const last = escapeHtml(TC.cleanSummary ? TC.cleanSummary(lastRaw, 60) : lastRaw);
     const time = escapeHtml(relativeTime(o.lastTs, o.now));
@@ -70,8 +74,8 @@
     return `<a class="${classes.join(' ')}" href="${escapeHtml(href)}" data-machine="${mid}" data-session="${sess}" data-status="${escapeHtml(s.status || 'unknown')}" aria-label="${label}">` +
       `<span class="s-dot ${meta.dot}" aria-hidden="true"></span>` +
       `<span class="s-icon" aria-hidden="true">${meta.icon}</span>` +
-      `<span class="card__name">${name}</span>` +
-      `<span class="card__session">${sess}</span>` +
+      `<span class="card__name">${primaryName}</span>` +
+      `<span class="card__session">${secondary}</span>` +
       `<span class="card__last">${last || '—'}</span>` +
       `<span class="card__time">${time}</span>` +
       `</a>`;
@@ -95,7 +99,7 @@
         const status = online ? (s.status || 'unknown') : 'offline';
         out.push({
           machine: m,
-          session: { name: s.name, status, lastLine: s.lastLine || '' },
+          session: { name: s.name, status, lastLine: s.lastLine || '', cwd: s.cwd || '' },
           status,
           key: `${m.id}/${s.name}`,
           name: m.name || m.id,
