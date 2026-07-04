@@ -51,10 +51,10 @@ test('.console-hero.disabled 存在(连接态视觉,Task 10 toggle 目标)', () 
 test('errored 卡片与 selected 叠加不被覆盖', () => {
   assert.match(CONSOLE_SECTION, /\.card\.card--selected\[data-status="errored"\]/);
 });
-test('console_render.buildCardHTML 输出的 class 在 markup 中齐全(跨 task 契约)', () => {
-  const r = require('../public/console_render.cjs');
-  const html = r.buildCardHTML({ id: 'm1', name: 'M1' }, { name: 's1', status: 'errored' }, { active: true, selected: true });
-  for (const sel of ['card', 'card--selected', 'active', 'card__select', 'card__name', 'card__session', 'card__last', 'card__time', 's-dot--errored', 's-icon']) {
+test('board_render.buildCardHTML 输出的 class 在 markup 中齐全(看板卡片契约,无 selected)', () => {
+  const B = require('../public/board_render.cjs');
+  const html = B.buildCardHTML({ id: 'm1', name: 'M1' }, { name: 's1', status: 'errored' }, { active: true });
+  for (const sel of ['card', 'active', 'card__name', 'card__session', 'card__last', 'card__time', 's-dot--errored', 's-icon']) {
     assert.ok(html.includes(sel), `buildCardHTML 应输出含 "${sel}"`);
   }
   assert.match(html, /data-status="errored"/);
