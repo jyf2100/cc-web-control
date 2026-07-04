@@ -88,7 +88,10 @@
             polling = false;
             hubPolling = false;                                  // Fix 7:隐藏时停 hub 轮询
         } else {
-            if (!polling) { polling = true; loop(); }
+            // NEW-M1:hub 模式下不该重启单机 loop()——/api/dashboard 在 hub 部署返回 404,
+            // poll() 会 showState('error','此处为单机看板…') 撞入 stateMessage(<main> 内 sessionList
+            // 的兄弟节点,非子节点),错误消息会叠在 hub 看板上。仅在非 hub 模式恢复单机轮询。
+            if (!polling && !hubModeActive) { polling = true; loop(); }
             // Fix 7:hub 模式下,可见且未在轮询 → 恢复 hubLoop(此前 hubPolling 为死标志)
             if (hubModeActive && !hubPolling) { hubPolling = true; hubLoop(); }
         }
@@ -115,6 +118,9 @@
 
     function renderFleetSummary(machines) {
         var s = BR.summarizeFleet(machines);
+        // NEW-H2:showBoardError 把 fleetSummary.hidden=true;恢复时(任意 renderBoard 路径均经此)
+        // 必须复位 hidden=false,否则摘要区在错误恢复后永久隐藏。
+        fleetSummary.hidden = false;
         fleetSummary.innerHTML =
             '<span><span class="s-icon" aria-hidden="true">▶</span> ' + s.working + '</span>' +
             '<span><span class="s-icon" aria-hidden="true">⏸</span> ' + s.idle + '</span>' +
@@ -150,6 +156,12 @@
                 li.innerHTML = BR.buildCardInner(card.machine, card.session, { lastTs: card.lastTs, now: Date.now() });
                 cardByKey.set(card.key, li);
                 boardBody.appendChild(li);
+            } else {
+                // NEW-H1:同 key(同 m.id/s.name)卡片状态已变(如 working→errored)—— 重排会把旧节点移到
+                // errored 位,但内容(status dot/icon/data-status/lastLine/相对时间)仍是旧的。此处刷新 innerHTML。
+                cardByKey.get(card.key).innerHTML = BR.buildCardInner(
+                    card.machine, card.session, { lastTs: card.lastTs, now: Date.now() }
+                );
             }
         }
         for (var r = 0; r < sorted.length; r++) { // 重排到 errored-first 顺序(appendChild 移动已有节点,O(1))
@@ -164,6 +176,10 @@
         boardBody.hidden = false;
         fleetSummary.hidden = true;
         boardBody.innerHTML = '<li class="board-empty"><span class="eyebrow">ERROR</span> ' + msg + '</li>';
+        // NEW-H2:innerHTML 替换已 detach 所有卡片 <li>,但 cardByKey/prevKeys 仍指向旧(已分离)节点。
+        // 恢复时 renderBoard 的 cardByKey.has(key)→true 命中分离节点 → 跳过创建、重排旧内容、且
+        // ERROR <li> 永不被清(不在 key 集合中)。此处重置 Map,强制下次 renderBoard 全量重建。
+        cardByKey = new Map(); prevKeys = new Set();
     }
     // 卡片 click-to-navigate 由 <a href="/console.html?m=&s="> 原生处理(无需 JS 拦截);中键/书签均可用
     async function pollHub() {
@@ -208,6 +224,9 @@
         } catch (e) { console.warn('detectMode 探测失败', e); loop(); return; } // Fix 8:不再静默吞错
         // Fix 6:404 = 真单机(hub 不提供 global-dashboard)→ loop();5xx = hub 降级 → 显式错误
         if (probe.status === 404) { loop(); return; }
+        // NEW-M2:/api/global-dashboard 需鉴权,401 → 登录页(带回跳),避免 probe 落入 !probe.ok
+        // 分支误显「看板服务暂不可用」(原 commit msg 声称处理 401 但 detectMode 实际缺此分支)
+        if (probe.status === 401) { window.location.href = '/login?next=/dashboard.html'; return; }
         if (!probe.ok) { showBoardError('看板服务暂不可用'); return; }
         // Fix 4:probe 结果直接首渲染 + 初始化 lastPollOkTs(免空白板 + 免冗余请求 + 后续失败 stale badge 可触发)
         var data;
