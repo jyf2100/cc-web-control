@@ -42,13 +42,13 @@
     return `${Math.floor(diff / 3600000)}h 前`;
   }
 
-  // 看板卡片:click-to-navigate 的 <a>(跳 /console.html?m=&s=),无 select 多选语义。
-  function buildCardHTML(machine, session, opts) {
+  // 看板卡片内层:click-to-navigate 的 <a>(跳 /console.html?m=&s=),无 select 多选语义。
+  // buildCardHTML 在外层包 <li class="card-row" data-key>;keyed-diff 场景(dashboard.js)只需内层。
+  function buildCardInner(machine, session, opts) {
     const m = machine || {};
     const s = session || {};
     const o = opts || {};
     const meta = statusMeta(s.status);
-    const key = `${m.id}/${s.name}`;
     const classes = ['card'];
     if (o.active) classes.push('active');
     const name = escapeHtml(m.name || m.id);
@@ -64,15 +64,43 @@
     const midRaw = m.id == null ? '' : m.id;
     const sessRaw = s.name == null ? '' : s.name;
     const href = `/console.html?m=${encodeURIComponent(midRaw)}&s=${encodeURIComponent(sessRaw)}`;
-    return `<li class="card-row" data-key="${escapeHtml(key)}">` +
-      `<a class="${classes.join(' ')}" href="${escapeHtml(href)}" data-machine="${mid}" data-session="${sess}" data-status="${escapeHtml(s.status || 'unknown')}" aria-label="${label}">` +
+    return `<a class="${classes.join(' ')}" href="${escapeHtml(href)}" data-machine="${mid}" data-session="${sess}" data-status="${escapeHtml(s.status || 'unknown')}" aria-label="${label}">` +
       `<span class="s-dot ${meta.dot}" aria-hidden="true"></span>` +
       `<span class="s-icon" aria-hidden="true">${meta.icon}</span>` +
       `<span class="card__name">${name}</span>` +
       `<span class="card__session">${sess}</span>` +
       `<span class="card__last">${last || '—'}</span>` +
       `<span class="card__time">${time}</span>` +
-      `</a></li>`;
+      `</a>`;
+  }
+
+  // 看板卡片:<li data-key> + buildCardInner(供需独立 <li> 的场景使用)。
+  function buildCardHTML(machine, session, opts) {
+    const m = machine || {};
+    const s = session || {};
+    const key = `${m.id}/${s.name}`;
+    return `<li class="card-row" data-key="${escapeHtml(key)}">` + buildCardInner(machine, session, opts) + `</li>`;
+  }
+
+  // hub fleet → 卡片数组:把 status 提升到顶层(供 sortCardsErroredFirst 读取),
+  // 离线机 → 'offline'。null/undefined → []。纯函数。
+  function flattenFleet(machines) {
+    const out = [];
+    for (const m of machines || []) {
+      const online = m && m.online !== false;
+      for (const s of (m && m.sessions) || []) {
+        const status = online ? (s.status || 'unknown') : 'offline';
+        out.push({
+          machine: m,
+          session: { name: s.name, status, lastLine: s.lastLine || '' },
+          status,
+          key: `${m.id}/${s.name}`,
+          name: m.name || m.id,
+          lastTs: s.lastTs || 0,
+        });
+      }
+    }
+    return out;
   }
 
   const STATUS_RANK = { errored: 0, working: 1, waiting: 2, idle: 3, unknown: 4, offline: 5 };
@@ -107,5 +135,5 @@
     return { added, removed };
   }
 
-  return { statusMeta, escapeHtml, relativeTime, buildCardHTML, sortCardsErroredFirst, summarizeFleet, diffCards };
+  return { statusMeta, escapeHtml, relativeTime, buildCardHTML, buildCardInner, flattenFleet, sortCardsErroredFirst, summarizeFleet, diffCards };
 });

@@ -101,3 +101,77 @@ test('diffCards: added/removed/全同/null 兜底', () => {
   assert.deepEqual(B.diffCards(['a', 'b'], ['a', 'b']).added, []);
   assert.deepEqual(B.diffCards(null, null).added, []);
 });
+
+// ---- flattenFleet(hub machines → 顶层 status 卡片;修复 sort bug)----
+test('flattenFleet: status 提升至顶层 + offline→offline + key/name 形状 + lastTs null-safe', () => {
+  const cards = B.flattenFleet([
+    { id: 'm1', name: 'machine-a', online: true, sessions: [
+      { name: 's1', status: 'errored', lastLine: 'boom', lastTs: 1000 },
+      { name: 's2', status: 'working', lastLine: 'ok', lastTs: 2000 },
+    ]},
+    { id: 'm2', name: 'machine-b', online: false, sessions: [
+      { name: 's3', status: 'idle', lastLine: '' },
+    ]},
+  ]);
+  assert.equal(cards.length, 3);
+  // 顶层 status(原 bug:status 嵌在 .session.status,sort 读不到)
+  assert.equal(cards[0].status, 'errored');
+  assert.equal(cards[1].status, 'working');
+  assert.equal(cards[2].status, 'offline'); // 离线机 → 'offline'(忽略 session.status)
+  // key / name 形状
+  assert.equal(cards[0].key, 'm1/s1');
+  assert.equal(cards[0].name, 'machine-a'); // m.name || m.id
+  // lastTs null-safe
+  assert.equal(cards[0].lastTs, 1000);
+  assert.equal(cards[2].lastTs, 0); // s.lastTs 缺失 → 0
+  // machine + session 字段仍在(供 buildCardInner)
+  assert.equal(cards[0].machine.id, 'm1');
+  assert.equal(cards[0].session.name, 's1');
+  assert.equal(cards[0].session.status, 'errored');
+});
+test('flattenFleet: machines null/undefined → []', () => {
+  assert.deepEqual(B.flattenFleet(null), []);
+  assert.deepEqual(B.flattenFleet(undefined), []);
+  assert.deepEqual(B.flattenFleet([]), []);
+});
+test('flattenFleet: 缺 session.status → unknown', () => {
+  const cards = B.flattenFleet([{ id: 'm1', name: 'm', online: true, sessions: [{ name: 's', lastLine: '' }] }]);
+  assert.equal(cards[0].status, 'unknown');
+});
+
+// 集成测试(原 sort bug 会被这条抓到:errored 必须冒到首位)
+test('INTEGRATION: flattenFleet → sortCardsErroredFirst 把 errored 冒到首位', () => {
+  const machines = [
+    { id: 'm1', name: 'alpha', online: true, sessions: [
+      { name: 's1', status: 'idle', lastLine: '', lastTs: 0 },
+      { name: 's2', status: 'errored', lastLine: 'crash', lastTs: 0 },
+    ]},
+    { id: 'm2', name: 'beta', online: true, sessions: [
+      { name: 's3', status: 'working', lastLine: 'running', lastTs: 0 },
+    ]},
+  ];
+  const sorted = B.sortCardsErroredFirst(B.flattenFleet(machines));
+  assert.equal(sorted[0].status, 'errored');
+  assert.equal(sorted[0].key, 'm1/s2');
+});
+
+// ---- buildCardInner(仅 <a>…</a>,无 <li> 包裹)----
+test('buildCardInner: 返回 <a>…</a>,不含 <li>', () => {
+  const html = B.buildCardInner(
+    { id: 'm1', name: 'machine-a', online: true },
+    { name: 'ses-1', status: 'working', lastLine: 'building…' },
+    { lastTs: 980000, now: 1000000 }
+  );
+  assert.ok(html.indexOf('<a ') === 0, '应以 <a 起始(实际:' + html.slice(0, 10) + ')');
+  assert.ok(html.lastIndexOf('</a>') === html.length - 4, '应以 </a> 结尾');
+  assert.doesNotMatch(html, /<li/);
+  assert.match(html, /class="card"/);
+  assert.match(html, /data-machine="m1"/);
+});
+test('buildCardHTML = <li data-key> + buildCardInner 组合', () => {
+  const full = B.buildCardHTML({ id: 'm1', name: 'a', online: true }, { name: 's1', status: 'idle' }, {});
+  const inner = B.buildCardInner({ id: 'm1', name: 'a', online: true }, { name: 's1', status: 'idle' }, {});
+  assert.match(full, /^<li class="card-row"/);
+  assert.match(full, /<\/a><\/li>$/);
+  assert.ok(full.indexOf(inner) > 0, 'buildCardHTML 必须包含 buildCardInner 输出');
+});

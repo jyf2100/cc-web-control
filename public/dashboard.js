@@ -84,35 +84,35 @@
         if (ok && polling) setTimeout(loop, POLL_MS);
     }
     document.addEventListener('visibilitychange', function () {
-        if (document.hidden) { polling = false; }
-        else if (!polling) { polling = true; loop(); }
+        if (document.hidden) {
+            polling = false;
+            hubPolling = false;                                  // Fix 7:隐藏时停 hub 轮询
+        } else {
+            if (!polling) { polling = true; loop(); }
+            // Fix 7:hub 模式下,可见且未在轮询 → 恢复 hubLoop(此前 hubPolling 为死标志)
+            if (hubModeActive && !hubPolling) { hubPolling = true; hubLoop(); }
+        }
     });
 
     // ---- 双模式探测:hub(global-dashboard 200)→ 卡片网格;否则单机 session-list ----
     var BR = window.BoardRender;
+    // Fix 3:board_render.cjs 缺失 → hub 模式不可用,显式回退单机(不裸跑 BR.* 报错)
+    if (!BR) { console.error('board_render.cjs 未加载,hub 模式不可用,回退单机'); loop(); return; }
+
+    var HUB_POLL_MS = POLL_MS;            // Fix 10:hub 轮询频率复用单机 POLL_MS(均为 2000ms)
+    var STALE_FAIL_THRESHOLD = 2;         // Fix 10:pollFailCount > 2 即视为连续失败
+    var STALE_SECS = 10;                  // Fix 10:lastPollOkTs 距今 > 10s → 弹 stale badge
+
     var boardBody = document.getElementById('board-body');
     var fleetSummary = document.getElementById('fleet-summary');
     var boardStale = document.getElementById('board-stale');
     var prevKeys = new Set();
     var pollFailCount = 0;
     var lastPollOkTs = 0;
+    var hubModeActive = false;            // Fix 7:visibilitychange 据 hubModeActive 决定是否重启 hubLoop
+    var hubPolling = false;
+    var cardByKey = new Map();            // Fix 9:key → <li>,O(1) 查找/重排,免 CSS 转义
 
-    function flattenCards(payload) {
-        var cards = [];
-        for (var i = 0; i < (payload.machines || []).length; i++) {
-            var m = payload.machines[i];
-            var online = m.online !== false;
-            for (var j = 0; j < (m.sessions || []).length; j++) {
-                var s = m.sessions[j];
-                cards.push({
-                    machine: m,
-                    session: { name: s.name, status: online ? (s.status || 'unknown') : 'offline', lastLine: s.lastLine || '' },
-                    key: m.id + '/' + s.name, name: m.name || m.id, lastTs: s.lastTs || 0
-                });
-            }
-        }
-        return cards;
-    }
     function renderFleetSummary(machines) {
         var s = BR.summarizeFleet(machines);
         fleetSummary.innerHTML =
@@ -125,71 +125,103 @@
         var titleEl2 = document.getElementById('title'); if (titleEl2) titleEl2.textContent = t;
     }
     function renderBoard(payload) {
-        var sorted = BR.sortCardsErroredFirst(flattenCards(payload));
+        // Fix 1:BR.flattenFleet 把 status 提升到顶层 → BR.sortCardsErroredFirst 才能把 errored 冒到首位
+        // (原 flattenCards 把 status 嵌在 .session.status,sort 读 a.status 永远 undefined → errored 不冒泡)
+        var sorted = BR.sortCardsErroredFirst(BR.flattenFleet(payload.machines || []));
         if (!sorted.length) {
             boardBody.innerHTML = '<li class="board-empty"><span class="eyebrow">NO MACHINES</span> 尚无机器注册到 hub</li>';
-            prevKeys = new Set(); renderFleetSummary(payload.machines || []); return;
+            cardByKey = new Map(); prevKeys = new Set();
+            renderFleetSummary(payload.machines || []);
+            return;
         }
         var nextKeys = sorted.map(function (c) { return c.key; });
         var diff = BR.diffCards(prevKeys, nextKeys);
-        var cssEsc = function (s) { return String(s).replace(/["\\]/g, '\\$&'); };
+        // Fix 9:Map<key,<li>> 替代 querySelector('[data-key=…]')—— O(1) 查找/重排,无 CSS 转义风险(M4/M5)
         for (var k = 0; k < diff.removed.length; k++) {
-            var n = boardBody.querySelector('[data-key="' + cssEsc(diff.removed[k]) + '"]'); if (n) n.remove();
+            var node = cardByKey.get(diff.removed[k]);
+            if (node) { node.remove(); cardByKey.delete(diff.removed[k]); }
         }
         for (var c = 0; c < sorted.length; c++) {
             var card = sorted[c];
-            if (!boardBody.querySelector('[data-key="' + cssEsc(card.key) + '"]')) {
+            if (!cardByKey.has(card.key)) {
                 var li = document.createElement('li');
                 li.className = 'card-row'; li.dataset.key = card.key;
-                // buildCardHTML 返回 <li class="card-row" data-key="..."><a ...>...</a></li>;
-                // keyed-diff 已自带 <li data-key>,此处仅需内层 <a>(click-to-navigate 跳 /console.html?m=&s=)。
-                li.innerHTML = BR.buildCardHTML(card.machine, card.session, { lastTs: card.lastTs, now: Date.now() })
-                    .match(/<a[\s\S]*<\/a>/)[0];
+                // Fix 2:BR.buildCardInner 直接返回 <a href="/console.html?m=&s=">…</a>(click-to-navigate;原 .match 正则贪婪+null 风险)
+                li.innerHTML = BR.buildCardInner(card.machine, card.session, { lastTs: card.lastTs, now: Date.now() });
+                cardByKey.set(card.key, li);
                 boardBody.appendChild(li);
             }
         }
-        for (var r = 0; r < sorted.length; r++) { // 重排到 errored-first 顺序
-            var e = boardBody.querySelector('[data-key="' + cssEsc(sorted[r].key) + '"]'); if (e) boardBody.appendChild(e);
+        for (var r = 0; r < sorted.length; r++) { // 重排到 errored-first 顺序(appendChild 移动已有节点,O(1))
+            var existing = cardByKey.get(sorted[r].key); if (existing) boardBody.appendChild(existing);
         }
         prevKeys = new Set(nextKeys);
         renderFleetSummary(payload.machines || []);
+    }
+    // Fix 6:hub 降级(5xx/格式异常)时把错误消息显式呈现到看板区,替代静默回退单机
+    function showBoardError(msg) {
+        document.getElementById('sessionList').hidden = true;
+        boardBody.hidden = false;
+        fleetSummary.hidden = true;
+        boardBody.innerHTML = '<li class="board-empty"><span class="eyebrow">ERROR</span> ' + msg + '</li>';
     }
     // 卡片 click-to-navigate 由 <a href="/console.html?m=&s="> 原生处理(无需 JS 拦截);中键/书签均可用
     async function pollHub() {
         var ok = false;
         try {
             var res = await fetch('/api/global-dashboard');
-            if (res.ok) { renderBoard(await res.json()); ok = true; }
-        } catch (e) {}
+            // Fix 5:401 → 登录页(带回跳),避免后续轮询在未授权态空转
+            if (res.status === 401) { window.location.href = '/login?next=/dashboard.html'; return; }
+            if (res.ok) {
+                // Fix 8:非 JSON 200 → 数据格式异常,不静默重试(content-type 校验先于 .json())
+                var ct = res.headers.get('content-type') || '';
+                if (ct.indexOf('application/json') === -1) {
+                    showBoardError('数据格式异常');
+                } else {
+                    var data;
+                    try { data = await res.json(); }
+                    catch (e) { showBoardError('数据格式异常'); console.warn('pollHub JSON 解析失败', e); }
+                    if (data) { renderBoard(data); ok = true; }
+                }
+            }
+        } catch (e) { console.warn('pollHub 失败', e); } // Fix 8:不再静默吞错
         pollFailCount = ok ? 0 : pollFailCount + 1;
         if (ok) lastPollOkTs = Date.now();
-        if (pollFailCount > 2 && lastPollOkTs && (Math.floor((Date.now() - lastPollOkTs) / 1000)) > 10) {
+        // Fix 10:STALE_FAIL_THRESHOLD / STALE_SECS 命名常量(原魔法数 2 / 10)
+        if (pollFailCount > STALE_FAIL_THRESHOLD && lastPollOkTs && (Math.floor((Date.now() - lastPollOkTs) / 1000)) > STALE_SECS) {
             var ago = Math.floor((Date.now() - lastPollOkTs) / 1000);
             boardStale.hidden = false; boardStale.textContent = '数据 ' + ago + 's 前';
         } else {
             boardStale.hidden = true;
         }
     }
-    var hubPolling = false;
     async function hubLoop() {
         if (!hubPolling) return;
         await pollHub();
-        if (hubPolling) setTimeout(hubLoop, 2000);
+        if (hubPolling) setTimeout(hubLoop, HUB_POLL_MS); // Fix 10:HUB_POLL_MS 命名常量
     }
 
     async function detectMode() {
+        var probe;
         try {
-            var probe = await fetch('/api/global-dashboard');
-            if (probe.ok) {
-                boardBody.hidden = false;
-                fleetSummary.hidden = false;
-                document.getElementById('sessionList').hidden = true;
-                hubPolling = true; hubLoop();
-                return;
-            }
-        } catch (e) {}
-        // 404/网络 → 单机模式:跑现有 loop()
-        loop();
+            probe = await fetch('/api/global-dashboard');
+        } catch (e) { console.warn('detectMode 探测失败', e); loop(); return; } // Fix 8:不再静默吞错
+        // Fix 6:404 = 真单机(hub 不提供 global-dashboard)→ loop();5xx = hub 降级 → 显式错误
+        if (probe.status === 404) { loop(); return; }
+        if (!probe.ok) { showBoardError('看板服务暂不可用'); return; }
+        // Fix 4:probe 结果直接首渲染 + 初始化 lastPollOkTs(免空白板 + 免冗余请求 + 后续失败 stale badge 可触发)
+        var data;
+        try { data = await probe.json(); }
+        catch (e) { console.warn('detectMode JSON 解析失败', e); showBoardError('数据格式异常'); return; }
+        lastPollOkTs = Date.now();
+        boardBody.hidden = false;
+        fleetSummary.hidden = false;
+        document.getElementById('sessionList').hidden = true;
+        hubModeActive = true;                              // Fix 7:标记 hub 模式,visibility 恢复时重启 hubLoop
+        hubPolling = true;
+        renderBoard(data);
+        renderFleetSummary(data.machines || []);
+        hubLoop();
     }
 
     detectMode();
