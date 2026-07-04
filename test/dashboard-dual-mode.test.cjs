@@ -73,3 +73,14 @@ test('NEW-M2: detectMode 含 probe.status === 401 重定向分支', () => {
   // 用 probe(非 res)限定 detectMode 上下文;pollHub 用 res.status,不会误命中。
   assert.match(js, /probe\.status\s*===\s*401/);
 });
+
+// NEW-ISSUE-1:showBoardError 注入 ERROR <li> 后,renderBoard 恢复路径须在 cardByKey 为空时
+// 清空 boardBody.innerHTML,否则 ERROR <li> 在恢复卡片之上残留直到整页重载。
+// (showBoardError 已重置 cardByKey,故恢复首帧 cardByKey.size === 0;正常更新非空 → 不触发,免重建。)
+test('NEW-ISSUE-1: renderBoard 非空分支以 cardByKey.size === 0 守卫清空 boardBody.innerHTML', () => {
+  // 锚定 renderBoard 函数体(声明后 1100 字符窗口),内含 `cardByKey.size === 0)` 后紧跟
+  // `boardBody.innerHTML = ''`(窗口 40 字符,刚好覆盖 `if (...) ` 单行写法)。
+  // 修复前 renderBoard 内全无 `cardByKey.size === 0` 表达式 → 此式不存在 → 失败(已本地 sanity 验证)。
+  // showBoardError 内虽有 boardBody.innerHTML = '...',但其前无 cardByKey.size === 0,不误命中。
+  assert.match(js, /function renderBoard[\s\S]{0,1100}cardByKey\.size\s*===\s*0\)[\s\S]{0,40}boardBody\.innerHTML\s*=\s*''/);
+});

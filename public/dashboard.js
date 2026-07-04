@@ -142,6 +142,10 @@
         }
         var nextKeys = sorted.map(function (c) { return c.key; });
         var diff = BR.diffCards(prevKeys, nextKeys);
+        // NEW-ISSUE-1:showBoardError 注入的 ERROR <li>(及首次渲染前的空板)在 cardByKey 空时仍占位;
+        // 恢复/首渲时 cardByKey 为空,先清掉残留 <li>,再 append 新卡片。正常更新 cardByKey 非空 → 不触发,
+        // 避免无谓重建。(空数组分支已自带 innerHTML 重置,无需此行。)
+        if (cardByKey.size === 0) boardBody.innerHTML = '';
         // Fix 9:Map<key,<li>> 替代 querySelector('[data-key=…]')—— O(1) 查找/重排,无 CSS 转义风险(M4/M5)
         for (var k = 0; k < diff.removed.length; k++) {
             var node = cardByKey.get(diff.removed[k]);
