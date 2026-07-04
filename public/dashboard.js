@@ -109,12 +109,10 @@
     var boardBody = document.getElementById('board-body');
     var fleetSummary = document.getElementById('fleet-summary');
     var boardStale = document.getElementById('board-stale');
-    var prevKeys = new Set();
     var pollFailCount = 0;
     var lastPollOkTs = 0;
     var hubModeActive = false;            // Fix 7:visibilitychange 据 hubModeActive 决定是否重启 hubLoop
     var hubPolling = false;
-    var cardByKey = new Map();            // Fix 9:key → <li>,O(1) 查找/重排,免 CSS 转义
 
     function renderFleetSummary(machines, singleMachine, partition) {
         var s = BR.summarizeFleet(machines);
@@ -159,7 +157,6 @@
         var partition = BR.partitionStale(sorted);
         if (!sorted.length) {
             boardBody.innerHTML = '<li class="board-empty"><span class="eyebrow">NO MACHINES</span> 尚无机器注册到 hub</li>';
-            cardByKey = new Map(); prevKeys = new Set();
             renderFleetSummary(machines, singleMachine, partition);
             return;
         }
@@ -167,12 +164,10 @@
         var prevStaleOpen = false;
         var prevDetails = boardBody.querySelector('li.board-stale-group > details');
         if (prevDetails) prevStaleOpen = !!prevDetails.open;
-        // 全量重建:单机规模无 keyed-diff 性能压力。cardByKey 保留供 showBoardError 重置。
+        // 全量重建:单机规模无 keyed-diff 性能压力,每次轮询无条件清空 boardBody.innerHTML。
         boardBody.innerHTML = '';
-        cardByKey = new Map();
         for (var ai = 0; ai < partition.active.length; ai++) {
             var liA = buildCardLi(partition.active[ai], singleMachine);
-            cardByKey.set(partition.active[ai].key, liA);
             boardBody.appendChild(liA);
         }
         if (partition.stale.length) {
@@ -187,14 +182,12 @@
             grid.className = 'board-grid board-stale-grid';
             for (var si = 0; si < partition.stale.length; si++) {
                 var liS = buildCardLi(partition.stale[si], singleMachine);
-                cardByKey.set(partition.stale[si].key, liS);
                 grid.appendChild(liS);
             }
             details.appendChild(grid);
             groupLi.appendChild(details);
             boardBody.appendChild(groupLi);
         }
-        prevKeys = new Set(sorted.map(function (c) { return c.key; }));
         renderFleetSummary(machines, singleMachine, partition);
     }
     // Fix 6:hub 降级(5xx/格式异常)时把错误消息显式呈现到看板区,替代静默回退单机
@@ -203,10 +196,7 @@
         boardBody.hidden = false;
         fleetSummary.hidden = true;
         boardBody.innerHTML = '<li class="board-empty"><span class="eyebrow">ERROR</span> ' + msg + '</li>';
-        // NEW-H2:innerHTML 替换已 detach 所有卡片 <li>,但 cardByKey/prevKeys 仍指向旧(已分离)节点。
-        // 恢复时 renderBoard 的 cardByKey.has(key)→true 命中分离节点 → 跳过创建、重排旧内容、且
-        // ERROR <li> 永不被清(不在 key 集合中)。此处重置 Map,强制下次 renderBoard 全量重建。
-        cardByKey = new Map(); prevKeys = new Set();
+        // ERROR <li> 由 renderBoard 下次轮询的无条件 innerHTML='' 清除,无需额外状态重置。
     }
     // 卡片 click-to-navigate 由 <a href="/console.html?m=&s="> 原生处理(无需 JS 拦截);中键/书签均可用
     async function pollHub() {

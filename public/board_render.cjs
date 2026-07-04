@@ -155,14 +155,6 @@
     return c;
   }
 
-  function diffCards(prevKeys, nextKeys) {
-    const prev = new Set(prevKeys || []);
-    const next = new Set(nextKeys || []);
-    const added = [], removed = [];
-    for (const k of next) if (!prev.has(k)) added.push(k);
-    for (const k of prev) if (!next.has(k)) removed.push(k);
-    return { added, removed };
-  }
 
-  return { statusMeta, escapeHtml, relativeTime, buildCardHTML, buildCardInner, flattenFleet, sortCardsByRelevance, summarizeFleet, diffCards, isStale, partitionStale };
+  return { statusMeta, escapeHtml, relativeTime, buildCardHTML, buildCardInner, flattenFleet, sortCardsByRelevance, summarizeFleet, isStale, partitionStale };
 });

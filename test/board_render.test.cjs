@@ -77,7 +77,7 @@ test('buildCardHTML: machine 缺 name → 回退到 id', () => {
   assert.match(html, /<span class="card__name">m1<\/span>/);
 });
 
-// ---- sortCardsByRelevance / summarizeFleet / diffCards(从 console_render.test.cjs 原样迁)----
+// ---- sortCardsByRelevance / summarizeFleet(从 console_render.test.cjs 原样迁)----
 test('sortCardsByRelevance: errored 置顶 + 同级按 lastTs 降序 + 不改入参', () => {
   const now = 1000000000;
   const cards = [
@@ -119,12 +119,6 @@ test('summarizeFleet: 计各状态 + online/total + 未识别 status 跳过', ()
   ]);
   assert.equal(s.working, 1); assert.equal(s.errored, 1); assert.equal(s.online, 1); assert.equal(s.total, 2);
   assert.equal(B.summarizeFleet(null).total, 0);
-});
-test('diffCards: added/removed/全同/null 兜底', () => {
-  assert.deepEqual(B.diffCards(['a', 'b'], ['a', 'b', 'c']).added, ['c']);
-  assert.deepEqual(B.diffCards(['a', 'b'], ['a']).removed, ['b']);
-  assert.deepEqual(B.diffCards(['a', 'b'], ['a', 'b']).added, []);
-  assert.deepEqual(B.diffCards(null, null).added, []);
 });
 
 // ---- flattenFleet(hub machines → 顶层 status 卡片;修复 sort bug)----

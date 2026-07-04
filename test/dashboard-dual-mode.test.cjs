@@ -37,20 +37,16 @@ test('dashboard.js hub title 带 fleet 数', () => {
 // ---- Re-review regression locks(NEW-H1/H2/M1/M2):字符串级断言,锁定具体修复点 ----
 // 说明:真正的行为级 DOM 测试需 JSDOM/Playwright(Task 7);此处仅锁源码结构,确保回退即被抓到。
 
-// Task 8(单机看板重设计)以全量重建取代 keyed-diff renderBoard,以下两个源码结构锁因锁定的
+// Task 8(单机看板重设计)以全量重建取代 keyed-diff renderBoard,以下三个源码结构锁因锁定的
 // 代码路径已移除而删除:
 // - NEW-H1(else 分支刷新同 key 卡片):全量重建每帧 buildCardLi 重建所有卡片 → 内容总是最新(意图无条件满足)。
 // - NEW-ISSUE-1(cardByKey.size===0 守卫清 ERROR 残留):全量重建无条件 boardBody.innerHTML='' → ERROR 不可能残留。
+// - NEW-H2 cardByKey 重置锁(showBoardError 内 cardByKey = new Map()):cardByKey/prevKeys 为全量重建后的
+//   死状态(零 .has/.get 读取),ERROR <li> 由下次轮询无条件 innerHTML='' 清除,无需重置。
 // 行为保护由新架构结构性保证;若未来回退 keyed-diff,需重新引入这些锁。
 
-// NEW-H2:showBoardError 须重置 cardByKey Map(否则恢复时命中分离节点 + ERROR <li> 残留),
-// 且恢复路径(renderFleetSummary)须复位 fleetSummary.hidden = false。
-test('NEW-H2: showBoardError 内重置 cardByKey = new Map()(ERROR 标记后紧跟重置)', () => {
-  // 精准锚定 showBoardError 函数体:ERROR</span> 后 400 字符窗口内出现 cardByKey = new Map()。
-  // 修复前 ERROR 后直接闭合函数 → 无重置 → 恢复时 cardByKey 命中分离节点。
-  // (注:renderBoard 空数组路径也重置 cardByKey,但那里无 ERROR 标记,不误命中。)
-  assert.match(js, /ERROR<\/span>[\s\S]{0,400}cardByKey\s*=\s*new Map\(\)/);
-});
+// NEW-H2(仅保留 hidden 复位锁):恢复路径(renderFleetSummary)须复位 fleetSummary.hidden = false。
+// (cardByKey 重置锁已随 cardByKey 死状态清除一并删除,见上方 Task 8 注释。)
 test('NEW-H2: 恢复路径 renderFleetSummary 复位 fleetSummary.hidden = false', () => {
   // 精准锚定 renderFleetSummary 函数体:声明后 400 字符窗口内出现 hidden = false。
   // 修复前 renderFleetSummary 仅设 innerHTML 不复位 hidden → 错误恢复后摘要区永久隐藏。
