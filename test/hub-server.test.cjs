@@ -307,6 +307,22 @@ test('已授权 GET / → 302 重定向到 /console.html(避免落入单机 inde
   }
 });
 
+test('已授权 GET /dashboard.html → 302 /console.html(单机看板页在 hub 无 /api/dashboard 数据源,导回多机控制台)', async () => {
+  const s1 = await new StubMachine({ token: 't1' }).start();
+  try {
+    await withHub([s1], 'hubtok', async (hub) => {
+      const res = await fetch(`http://127.0.0.1:${hub.port}/dashboard.html`, {
+        redirect: 'manual',
+        headers: { Cookie: 'cc_web_auth=hubtok' },
+      });
+      assert.equal(res.status, 302);
+      assert.equal(res.headers.get('location'), '/console.html');
+    });
+  } finally {
+    await s1.stop();
+  }
+});
+
 test('GET /healthz 公开健康检查(无需 cookie)', async () => {
   const s1 = await new StubMachine({ token: 't1' }).start();
   try {

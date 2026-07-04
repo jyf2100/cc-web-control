@@ -62,10 +62,17 @@ test('buildCardHTML button 输出 data-status(随 status 变化,缺省 unknown)'
   html = R.buildCardHTML(m, { name: 's1' }, {}); // status 缺省
   assert.match(html, /data-status="unknown"/);
 });
-test('buildCardHTML selected 加 card--selected', () => {
+test('buildCardHTML selected 加 card--selected + ☑ + aria-label 含已选', () => {
   const html = R.buildCardHTML({ id: 'm1', name: 'a', online: true }, { name: 's', status: 'idle' }, { selected: true });
   assert.match(html, /class="[^"]*card--selected/);
-  assert.match(html, /aria-checked="true"/);
+  assert.match(html, /☑/);
+  assert.match(html, /aria-label="已选/);
+});
+test('buildCardHTML: card__select 为纯视觉指示器(无 role/tabindex,避免 button 内嵌套交互后代)', () => {
+  const html = R.buildCardHTML({ id: 'm1', name: 'a', online: true }, { name: 's', status: 'idle' }, { selected: false });
+  assert.match(html, /<span class="card__select" aria-hidden="true">☐<\/span>/);
+  assert.doesNotMatch(html, /role="checkbox"/);
+  assert.doesNotMatch(html, /tabindex="-1"/);
 });
 test('buildCardHTML 离线机器 lastLine 回退 (离线)', () => {
   const html = R.buildCardHTML({ id: 'm2', name: 'b', online: false }, { name: 's', status: 'idle', lastLine: '' });
@@ -152,10 +159,16 @@ test('parseCallout: 纯进度行(无关键词)→ 隐藏', () => {
 });
 test('parseCallout: 含 error → 点亮 + 截断省略', () => {
   const longErr = 'x'.repeat(200);
-  const r = R.parseCallout(`npm install\nError: ${longErr}`, { now: 1000 });
+  // 空行分隔:Error 自成"最后非空块",块首即 Error 行(spec §9 块首算法)
+  const r = R.parseCallout(`npm install\n\nError: ${longErr}`, { now: 1000 });
   assert.equal(r.show, true);
   assert.match(r.text, /Error:/);
   assert.ok(r.text.length <= 121); // 120 + 省略号
+});
+test('parseCallout: 多行错误栈 → 取块首(非栈尾噪音)', () => {
+  const r = R.parseCallout('npm install\n\nError: ENOTEMPTY\n    at line 42\n    at line 17', { now: 1000 });
+  assert.equal(r.show, true);
+  assert.equal(r.text, 'Error: ENOTEMPTY');
 });
 test('parseCallout: ANSI 残留被 strip', () => {
   const r = R.parseCallout('\x1b[31mError: boom\x1b[0m', { now: 1000 });
@@ -228,7 +241,8 @@ test('buildCardHTML: active+selected 叠加 → class 顺序 active 在 selected
   );
   assert.match(html, /class="card active card--selected"/);
   assert.match(html, /data-status="errored"/);
-  assert.match(html, /role="checkbox" aria-checked="true"/);
+  assert.doesNotMatch(html, /role="checkbox"/);
+  assert.match(html, /aria-label="已选/);
 });
 
 test('buildCardHTML: 离线机器无 lastLine → 兜底 (离线)', () => {

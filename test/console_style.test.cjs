@@ -32,7 +32,9 @@ test('终端色用局部 token --term-bg/--term-fg(非 #000)', () => {
   assert.match(CONSOLE_SECTION, /color:\s*var\(--term-fg\)/);
 });
 test('.s-dot--idle 加内描边满足非文本 3:1', () => {
-  assert.match(CONSOLE_SECTION, /\.s-dot--idle\s*\{[^}]*box-shadow:\s*0 0 0 1px var\(--border-2\)/);
+  // ring 加粗 1.5px + 深色 --fg-2(0.70 alpha,在 --bg 上合成对比 ~5.6:1 达非文本 3:1)。
+  // 旧值 1px var(--border-2) 仅 ~1.6:1 不达标;此处锁新契约。
+  assert.match(CONSOLE_SECTION, /\.s-dot--idle\s*\{[^}]*box-shadow:\s*0 0 0 1\.5px var\(--fg-2\)/);
 });
 test('卡片网格 auto-fill minmax', () => {
   assert.match(CONSOLE_SECTION, /grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(220px,\s*1fr\)\)/);

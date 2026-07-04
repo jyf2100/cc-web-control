@@ -100,3 +100,11 @@ test('ma-toggle 切 data-ma-open + aria-expanded', () => {
 test('poll stale 检测:连续失败标陈旧', () => {
   assert.match(js, /pollFailCount|数据.*前/);
 });
+test('visualViewport 监听:软键盘弹起同步 --vh(移动端 P1 §4.2 A6)', () => {
+  assert.match(js, /visualViewport/);
+});
+test('终端可折叠:term-collapse-btn + data-collapsed 联动(P1 §4.2 A6)', () => {
+  assert.match(html, /id="term-collapse-btn"/);
+  assert.match(html, /data-collapsed="false"/);
+  assert.match(js, /data-collapsed/);
+});

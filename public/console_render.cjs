@@ -53,17 +53,20 @@
     if (o.selected) classes.push('card--selected');
     const name = escapeHtml(m.name || m.id);
     const sess = escapeHtml(s.name);
-    const last = escapeHtml(s.lastLine || (m.online === false ? '(离线)' : ''));
+    const lastRaw = s.lastLine || (m.online === false ? '(离线)' : '');
+    const last = escapeHtml(lastRaw);
     const time = escapeHtml(relativeTime(o.lastTs, o.now));
-    const label = escapeHtml(`${m.name || m.id} / ${s.name},${meta.label},${last ? last.slice(0, 40) : '无输出'}`);
+    const selPrefix = o.selected ? '已选,' : '';
+    const label = escapeHtml(`${selPrefix}${m.name || m.id} / ${s.name},${meta.label},${lastRaw ? lastRaw.slice(0, 40) : '无输出'}`);
+    const check = o.selected ? '☑' : '☐';
     return `<li class="card-row" data-key="${escapeHtml(key)}">` +
       `<button type="button" class="${classes.join(' ')}" data-machine="${escapeHtml(m.id)}" data-session="${escapeHtml(s.name)}" data-status="${escapeHtml(s.status || 'unknown')}" aria-label="${label}">` +
-      `<span class="card__select" role="checkbox" aria-checked="${o.selected ? 'true' : 'false'}" tabindex="-1" aria-hidden="true">☐</span>` +
+      `<span class="card__select" aria-hidden="true">${check}</span>` +
       `<span class="s-dot ${meta.dot}" aria-hidden="true"></span>` +
       `<span class="s-icon" aria-hidden="true">${meta.icon}</span>` +
       `<span class="card__name">${name}</span>` +
       `<span class="card__session">${sess}</span>` +
-      `<span class="card__last">${last}</span>` +
+      `<span class="card__last">${last || '—'}</span>` +
       `<span class="card__time">${time}</span>` +
       `</button></li>`;
   }
@@ -107,15 +110,20 @@
   function parseCallout(rawScreen, state) {
     const st = state || {};
     const clean = stripAnsi(rawScreen || '');
-    const lines = clean.split('\n').map((l) => l.trim()).filter(Boolean);
-    if (!lines.length) return { show: false };
-    const fullLast = lines[lines.length - 1];
-    const text = fullLast.slice(0, 120);
+    // §9 块首算法:取"最后一个连续非空块的首行"(非末行),过滤多行错误栈的栈尾噪音
+    const rawLines = clean.split('\n').map((l) => l.trim());
+    let end = rawLines.length;
+    while (end > 0 && !rawLines[end - 1]) end--;        // 跳过末尾空行
+    if (end === 0) return { show: false };
+    let start = end;
+    while (start > 0 && rawLines[start - 1]) start--;   // 块内向前到块首
+    const blockFirst = rawLines[start];
+    const text = blockFirst.slice(0, 120);
     if (!ERROR_RE.test(text)) return { show: false };
     const now = st.now || Date.now();
     const ts = (text === st.lastText) ? (st.lastChangeTs || now) : now;
     const stableMs = ts ? now - ts : 0;
-    const display = fullLast.length > 120 ? text + '…' : text;
+    const display = blockFirst.length > 120 ? text + '…' : text;
     const timeLabel = stableMs > 10000 ? relativeTime(ts, now) : '实时输出中…';
     return { show: true, text: display, ts, timeLabel };
   }

@@ -120,7 +120,7 @@ html, body {
 
 /* ===== 多机控制台 Fleet Dashboard(token 化,删除原硬编码)===== */
 .console-app {
-  height: 100dvh; display: flex; flex-direction: column; overflow: hidden;
+  height: 100dvh; height: var(--vh, 100dvh); display: flex; flex-direction: column; overflow: hidden;
   --term-bg: #1a1815; --term-fg: #e8e6df;
   --waiting-bg: rgba(192, 133, 50, 0.08);
 }
@@ -135,12 +135,14 @@ html, body {
 .fleet-summary .s-icon { font-size:.9em; }
 
 .console-hero { position:relative; padding:10px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
-.console-hero .eyebrow { letter-spacing:.08em; text-transform:uppercase; font-size:.7em; color:var(--fg-2); }
+.console-hero .eyebrow { letter-spacing:.08em; text-transform:uppercase; font-size:.7em; color:var(--accent-2); }
 .console-hero .hero-title { font-weight:600; font-size:1.05rem; }
 .hero-l1 { display:flex; gap:14px; color:var(--fg-2); font-size:.85em; }
+.hero-l1--stale .hero-stale { color:var(--accent-2); font-weight:600; }
 .hero-callout { flex-basis:100%; color:var(--fg-2); font-size:.8em; font-family:var(--mono); }
 .hero-callout[hidden] { display:none; }
-.ma-warn-line { color:var(--fg-2); font-size:.75em; }
+.ma-warn-line { color:var(--fg-2); font-size:.75em; display:none; }
+.console-hero[data-ma-open="true"] .ma-warn-line { display:block; }
 #ma-screen { margin:0; max-height:0; overflow:auto; background:var(--term-bg); color:var(--term-fg); font-family:var(--mono); font-size:.8em; padding:0 8px; transition:max-height .2s ease; }
 .console-hero[data-ma-open="true"] #ma-screen { max-height:240px; padding:8px; position:absolute; z-index:50; left:16px; right:16px; box-shadow:var(--shadow-card); border:1px solid var(--border); border-radius:var(--r-sm); }
 .dot { display:inline-block; width:10px; height:10px; border-radius:50%; }
@@ -152,16 +154,18 @@ html, body {
 .board-grid { list-style:none; margin:0; padding:0; display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:10px; }
 .board-empty { grid-column:1/-1; padding:32px; text-align:center; color:var(--fg-2); }
 .card-row { list-style:none; }
-.card { position:relative; display:grid; grid-template-columns:auto auto auto 1fr auto; grid-template-rows:auto auto auto; align-items:center; gap:2px 8px; width:100%; padding:8px 10px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r); cursor:pointer; text-align:left; font:inherit; color:var(--fg); box-shadow:inset 3px 0 0 transparent; }
+.card { position:relative; display:grid; grid-template-columns:auto auto auto 1fr auto; grid-template-rows:auto auto auto; align-items:center; gap:2px 8px; width:100%; min-height:72px; padding:8px 10px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r); cursor:pointer; text-align:left; font:inherit; color:var(--fg); box-shadow:inset 3px 0 0 transparent; transition:transform .15s ease, border-color .15s ease, box-shadow .15s ease; }
 @media (hover:hover){ .card:hover { transform:translateY(-1px); } }
 .card:focus-visible { outline:2px solid var(--accent-2); outline-offset:2px; }
 .card.active { box-shadow:inset 3px 0 0 var(--accent-2); }
 .card.card--selected { border-color:var(--accent-2); box-shadow:inset 0 0 0 2px var(--accent-2); }
+.card.card--selected::after { content:''; position:absolute; top:0; right:0; width:0; height:0; border-style:solid; border-width:0 13px 13px 0; border-color:transparent var(--accent-2) transparent transparent; }
 .card[data-status="errored"] { box-shadow:inset 3px 0 0 var(--errored); }
 .card[data-status="errored"].active { box-shadow:inset 3px 0 0 var(--errored), inset 0 0 0 2px var(--accent-2); }
 .card.card--selected[data-status="errored"] { box-shadow:inset 3px 0 0 var(--errored), inset 0 0 0 2px var(--accent-2); }
 .card[data-status="waiting"] { background:var(--waiting-bg); }
-.card__select { grid-column:1; grid-row:1; font-size:.9em; color:var(--fg-2); user-select:none; }
+.card[data-status="unknown"] { border-style:dashed; }
+.card__select { grid-column:1; grid-row:1; font-size:.9em; color:var(--fg-2); user-select:none; display:inline-flex; align-items:center; justify-content:center; width:1.4em; }
 .card .s-dot { grid-column:2; grid-row:1; }
 .card .s-icon { grid-column:3; grid-row:1; }
 .card__name { grid-column:4; grid-row:1; font-weight:600; font-size:.9em; }
@@ -169,25 +173,42 @@ html, body {
 .card__session { grid-column:4; grid-row:2; color:var(--fg-2); font-size:.75em; }
 .card__last { grid-column:1 / -1; grid-row:3; color:var(--fg-2); font-size:.75em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 /* 状态点:几何 + working/idle/errored/waiting/unknown 色统一在 tokens.css;此处仅 console 局部增强(idle 描边达 WCAG 3:1)+ 补 offline */
-.s-dot--idle { box-shadow:0 0 0 1px var(--border-2); }
+.s-dot--idle { box-shadow:0 0 0 1.5px var(--fg-2); }
 .s-dot--offline { background:var(--fg-3); }
 .s-icon[aria-hidden="true"] { color:var(--fg-2); }
+.s-icon { font-variant-emoji:text; }
 
 .console-term { display:flex; flex-direction:column; border-top:1px solid var(--border); flex:0 0 40vh; min-height:180px; }
-#term-target { padding:4px 16px; font-size:.8em; color:var(--fg-2); display:flex; align-items:center; gap:6px; border-bottom:1px solid var(--border); }
+.term-header { display:flex; align-items:center; gap:6px; padding:4px 16px; border-bottom:1px solid var(--border); }
+#term-target { flex:1; min-width:0; font-size:.8em; color:var(--fg-2); display:flex; align-items:center; gap:6px; }
 #term-target[data-state="disconnected"] { color:var(--errored); }
+.term-collapse-btn { font:inherit; font-size:.75em; color:var(--fg-2); background:transparent; border:none; padding:2px 8px; min-height:44px; cursor:pointer; touch-action:manipulation; }
+.term-collapse-btn:hover { color:var(--accent-2); }
+.term-collapse-btn:focus-visible { outline:2px solid var(--accent-2); outline-offset:2px; }
 #term-screen { margin:0; flex:1; min-height:0; padding:8px 12px; background:var(--term-bg); color:var(--term-fg); font-family:var(--mono); font-size:.8em; overflow:auto; white-space:pre-wrap; }
 .term-input-form { display:flex; gap:6px; padding:6px 16px; border-top:1px solid var(--border); align-items:center; }
 #term-input { flex:1; }
 #term-input:disabled { opacity:.5; }
-.term-badge { font-size:.75em; background:var(--accent-dim); color:var(--accent-2); padding:2px 8px; border-radius:var(--r-pill); }
+.term-badge { font-size:.75em; background:var(--accent-2); color:#fff; padding:2px 8px; border-radius:var(--r-pill); }
 #bc-result { font-size:.75em; color:var(--fg-2); }
+/* 折叠态:终端收为单行 header,卡片网格获更多空间(P1 §4.2 A6) */
+.console-term[data-collapsed="true"] { flex-basis:auto; min-height:0; }
+.console-term[data-collapsed="true"] #term-screen,
+.console-term[data-collapsed="true"] .term-input-form { display:none; }
 
 @media (max-width: 768px) {
-  .console-hero .hero-l1, .console-hero .eyebrow { display:none; }
+  /* HERO 折叠入顶部栏(P1 §4.2 A6):fleet 详情已在 #fleet-summary,只留状态点 + 文字 + 镜像按钮 */
+  .console-hero { padding:6px 12px; gap:8px; }
+  .console-hero .eyebrow,
+  .console-hero .hero-title,
+  .console-hero .hero-l1 { display:none; }
+  /* stale 态豁免:fleet 数据过期提示在移动端也须可见(否则仅桌面端可见,移动端无任何过期信号)*/
+  .console-hero .hero-l1--stale { display:flex; }
+  .console-hero .ma-btn { padding:2px 8px; }
   .console-term { flex-basis:38vh; }
 }
 @media (hover: none) { .card:active { background:var(--surface-2); } }
 @media (prefers-reduced-motion: reduce) {
   .card, #ma-screen { transition:none; }
+  .card:hover { transform:none; }
 }

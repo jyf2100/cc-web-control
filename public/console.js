@@ -1,5 +1,16 @@
 'use strict';
 (function () {
+  // 移动端软键盘适配(P1 §4.2 A6):visualViewport 变化时同步 --vh,
+  // 配合 CSS height: var(--vh, 100dvh) 避免终端/输入被键盘遮(100dvh 仅近似)。
+  if (window.visualViewport) {
+    const updateVh = () => {
+      document.documentElement.style.setProperty('--vh', window.visualViewport.height + 'px');
+    };
+    window.visualViewport.addEventListener('resize', updateVh);
+    window.visualViewport.addEventListener('scroll', updateVh);
+    updateVh();
+  }
+
   // 认证:同源 cookie(httpOnly,JS 读不到)由浏览器自动携带;?token= 仅测试/直链 fallback
   const queryToken = new URLSearchParams(location.search).get('token') || '';
   const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/`
@@ -13,6 +24,8 @@
   const termScreen = document.getElementById('term-screen');
   const termInput = document.getElementById('term-input');
   const termForm = document.getElementById('term-input-form');
+  const termSection = document.querySelector('.console-term');
+  const termCollapseBtn = document.getElementById('term-collapse-btn');
   const bcCount = document.getElementById('bc-count');
   const bcResult = document.getElementById('bc-result');
   const fleetSummary = document.getElementById('fleet-summary');
@@ -142,6 +155,44 @@
 
   function cssEsc(s) { return String(s).replace(/["\\]/g, '\\$&'); }
 
+  // 已存在卡片的 diff 更新:只改变化的属性/文本,避免单卡 innerHTML 整体重建
+  // 丢键盘焦点/中断点击(P0 a11y)。字段派生对齐 ConsoleRender.buildCardHTML。
+  function updateCardNode(li, c) {
+    const active = !!(currentTarget && currentTarget.machine === c.machine.id && currentTarget.session === c.session.name);
+    const isSel = selected.has(c.key);
+    const status = c.session.status || 'unknown';
+    const meta = ConsoleRender.statusMeta(status);
+    const name = c.machine.name || c.machine.id;
+    const lastRaw = c.session.lastLine || (c.machine.online === false ? '(离线)' : '');
+    const lastDisp = lastRaw || '—';
+    const time = ConsoleRender.relativeTime(c.lastTs, Date.now());
+    const label = `${isSel ? '已选,' : ''}${name} / ${c.session.name},${meta.label},${lastRaw ? lastRaw.slice(0, 40) : '无输出'}`;
+
+    const btn = li.querySelector('.card');
+    if (!btn) return; // 兜底:异常空 li,等下次 poll 重建
+    if (btn.getAttribute('data-status') !== status) btn.setAttribute('data-status', status);
+    if (btn.getAttribute('aria-label') !== label) btn.setAttribute('aria-label', label);
+    // class 重算整串比对(active/card--selected 与 data-status 组合由 CSS 接管左色条)
+    const cls = 'card' + (active ? ' active' : '') + (isSel ? ' card--selected' : '');
+    if (btn.className !== cls) btn.className = cls;
+    const check = isSel ? '☑' : '☐';
+    const selEl = li.querySelector('.card__select');
+    if (selEl && selEl.textContent !== check) selEl.textContent = check;
+    const dotEl = li.querySelector('.s-dot');
+    const dotCls = 's-dot ' + meta.dot;
+    if (dotEl && dotEl.className !== dotCls) dotEl.className = dotCls;
+    const iconEl = li.querySelector('.s-icon');
+    if (iconEl && iconEl.textContent !== meta.icon) iconEl.textContent = meta.icon;
+    const nameEl = li.querySelector('.card__name');
+    if (nameEl && nameEl.textContent !== name) nameEl.textContent = name;
+    const sessEl = li.querySelector('.card__session');
+    if (sessEl && sessEl.textContent !== c.session.name) sessEl.textContent = c.session.name;
+    const lastEl = li.querySelector('.card__last');
+    if (lastEl && lastEl.textContent !== lastDisp) lastEl.textContent = lastDisp;
+    const timeEl = li.querySelector('.card__time');
+    if (timeEl && timeEl.textContent !== time) timeEl.textContent = time;
+  }
+
   function renderBoard(payload) {
     lastPayload = payload;
     lastBoardMachines = payload.machines || [];
@@ -162,20 +213,23 @@
       if (node) node.remove();
     }
     for (const c of sorted) {
-      let li = boardBody.querySelector(`[data-key="${cssEsc(c.key)}"]`);
-      const btnHtml = ConsoleRender.buildCardHTML(c.machine, c.session, {
-        active: currentTarget && currentTarget.machine === c.machine.id && currentTarget.session === c.session.name,
-        selected: selected.has(c.key),
-        lastTs: c.lastTs,
-        now: Date.now(),
-      }).match(/<button[\s\S]*<\/button>/)[0];
+      const li = boardBody.querySelector(`[data-key="${cssEsc(c.key)}"]`);
       if (!li) {
-        li = document.createElement('li');
-        li.className = 'card-row';
-        li.dataset.key = c.key;
-        boardBody.appendChild(li);
+        // 新增卡片:buildCardHTML 初始化(新节点无焦点可丢)
+        const node = document.createElement('li');
+        node.className = 'card-row';
+        node.dataset.key = c.key;
+        node.innerHTML = ConsoleRender.buildCardHTML(c.machine, c.session, {
+          active: currentTarget && currentTarget.machine === c.machine.id && currentTarget.session === c.session.name,
+          selected: selected.has(c.key),
+          lastTs: c.lastTs,
+          now: Date.now(),
+        }).match(/<button[\s\S]*<\/button>/)[0];
+        boardBody.appendChild(node);
+      } else {
+        // 已存在:diff 更新属性/文本,保留键盘焦点 & 动画
+        updateCardNode(li, c);
       }
-      li.innerHTML = btnHtml;
     }
     // 按 sorted 顺序重排(appendChild 移动已存在节点,不重建 → 保留 scrollTop/focus)
     for (const c of sorted) {
@@ -216,11 +270,7 @@
     pollFailCount = boardOk ? 0 : pollFailCount + 1;
     if (boardOk) lastPollOkTs = Date.now();
     renderMaStatus();
-    // stale 检测:连续 3+ 次 board 失败(≈6s+)&& 最后成功 >10s 前 → maText 覆盖标陈旧
-    if (pollFailCount > 2 && lastPollOkTs) {
-      const ago = Math.floor((Date.now() - lastPollOkTs) / 1000);
-      if (ago > 10) maText.textContent = `数据 ${ago}s 前`;
-    }
+    // stale 提示位置见 renderHeroL1:fleet 数据过期应在 HERO 健康摘要,而非 main-agent 状态栏
   }
 
   function renderMaStatus() {
@@ -250,6 +300,17 @@
   let lastPollOkTs = 0;
 
   function renderHeroL1() {
+    // stale:fleet 数据连续失败(>2 次 ≈ 6s+)&& 最后成功 >10s 前 → HERO L1 覆盖
+    // 显示"数据 Ns 前"+ 暖琥珀,提示整个 fleet 数据过期(原误写在 #ma-status-text)
+    if (pollFailCount > 2 && lastPollOkTs) {
+      const ago = Math.floor((Date.now() - lastPollOkTs) / 1000);
+      if (ago > 10) {
+        heroL1.innerHTML = `<span class="hero-stale"><span class="s-icon" aria-hidden="true">⏳</span> 数据 ${ago}s 前</span>`;
+        heroL1.classList.add('hero-l1--stale');
+        return;
+      }
+    }
+    heroL1.classList.remove('hero-l1--stale');
     const s = ConsoleRender.summarizeFleet(lastBoardMachines);
     heroL1.innerHTML =
       `<span><span class="s-icon" aria-hidden="true">▶</span> ${s.working} working</span>` +
@@ -340,7 +401,16 @@
     if (!card) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      attachTarget({ machine: card.dataset.machine, session: card.dataset.session });
+      const machine = card.dataset.machine, session = card.dataset.session;
+      // Shift+Enter/Space:切该卡片 selected(键盘多选 → 广播可达,广播需 selected.size>=2)
+      if (e.shiftKey) {
+        const key = `${machine}/${session}`;
+        selected.has(key) ? selected.delete(key) : selected.add(key);
+        refreshBroadcast();
+        if (lastPayload) renderBoard(lastPayload);
+      } else {
+        attachTarget({ machine, session });
+      }
     }
   });
   maToggleBtn.addEventListener('click', () => {
@@ -348,6 +418,17 @@
     const open = maPanel.getAttribute('data-ma-open') === 'true';
     maPanel.setAttribute('data-ma-open', String(!open));
     maToggleBtn.setAttribute('aria-expanded', String(!open));
+    // a11y:抽屉折叠时把 #ma-screen 从可访问树隐藏(展开 → aria-hidden=false;折叠 → true)
+    // open 为切前状态:String(open) 恰为切后状态对应的 aria-hidden 值
+    maScreen.setAttribute('aria-hidden', String(open));
+  });
+  termCollapseBtn.addEventListener('click', () => {
+    // 终端可折叠(P1 §4.2 A6):收起时仅留 .term-header 单行,腾空间给卡片网格
+    const collapsed = termSection.getAttribute('data-collapsed') === 'true';
+    termSection.setAttribute('data-collapsed', String(!collapsed));
+    termCollapseBtn.setAttribute('aria-expanded', String(!collapsed));
+    // 切前 collapsed:true → 切后展开(▾);false → 切后收起(▸)
+    termCollapseBtn.textContent = collapsed ? '▾终端' : '▸终端';
   });
   setInterval(renderMaCallout, 30000);
   setInterval(poll, 2000);

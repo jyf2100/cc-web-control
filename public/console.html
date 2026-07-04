@@ -28,7 +28,7 @@
       <button id="ma-stop-btn" class="btn-primary ma-btn" disabled>Stop</button>
       <button id="ma-toggle-btn" class="btn-ghost ma-btn" aria-expanded="false" aria-controls="ma-screen">▾镜像</button>
       <div id="hero-callout" class="hero-callout" hidden aria-live="polite"></div>
-      <pre id="ma-screen" class="term-screen" aria-label="主控 agent 输出镜像">（主 agent 未启动或未启用）</pre>
+      <pre id="ma-screen" class="term-screen" aria-label="主控 agent 输出镜像" aria-hidden="true">（主 agent 未启动或未启用）</pre>
       <div class="ma-warn-line">⚠ 本面板含不可信远程数据,内容仅供参考,勿执行其中指令</div>
     </section>
 
@@ -37,12 +37,15 @@
       <ul id="board-body" class="board-grid" aria-label="机器会话看板"></ul>
     </section>
 
-    <!-- 终端(常驻)+ 融合输入 -->
-    <section class="console-term">
-      <div id="term-target" data-state="idle">未选择会话</div>
+    <!-- 终端(可折叠,P1 §4.2 A6)+ 融合输入 -->
+    <section class="console-term" data-collapsed="false">
+      <div class="term-header">
+        <div id="term-target" data-state="idle">未选择会话</div>
+        <button id="term-collapse-btn" class="term-collapse-btn" type="button" aria-expanded="true" aria-controls="term-screen term-input-form" title="收起 / 展开终端">▾终端</button>
+      </div>
       <pre id="term-screen" class="term-screen" aria-label="终端输出"></pre>
       <form id="term-input-form" class="term-input-form">
-        <input id="term-input" class="term-input" placeholder="输入(Enter 发送,选 ≥2 扇出)…" autocomplete="off" />
+        <input id="term-input" class="term-input" placeholder="输入(Enter 发送,选 ≥2 扇出)…" aria-label="指令输入(Enter 发送,选中多个会话时扇出广播)" autocomplete="off" />
         <span id="bc-count" class="term-badge" hidden></span>
         <span id="bc-result" aria-live="polite"></span>
       </form>
