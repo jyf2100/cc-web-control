@@ -106,6 +106,21 @@
     return out;
   }
 
+  const STALE_MS = 24 * 60 * 60 * 1000; // 24h
+  function isStale(card, now) {
+    if (!card || card.status !== 'waiting') return false;
+    if (!card.lastTs) return false;
+    const n = now || Date.now();
+    return (n - card.lastTs) > STALE_MS;
+  }
+  function partitionStale(cards, now) {
+    const active = [], stale = [];
+    for (const c of (cards || [])) {
+      if (isStale(c, now)) stale.push(c); else active.push(c);
+    }
+    return { active: active, stale: stale };
+  }
+
   const STATUS_RANK = { errored: 0, working: 1, waiting: 2, idle: 3, unknown: 4, offline: 5 };
   function sortCardsErroredFirst(cards) {
     return [...(cards || [])].sort((a, b) => {
@@ -138,5 +153,5 @@
     return { added, removed };
   }
 
-  return { statusMeta, escapeHtml, relativeTime, buildCardHTML, buildCardInner, flattenFleet, sortCardsErroredFirst, summarizeFleet, diffCards };
+  return { statusMeta, escapeHtml, relativeTime, buildCardHTML, buildCardInner, flattenFleet, sortCardsErroredFirst, summarizeFleet, diffCards, isStale, partitionStale };
 });
