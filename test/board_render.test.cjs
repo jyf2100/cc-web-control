@@ -21,12 +21,15 @@ test('statusMeta 未知/undefined 回退 unknown', () => {
   assert.equal(B.statusMeta(undefined).icon, '?');
   assert.equal(B.statusMeta('offline').icon, '⌽');
 });
-test('relativeTime <5s → now / 秒分时档 / 无 ts 空串', () => {
+test('relativeTime <5s → now / 秒分时天周月档 / 无 ts 空串', () => {
   assert.equal(B.relativeTime(Date.now() - 3000, Date.now()), 'now');
   const now = 1000000;
   assert.equal(B.relativeTime(now - 30000, now), '30s 前');
   assert.equal(B.relativeTime(now - 120000, now), '2m 前');
   assert.equal(B.relativeTime(now - 7200000, now), '2h 前');
+  assert.equal(B.relativeTime(now - 3 * 86400000, now), '3d 前');      // 3 天
+  assert.equal(B.relativeTime(now - 14 * 86400000, now), '2w 前');     // 14 天 = 2 周
+  assert.equal(B.relativeTime(now - 60 * 86400000, now), '2个月前');   // 60 天 = 2 月
   assert.equal(B.relativeTime(0, Date.now()), '');
 });
 

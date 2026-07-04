@@ -39,7 +39,10 @@
     if (diff < 5000) return 'now';
     if (diff < 60000) return `${Math.floor(diff / 1000)}s 前`;
     if (diff < 3600000) return `${Math.floor(diff / 60000)}m 前`;
-    return `${Math.floor(diff / 3600000)}h 前`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h 前`;        // <24h
+    if (diff < 604800000) return `${Math.floor(diff / 86400000)}d 前`;      // <7d
+    if (diff < 2592000000) return `${Math.floor(diff / 604800000)}w 前`;    // <30d
+    return `${Math.floor(diff / 2592000000)}个月前`;                        // ≥30d
   }
 
   // 看板卡片内层:click-to-navigate 的 <a>(跳 /console.html?m=&s=),无 select 多选语义。
