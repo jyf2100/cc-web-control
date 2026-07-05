@@ -104,3 +104,21 @@ test('三页面样式:存在 .machine-group / .fanout-bar / .card__select[aria-c
   assert.match(css, /#ma-screen\s*\{[^}]*max-height:\s*none/);  // 覆盖原 max-height:0,否则 flex:1 被锁死
   assert.match(css, /\.console-term\s*\{[^}]*flex:\s*1;\s*min-height:\s*0/);  // 三页面:单机模式 term 撑满剩余视口(Task 6 detectConsoleMode 同提交)
 });
+
+test('三页面显隐:[hidden] 兜底(display:flex 不盖过 UA [hidden],detectConsoleMode 切换才视觉生效) — T8 §4.1/§4.2', () => {
+  // .console-hero/.console-term/.tab 的 display:flex 覆盖 UA [hidden]{display:none},
+  // 须显式 [hidden]{display:none} 兜底,否则单机 hero 不隐 / 多机 term+⇄ 不隐(违反职责分离)
+  assert.match(css, /#main-agent-panel\[hidden\][^{]*\{[^}]*display:\s*none/);
+  assert.match(css, /\.console-term\[hidden\][^{]*\{[^}]*display:\s*none/);
+  assert.match(css, /\.tab\[hidden\][^{]*\{[^}]*display:\s*none/);
+});
+test('看板主内容区 .main flex:1 + min-height:0(多卡时不撑爆 #app 推走 tabbar) — T8 §4.0', () => {
+  assert.match(css, /\.main\s*\{[^}]*flex:\s*1/);
+  assert.match(css, /\.main\s*\{[^}]*min-height:\s*0/);
+});
+test('#app overflow:hidden 兜底(内容溢出不外溢视口) — T8 §4.0', () => {
+  assert.match(css, /#app\s*\{[^}]*overflow:\s*hidden/);
+});
+test('.ma-btn 触摸目标 ≥44px(WCAG 2.5.5,主控 Start/Stop/镜像) — T8 §7', () => {
+  assert.match(css, /\.ma-btn\s*\{[^}]*min-height:\s*44/);
+});

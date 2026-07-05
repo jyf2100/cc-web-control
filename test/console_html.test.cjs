@@ -135,3 +135,7 @@ test('源码契约:console.js submit 单发 type:input,无 broadcast(扇出已�
   assert.match(src, /type:\s*['"]input['"]/);
   assert.doesNotMatch(src, /type:\s*['"]broadcast['"]/);
 });
+
+test('console.html viewport 含 viewport-fit=cover(iOS 缺口机 safe-area env() 生效前提) — T8 §7', () => {
+  assert.match(html, /name="viewport"[^>]*viewport-fit=cover/);
+});
