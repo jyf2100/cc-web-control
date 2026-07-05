@@ -20,9 +20,6 @@ test('dashboard.html hub 模式卡片网格挂点 + fleet 摘要 + board-stale',
   assert.match(html, /id="fleet-summary"/);
   assert.match(html, /board-stale/);
 });
-test('dashboard.html 底部 tab 含切换(aria-haspopup)', () => {
-  assert.match(html, /aria-haspopup="dialog"/);
-});
 test('dashboard.js 探测 global-dashboard 分发 hub/单机', () => {
   assert.match(js, /\/api\/global-dashboard/);
   assert.match(js, /404|status\s*===\s*404/);  // 404 → 单机 fallback

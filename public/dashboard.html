@@ -32,20 +32,20 @@
             <div id="stateMessage" class="state-message" hidden></div>
         </main>
 
+        <!-- 三页面:扇出 bar(选中卡片后显示,Enter 广播,不跳控制台)-->
+        <form id="fanout-bar" class="fanout-bar" hidden>
+            已选 <span class="sel-count" id="sel-count">0</span>
+            <button class="sel-clear" id="sel-clear" type="button">清除</button>
+            <input class="term-input" id="fanout-input" placeholder="输入(Enter 扇出)…" autocomplete="off" aria-label="扇出指令输入" />
+            <span class="term-badge" id="bc-count" hidden></span>
+            <span class="bc-result" id="bc-result" aria-live="polite"></span>
+        </form>
+
         <nav class="bottom-tabbar" aria-label="主导航">
             <a class="tab" id="tab-console" href="/"><span class="tab-icon" aria-hidden="true">▤</span><span class="tab-label">控制台</span></a>
             <a class="tab tab--active" href="/dashboard.html" aria-current="page"><span class="tab-icon" aria-hidden="true">◫</span><span class="tab-label">看板</span></a>
-            <button class="tab" type="button" id="switchTab" aria-haspopup="dialog" aria-expanded="false"><span class="tab-icon" aria-hidden="true">⇄</span><span class="tab-label">切换</span></button>
         </nav>
     </div>
-    <script>
-        // 看板页「切换」tab:写跨页标志后跳控制台(hub→/console.html,单机→/),由控制台 init 检测开抽屉
-        document.getElementById('switchTab').addEventListener('click', function () {
-            sessionStorage.setItem('openSwitchSheet', '1');
-            var isHubMode = document.getElementById('board-body') && !document.getElementById('board-body').hidden;
-            window.location.href = isHubMode ? '/console.html' : '/';
-        });
-    </script>
     <script src="terminal_cleaner.cjs"></script>
     <script src="board_render.cjs"></script>
     <script src="dashboard_render.cjs"></script>

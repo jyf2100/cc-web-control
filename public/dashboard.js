@@ -160,7 +160,17 @@
             }
         } catch (e) { /* 损坏 JSON 静默丢弃 */ }
     }
-    function updateFanoutBar() {}   // Task 5 填充;此处占位(reapplySelected/click 先调)
+    function updateFanoutBar() {
+        if (!fanoutBar) return;   // 防御:非看板页(console)无 #fanout-bar 时 null,避免报错
+        var n = selected.size;
+        selCount.textContent = n;
+        fanoutBar.hidden = n === 0;
+        fanoutBcCount.hidden = n < 2;
+        fanoutBcCount.textContent = n >= 2 ? ('扇出 ' + n) : '';
+        fanoutInput.placeholder = n >= 2 ? ('输入(Enter 扇出给 ' + n + ' 个被控)…')
+            : n === 1 ? '输入(Enter 发送给该被控)…' : '输入…';
+        persistSelected();   // Q3:所有 toggle/clear 路径都经 updateFanoutBar,集中持久化(reapplySelected 调时写回相同值,幂等无害)
+    }
     loadSelected();   // 初始化:首次 renderBoard 前填充 Map(reapplySelected 自动重标 DOM)
     // Task 4:重建后重标选中卡片。renderBoard 末尾无条件调用。
     function reapplySelected() {
@@ -195,8 +205,7 @@
             card.classList.add('card--selected');
             tog.setAttribute('aria-checked', 'true'); tog.textContent = '☑';
         }
-        persistSelected();
-        updateFanoutBar();
+        updateFanoutBar();   // Q3:集中持久化(内部调 persistSelected),click 委托无需再显式 persist
     });
     // keydown 委托:键盘可达性(WCAG 2.1.1)—— role=checkbox 上 Enter/Space 不自动派发 click,
     // 显式拦截并复用同一 toggle 逻辑(触发 .click() 走上面的 click 委托)。
@@ -206,6 +215,62 @@
             e.target.click();
         }
     });
+    // ---- 三页面:扇出 bar(broadcast + broadcast_result reduce)----
+    var fanoutBar = document.getElementById('fanout-bar');
+    var selCount = document.getElementById('sel-count');
+    var fanoutInput = document.getElementById('fanout-input');
+    var fanoutBcCount = document.getElementById('bc-count');
+    var fanoutBcResult = document.getElementById('bc-result');
+    var hubWs = null;
+    function hubWsUrl() {
+        var proto = location.protocol === 'https:' ? 'wss' : 'ws';
+        var tok = new URLSearchParams(location.search).get('token');   // 复用 console.js 同款 ?token= 拼接(直链/测试 fallback,cookie 不够用时兜底)
+        return proto + '://' + location.host + '/' + (tok ? '?token=' + encodeURIComponent(tok) : '');
+    }
+    function ensureHubWs() {
+        if (hubWs && hubWs.readyState <= 1) return hubWs;
+        hubWs = new WebSocket(hubWsUrl());
+        hubWs.onmessage = function (ev) {
+            var msg; try { msg = JSON.parse(ev.data); } catch (e) { return; }
+            if (msg.type === 'broadcast_result') {
+                var arr = Array.isArray(msg.results) ? msg.results : [];
+                var okN = arr.filter(function (r) { return r.ok; }).length;
+                fanoutBcResult.textContent = '成功 ' + okN + '/' + arr.length;
+                fanoutBcResult.style.color = okN === arr.length ? 'var(--working)' : 'var(--errored)';
+            }
+        };
+        hubWs.onclose = function () { fanoutBcResult.textContent = '连接断开,重试…'; fanoutBcResult.style.color = 'var(--errored)'; };
+        hubWs.onerror = function () { fanoutBcResult.textContent = '连接失败,检查 token/网络'; fanoutBcResult.style.color = 'var(--errored)'; };
+        return hubWs;
+    }
+    function sendHub(msg) {
+        var payload = JSON.stringify(msg);
+        if (hubWs && hubWs.readyState === 1) hubWs.send(payload);
+        else if (hubWs) hubWs.addEventListener('open', function () { hubWs.send(payload); }, { once: true });
+    }
+    if (fanoutBar) {
+        ensureHubWs();
+        fanoutBar.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var v = fanoutInput.value;
+            if (!v || selected.size === 0) { return; }
+            ensureHubWs();
+            var targets = Array.from(selected.values());
+            fanoutBcResult.textContent = '扇出中…';
+            fanoutBcResult.style.color = 'var(--waiting)';
+            sendHub({ type: 'broadcast', targets: targets, data: v, enter: true });
+            fanoutInput.value = '';
+        });
+        document.getElementById('sel-clear').addEventListener('click', function () {
+            selected.clear();
+            Array.prototype.forEach.call(boardBody.querySelectorAll('.card--selected'), function (a) {
+                a.classList.remove('card--selected');
+                var tog = a.querySelector('.card__select');
+                if (tog) { tog.setAttribute('aria-checked', 'false'); tog.textContent = '☐'; }
+            });
+            updateFanoutBar();
+        });
+    }
     function renderBoard(payload) {
         var machines = payload.machines || [];
         var flat = BR.flattenFleet(machines);

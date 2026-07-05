@@ -39,3 +39,14 @@ test('契约:broadcast_result.results reduce → {total,succeeded,failed}', () =
   assert.equal(succeeded, 2);
   assert.equal(total - succeeded, 1);
 });
+
+test('契约:扇出 WS payload = {type:broadcast, targets:[{machine,session}], data, enter:true}', () => {
+  var selected = new Map();
+  selected.set('A/s1', { machine: 'A', session: 's1' });
+  selected.set('B/s2', { machine: 'B', session: 's2' });
+  var payload = { type: 'broadcast', targets: Array.from(selected.values()), data: 'ls', enter: true };
+  assert.equal(payload.type, 'broadcast');
+  assert.equal(payload.targets.length, 2);
+  assert.deepEqual(payload.targets[0], { machine: 'A', session: 's1' });
+  assert.equal(payload.enter, true);
+});
