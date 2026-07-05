@@ -278,6 +278,9 @@ html, body {
 .fanout-bar{flex-shrink:0;display:flex;align-items:center;gap:10px;padding:10px 16px;
   padding-bottom:calc(10px + env(safe-area-inset-bottom));background:var(--surface);
   border-top:1px solid var(--border)}
+/* P0-1:display:flex 顶穿 UA [hidden](同款 commit 242c486 控制台 C1),无选中时初始 hidden 须真隐藏,
+   否则首次进看板底部常驻「已选 0…」bar(2026-07-05 运行时坐实 offsetTop:535/可见)。 */
+.fanout-bar[hidden]{display:none}
 .fanout-bar .sel-count{font-weight:700;color:var(--accent-2);flex-shrink:0}
 .fanout-bar .sel-clear{min-height:44px;padding:0 12px;border:1px solid var(--border-2);
   border-radius:var(--r);background:transparent;color:var(--fg-2);font:inherit;font-size:13px;cursor:pointer;flex-shrink:0}

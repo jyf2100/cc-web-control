@@ -111,6 +111,9 @@ test('三页面显隐:[hidden] 兜底(display:flex 不盖过 UA [hidden],detectC
   assert.match(css, /#main-agent-panel\[hidden\][^{]*\{[^}]*display:\s*none/);
   assert.match(css, /\.console-term\[hidden\][^{]*\{[^}]*display:\s*none/);
   assert.match(css, /\.tab\[hidden\][^{]*\{[^}]*display:\s*none/);
+  // P0-1:.fanout-bar{display:flex} 顶穿 UA [hidden](同款 commit 242c486 控制台 C1),看板遗漏;
+  // 首次进看板(无选中)底部常驻「已选 0…」bar(2026-07-05 运行时坐实 offsetTop:535/可见)。
+  assert.match(css, /\.fanout-bar\[hidden\][^{]*\{[^}]*display:\s*none/);
 });
 test('看板主内容区 .main flex:1 + min-height:0(多卡时不撑爆 #app 推走 tabbar) — T8 §4.0', () => {
   assert.match(css, /\.main\s*\{[^}]*flex:\s*1/);
