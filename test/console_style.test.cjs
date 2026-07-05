@@ -122,3 +122,8 @@ test('#app overflow:hidden 兜底(内容溢出不外溢视口) — T8 §4.0', ()
 test('.ma-btn 触摸目标 ≥44px(WCAG 2.5.5,主控 Start/Stop/镜像) — T8 §7', () => {
   assert.match(css, /\.ma-btn\s*\{[^}]*min-height:\s*44/);
 });
+test('.board-body 纯 list 重置(非 grid,避免外层网格把 machine-group 压成单格 → 卡片一列) — 三页面 §4.3①', () => {
+  // #board-body 装的是 <li class="machine-group"> 分组容器,非卡片;若它自带 board-grid(display:grid),
+  // 每个 machine-group 只占 1 格(~251px),组内 .board-grid inherits → minmax(220px) 仅 1 列(2026-07-05 实测)。
+  assert.match(css, /\.board-body\s*\{[^}]*list-style:\s*none/);
+});

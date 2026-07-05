@@ -74,3 +74,11 @@ test('renderBoard: 区分「无机器」与「无会话」空态', () => {
   assert.match(js, /machines\.length\s*===\s*0/);
   assert.match(js, /NO SESSIONS/);
 });
+
+// 三页面 §4.3① 按机分节:#board-body 是分组容器(<li class="machine-group">),非卡片网格。
+// 若 #board-body 自带 board-grid(外层 display:grid auto-fill 220px),每个 machine-group 被压进
+// ~251px 单格,组内 .board-grid inherits → minmax(220px) 仅 1 列 → 看板一列(2026-07-05 chrome-devtools 实测)。
+test('#board-body 非外层 grid(按机分节容器,非卡片网格)— 三页面 §4.3①', () => {
+  assert.doesNotMatch(html, /id="board-body"[^>]*class="board-grid"/);
+  assert.match(html, /id="board-body"[^>]*class="board-body"/);
+});
