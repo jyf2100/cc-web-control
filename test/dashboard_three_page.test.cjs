@@ -22,3 +22,20 @@ test('契约:flatten→sort→partition→groupByMachine 链路产出按机分�
   assert.equal(groups[1].machine.id, 'B');   // 离线机组末尾
   assert.equal(groups[1].machine.online, false);
 });
+
+test('契约:多选 key = `${m.id}/${s.name}`(与 flattenFleet card.key 一致)', () => {
+  const flat = B.flattenFleet([{ id: 'A', name: 'a', online: true, sessions: [{ name: 's1', status: 'working' }] }]);
+  assert.equal(flat[0].key, 'A/s1');
+});
+test('契约:broadcast_result.results reduce → {total,succeeded,failed}', () => {
+  const results = [
+    { target: { machine: 'A', session: 's1' }, ok: true },
+    { target: { machine: 'A', session: 's2' }, ok: false, error: 'offline' },
+    { target: { machine: 'B', session: 's3' }, ok: true },
+  ];
+  const total = results.length;
+  const succeeded = results.filter(r => r.ok).length;
+  assert.equal(total, 3);
+  assert.equal(succeeded, 2);
+  assert.equal(total - succeeded, 1);
+});

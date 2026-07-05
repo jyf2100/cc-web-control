@@ -139,8 +139,73 @@
         });
         return li;
     }
-    // Task 4 占位:重建后重标选中卡片(由 Task 4 填充)。renderBoard 末尾无条件调用。
-    function reapplySelected() {}
+    // 三页面:卡片多选(扇出目标)。key = `${m.id}/${s.name}`(card.key)。Map 跨 2s 重建保持。
+    var selected = new Map();   // key → {machine,session}
+    function keyOf(machineId, sessionName) { return machineId + '/' + sessionName; }
+    // Q3:sessionStorage 持久化选中态(跳转单机控制台返回后恢复)。存完整 {machine,session} 对象数组,免 split('/') 截断。
+    var SELECTED_KEY = 'ccBoardSelected';
+    function persistSelected() {
+        try { sessionStorage.setItem(SELECTED_KEY, JSON.stringify(Array.from(selected.values()))); } catch (e) { /* sessionStorage 不可用时静默 */ }
+    }
+    function loadSelected() {
+        try {
+            var raw = sessionStorage.getItem(SELECTED_KEY);
+            if (!raw) return;
+            var arr = JSON.parse(raw);
+            if (!Array.isArray(arr)) return;
+            selected = new Map();   // reassign 闭包变量(后续 click 委托/reapplySelected 读到新 Map)
+            for (var i = 0; i < arr.length; i++) {
+                var t = arr[i];
+                if (t && t.machine != null && t.session != null) selected.set(keyOf(t.machine, t.session), { machine: t.machine, session: t.session });
+            }
+        } catch (e) { /* 损坏 JSON 静默丢弃 */ }
+    }
+    function updateFanoutBar() {}   // Task 5 填充;此处占位(reapplySelected/click 先调)
+    loadSelected();   // 初始化:首次 renderBoard 前填充 Map(reapplySelected 自动重标 DOM)
+    // Task 4:重建后重标选中卡片。renderBoard 末尾无条件调用。
+    function reapplySelected() {
+        // 全量重建后 selected(Map)存活,重标 DOM 的 card--selected + aria-checked
+        var cards = boardBody.querySelectorAll('.card');
+        Array.prototype.forEach.call(cards, function (a) {
+            var key = keyOf(a.getAttribute('data-machine'), a.getAttribute('data-session'));
+            if (selected.has(key)) {
+                a.classList.add('card--selected');
+                var tog = a.querySelector('.card__select');
+                if (tog) { tog.setAttribute('aria-checked', 'true'); tog.textContent = '☑'; }
+            }
+        });
+        updateFanoutBar();
+    }
+    // click 委托:命中 .card__select[data-toggle] → toggle 选中(preventDefault 阻止 <a> 跳转);
+    // 其余区域放行 → <a href> 原生跳单机控制台(console.html?m=&s=)
+    boardBody.addEventListener('click', function (e) {
+        var tog = e.target.closest('[data-toggle="select"]');
+        if (!tog) return;
+        e.preventDefault();
+        var card = tog.closest('.card');
+        if (!card) return;
+        var key = keyOf(card.getAttribute('data-machine'), card.getAttribute('data-session'));
+        if (selected.has(key)) {
+            selected.delete(key);
+            card.classList.remove('card--selected');
+            tog.setAttribute('aria-checked', 'false'); tog.textContent = '☐';
+        } else {
+            if (selected.size >= 50) { return; }   // 后端 BROADCAST_MAX_TARGETS=50 上限,阻止继续选
+            selected.set(key, { machine: card.getAttribute('data-machine'), session: card.getAttribute('data-session') });
+            card.classList.add('card--selected');
+            tog.setAttribute('aria-checked', 'true'); tog.textContent = '☑';
+        }
+        persistSelected();
+        updateFanoutBar();
+    });
+    // keydown 委托:键盘可达性(WCAG 2.1.1)—— role=checkbox 上 Enter/Space 不自动派发 click,
+    // 显式拦截并复用同一 toggle 逻辑(触发 .click() 走上面的 click 委托)。
+    boardBody.addEventListener('keydown', function (e) {
+        if ((e.key === 'Enter' || e.key === ' ') && e.target.closest('[data-toggle="select"]')) {
+            e.preventDefault();
+            e.target.click();
+        }
+    });
     function renderBoard(payload) {
         var machines = payload.machines || [];
         var flat = BR.flattenFleet(machines);
