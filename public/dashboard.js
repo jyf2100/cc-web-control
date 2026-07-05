@@ -139,6 +139,8 @@
         });
         return li;
     }
+    // Task 4 占位:重建后重标选中卡片(由 Task 4 填充)。renderBoard 末尾无条件调用。
+    function reapplySelected() {}
     function renderBoard(payload) {
         var machines = payload.machines || [];
         var flat = BR.flattenFleet(machines);
@@ -157,34 +159,53 @@
             renderFleetSummary(machines);
             return;
         }
-        // 展开状态保持:轮询全量重建前记录陈旧折叠区 open 状态,重建后继承(免每次轮询重折叠打扰)
-        var prevStaleOpen = false;
-        var prevDetails = boardBody.querySelector('li.board-stale-group > details');
-        if (prevDetails) prevStaleOpen = !!prevDetails.open;
+        // 展开状态继承:全量重建前记录每个 machine-group 与 stale 区的 open,重建后恢复(免轮询重折叠)
+        var prevOpen = {}; // mid → true / '__stale__' → true
+        var prevDetails = boardBody.querySelectorAll('details[data-mid]');
+        Array.prototype.forEach.call(prevDetails, function (d) { if (d.open) prevOpen[d.dataset.mid] = true; });
         // 全量重建:每次轮询无条件清空 boardBody.innerHTML。
         boardBody.innerHTML = '';
-        for (var ai = 0; ai < partition.active.length; ai++) {
-            var liA = buildCardLi(partition.active[ai]);
-            boardBody.appendChild(liA);
-        }
-        if (partition.stale.length) {
+        // 按机分节:每机 <li class="machine-group"><details><summary>{name} · {n}</summary><ul.board-grid>…
+        var groups = BR.groupByMachine(partition.active);
+        for (var gi = 0; gi < groups.length; gi++) {
+            var g = groups[gi];
+            var online = g.machine.online !== false;
             var groupLi = document.createElement('li');
-            groupLi.className = 'board-stale-group';
-            var details = document.createElement('details'); // 默认 closed(无 open 属性)
-            if (prevStaleOpen) details.open = true; // 继承上次展开状态
+            groupLi.className = 'machine-group' + (online ? '' : ' machine-group--offline');
+            var details = document.createElement('details');
+            details.dataset.mid = g.machine.id;
+            // 在线机默认展开、离线机默认折叠;用户 toggle 过则按记忆(prevOpen)恢复
+            details.open = (g.machine.id in prevOpen) ? !!prevOpen[g.machine.id] : online;
             var sum = document.createElement('summary');
-            sum.textContent = partition.stale.length + ' 个陈旧会话(>24h)';
-            details.appendChild(sum);
+            sum.innerHTML = '<span class="machine-group__caret">' + (details.open ? '▼' : '▸') + '</span>' +
+                '<span class="machine-group__name">' + (g.machine.name || g.machine.id) + (online ? '' : ' · offline') + '</span>' +
+                '<span class="machine-group__count">' + g.cards.length + '</span>';
             var grid = document.createElement('ul');
-            grid.className = 'board-grid board-stale-grid';
-            for (var si = 0; si < partition.stale.length; si++) {
-                var liS = buildCardLi(partition.stale[si]);
-                grid.appendChild(liS);
+            grid.className = 'board-grid';
+            for (var ci = 0; ci < g.cards.length; ci++) {
+                grid.appendChild(buildCardLi(g.cards[ci]));
             }
+            details.appendChild(sum);
             details.appendChild(grid);
             groupLi.appendChild(details);
             boardBody.appendChild(groupLi);
         }
+        if (partition.stale.length) {
+            var groupLi2 = document.createElement('li');
+            groupLi2.className = 'board-stale-group';
+            var details2 = document.createElement('details');
+            details2.dataset.mid = '__stale__';
+            if (prevOpen['__stale__']) details2.open = true;
+            var sum2 = document.createElement('summary');
+            sum2.textContent = partition.stale.length + ' 个陈旧会话(>24h)';
+            var grid2 = document.createElement('ul');
+            grid2.className = 'board-grid board-stale-grid';
+            for (var si = 0; si < partition.stale.length; si++) grid2.appendChild(buildCardLi(partition.stale[si]));
+            details2.appendChild(sum2); details2.appendChild(grid2);
+            groupLi2.appendChild(details2);
+            boardBody.appendChild(groupLi2);
+        }
+        reapplySelected();           // Task 4:重建后重标选中卡片
         renderFleetSummary(machines);
     }
     // Fix 6:hub 降级(5xx/格式异常)时把错误消息显式呈现到看板区,替代静默回退单机
