@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>mockup · 单机控制台 = 单被控 agent 终端(:7685)</title>
+<style>
+  :root{
+    --bg:#f2f1ed; --bg-2:#f7f7f4; --surface:#ebeae5; --surface-2:#e3e2dc; --surface-3:#d9d8d1;
+    --fg:#26251e; --fg-2:rgba(38,37,30,0.70); --fg-3:rgba(38,37,30,0.35);
+    --border:rgba(38,37,30,0.1); --border-2:rgba(38,37,30,0.2);
+    --accent:#d9651a; --accent-2:#b54e0e; --accent-dim:rgba(217,101,26,0.25); --accent-bg:rgba(217,101,26,0.08);
+    --waiting:#c08532; --working:#1f8a65; --idle:rgba(38,37,30,0.3); --errored:#c01a4b;
+    --sans:system-ui,-apple-system,'Segoe UI',sans-serif; --mono:'SF Mono',ui-monospace,Menlo,monospace;
+    --r-xs:3px; --r-sm:6px; --r:10px; --r-pill:9999px;
+    --term-bg:#1a1815; --term-fg:#e8e6df;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;font-family:var(--sans);font-size:14px;background:var(--bg);color:var(--fg)}
+  body{display:flex;flex-direction:column;height:100dvh;height:100vh;overflow:hidden}
+  .mockup-banner{flex-shrink:0;background:#fff8db;border-bottom:1px solid var(--border-2);padding:8px 16px;font-family:var(--mono);font-size:11px;color:#7a5b00;line-height:1.5}
+
+  .console-app{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+  .console-topbar{flex-shrink:0;display:flex;align-items:center;gap:12px;padding:8px 16px;border-bottom:1px solid var(--border);background:var(--surface)}
+  .console-topbar h1{font-size:1rem;font-weight:600}
+  .console-topbar .topbar-back{color:var(--fg-2);text-decoration:none;font-size:.85em}
+  .console-topbar .topbar-back:hover{color:var(--accent-2)}
+  .fleet-summary{margin-left:auto;display:flex;gap:10px;align-items:center;color:var(--fg-2);font-size:.95em}
+
+  /* 终端区:撑满剩余视口(flex:1) */
+  .console-term{flex:1;min-height:0;display:flex;flex-direction:column;border-top:1px solid var(--border);background:var(--bg-2)}
+  .console-term[data-collapsed="true"] .term-screen,
+  .console-term[data-collapsed="true"] .term-input-form{display:none}
+  .term-header{flex-shrink:0;display:flex;align-items:center;gap:8px;padding:6px 16px;border-bottom:1px solid var(--border);background:var(--surface)}
+  .term-target{flex:1;min-width:0;display:flex;align-items:center;gap:8px;font-size:.85em;color:var(--fg-2);min-height:44px}
+  .term-target .t-machine{font-weight:600;color:var(--fg)}
+  .term-target .t-sep{color:var(--fg-3)}
+  .term-target .t-session{font-family:var(--mono);font-size:.9em}
+  .s-dot{width:9px;height:9px;border-radius:50%;background:var(--idle);flex-shrink:0}
+  .s-dot--working{background:var(--working)}
+  .s-dot--idle{background:var(--idle);box-shadow:0 0 0 1.5px var(--fg-2)}
+  .s-dot--errored{background:var(--errored)}
+  .s-dot--waiting{background:var(--waiting)}
+  .s-dot--offline{background:var(--fg-3)}
+  .term-collapse-btn,.term-fullscreen-btn{font:inherit;font-size:.75em;color:var(--fg-2);background:transparent;border:1px solid var(--border);padding:4px 10px;min-height:36px;border-radius:var(--r-sm);cursor:pointer}
+  .term-collapse-btn:hover,.term-fullscreen-btn:hover{color:var(--accent-2);border-color:var(--accent-dim)}
+
+  #term-screen{flex:1;min-height:0;margin:0;padding:12px 16px;background:var(--term-bg);color:var(--term-fg);font-family:var(--mono);font-size:.82em;line-height:1.5;overflow:auto;white-space:pre-wrap;word-break:break-word}
+  #term-screen .ts-cmd{color:var(--accent)}
+  #term-screen .ts-ok{color:var(--working)}
+  #term-screen .ts-spin{color:var(--waiting)}
+  #term-screen .ts-dim{color:var(--fg-3)}
+
+  .term-input-form{flex-shrink:0;display:flex;align-items:center;gap:8px;padding:8px 16px;padding-bottom:calc(8px + env(safe-area-inset-bottom));border-top:1px solid var(--border);background:var(--surface)}
+  .term-input{flex:1;min-height:44px;padding:8px 12px;border:1px solid var(--border-2);border-radius:var(--r-sm);font:inherit;background:var(--bg-2);color:var(--fg)}
+  .term-input:focus{outline:2px solid var(--accent-2);outline-offset:1px;border-color:var(--accent-2)}
+  .term-badge{font-size:.72em;background:var(--surface-3);color:var(--fg-2);padding:3px 10px;border-radius:var(--r-pill);flex-shrink:0;font-weight:600}
+  .term-result{font-size:.72em;color:var(--working);flex-shrink:0;font-family:var(--mono);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  /* ⇄ 切换抽屉(单选 attach,无多选/无扇出) */
+  .switch-sheet{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--accent-dim);border-radius:var(--r) var(--r) 0 0;padding:8px 0 calc(8px + env(safe-area-inset-bottom));box-shadow:0 -4px 14px rgba(38,37,30,0.12);transform:translateY(110%);transition:transform .2s ease;max-height:60vh;display:flex;flex-direction:column;z-index:50}
+  .switch-sheet:not([hidden]){transform:translateY(0)}
+  .switch-sheet__head{flex-shrink:0;display:flex;align-items:center;gap:8px;padding:4px 16px 8px;border-bottom:1px solid var(--border)}
+  .switch-sheet__title{font-weight:600;font-size:.9em}
+  .switch-sheet__hint{font-size:.72em;color:var(--fg-3);font-family:var(--mono)}
+  .switch-sheet__close{margin-left:auto;font:inherit;font-size:.8em;color:var(--fg-2);background:transparent;border:none;min-height:36px;cursor:pointer;padding:0 8px}
+  .switch-sheet__list{list-style:none;overflow:auto;padding:4px 0;margin:0}
+  .switch-item{display:flex;align-items:center;gap:10px;width:100%;padding:10px 16px;min-height:48px;background:transparent;border:none;font:inherit;color:var(--fg);cursor:pointer;text-align:left}
+  .switch-item:hover{background:var(--accent-bg)}
+  .switch-item--current{background:var(--accent-bg)}
+  .switch-item .si-name{font-weight:600;font-size:.9em}
+  .switch-item .si-machine{font-size:.75em;color:var(--fg-2);font-family:var(--mono);margin-left:auto}
+  .switch-item .si-status{font-size:.72em;color:var(--fg-3);font-family:var(--mono);min-width:64px;text-align:right}
+
+  .bottom-tabbar{flex-shrink:0;display:flex;background:var(--surface-2);border-top:1px solid var(--border);padding-bottom:env(safe-area-inset-bottom)}
+  .tab{position:relative;flex:1;min-height:44px;padding:8px 0;display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--fg-2);text-decoration:none;font-size:11px;background:none;border:none;font-family:inherit;cursor:pointer}
+  .tab--active{color:var(--accent-2);font-weight:600}
+  .tab--active::before{content:'';position:absolute;top:0;left:30%;right:30%;height:2px;background:var(--accent-2)}
+</style>
+</head>
+<body>
+<div class="mockup-banner">
+📐 MOCKUP · 单机控制台 = <strong>单被控 agent 终端</strong>(console.html?m=hostA&s=web-refactor) · :7685<br>
+看板卡片点击进入 · attach 该被控 + 给它发指令(<strong>单发,非扇出</strong>) · <strong>⇄ 单选切换</strong>其他被控 · 无主控 hero / 无 #ma-screen · 终端撑满视口
+</div>
+
+<div class="console-app">
+  <header class="console-topbar">
+    <span aria-hidden="true">◇</span>
+    <h1>单机控制台</h1>
+    <a class="topbar-back" href="dashboard-multiselect.html">← 看板</a>
+    <div class="fleet-summary" aria-live="polite">
+      <span>▶ 2</span><span>在线 2/3</span>
+    </div>
+  </header>
+
+  <!-- 终端区(撑满):attach 单被控 + 给它发指令 -->
+  <section class="console-term" data-collapsed="false">
+    <div class="term-header">
+      <div class="term-target" id="term-target" data-state="working">
+        <span class="s-dot s-dot--working" id="tt-dot"></span>
+        <span class="t-machine" id="tt-machine">host-A</span>
+        <span class="t-sep">/</span>
+        <span class="t-session" id="tt-session">web-refactor</span>
+      </div>
+      <button class="term-collapse-btn" type="button" aria-expanded="true" title="收起 / 展开终端">▾终端</button>
+      <button class="term-fullscreen-btn" type="button" aria-pressed="false" title="终端全屏 / 退出全屏(Esc)">⛶全屏</button>
+    </div>
+    <pre id="term-screen"><span class="ts-dim">$ claude  (host-A · web-refactor)</span>
+<span class="ts-cmd">&gt; 帮我把 dashboard.js 的 renderBoard 按机器分组,离线机折叠</span>
+
+<span class="ts-spin">⠋</span> 正在分析 dashboard.js …
+<span class="ts-ok">✓</span> 已读取 dashboard.js(renderBoard 142-189)
+<span class="ts-ok">✓</span> 已读取 board_render.cjs(flattenFleet / sortCardsByRelevance)
+<span class="ts-ok">✓</span> 已读取 dashboard.css(.card.card--selected 已存在 :171)
+<span class="ts-spin">⠋</span> 正在修改 renderBoard:sorted → Map(machine.id → cards[]) …
+<span class="ts-dim">  └ 每机 &lt;details open&gt;,离线机默认折叠,扩展 open 继承</span>
+
+<span class="ts-cmd">&gt; 记得选中态用 Set 存,2s 重建后重标</span>
+<span class="ts-spin">⠋</span> 好的,selected = new Set(),key = `${m.id}/${s.name}` …</pre>
+    <form class="term-input-form" id="term-input-form">
+      <input class="term-input" id="term-input" placeholder="输入(Enter 发送给 host-A/web-refactor)…" autocomplete="off" aria-label="指令输入(Enter 发送给当前被控)" />
+      <span class="term-badge">单发</span>
+      <span class="term-result" id="term-result" aria-live="polite"></span>
+    </form>
+  </section>
+
+  <nav class="bottom-tabbar" aria-label="主导航">
+    <a class="tab" href="console-crosspage-fanout.html"><span aria-hidden="true">▤</span><span>控制台</span></a>
+    <a class="tab" href="dashboard-multiselect.html"><span aria-hidden="true">◫</span><span>看板</span></a>
+    <button class="tab" type="button" id="switchTab" aria-haspopup="dialog" aria-expanded="false"><span aria-hidden="true">⇄</span><span>切换</span></button>
+  </nav>
+</div>
+
+<!-- ⇄ 切换抽屉(单选 attach,无多选) -->
+<aside class="switch-sheet" id="switch-sheet" hidden role="dialog" aria-label="切换被控 agent">
+  <div class="switch-sheet__head">
+    <span class="switch-sheet__title">切换被控</span>
+    <span class="switch-sheet__hint">点一项 → attach + 关闭(单选,非扇出)</span>
+    <button class="switch-sheet__close" id="switch-close" type="button">关闭 ✕</button>
+  </div>
+  <ul class="switch-sheet__list" id="switch-list"></ul>
+</aside>
+
+<script>
+  // 当前 attach 的被控
+  var current = { machine:'host-A', session:'web-refactor', status:'working' };
+  // 可切换的被控列表(来自 fleet)
+  var agents = [
+    { machine:'host-A', session:'web-refactor', status:'working' },
+    { machine:'host-A', session:'api-tests',   status:'working' },
+    { machine:'host-A', session:'docs-polish', status:'idle' },
+    { machine:'host-B', session:'review-bot',  status:'waiting' },
+    { machine:'host-B', session:'deploy-job',  status:'errored' }
+  ];
+  var statusLabel = { working:'working', idle:'idle', waiting:'waiting', errored:'errored', offline:'offline' };
+
+  function $(id){ return document.getElementById(id); }
+  function dotClass(s){ return 's-dot s-dot--' + s; }
+
+  function renderTarget(){
+    $('tt-machine').textContent = current.machine;
+    $('tt-session').textContent = current.session;
+    $('tt-dot').className = dotClass(current.status);
+    $('term-target').dataset.state = current.status;
+    $('term-input').placeholder = '输入(Enter 发送给 ' + current.machine + '/' + current.session + ')…';
+  }
+
+  function renderList(){
+    var ul = $('switch-list');
+    ul.innerHTML = '';
+    agents.forEach(function(a){
+      var isCur = a.machine === current.machine && a.session === current.session;
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'switch-item' + (isCur ? ' switch-item--current' : '');
+      btn.innerHTML =
+        '<span class="' + dotClass(a.status) + '"></span>' +
+        '<span class="si-name">' + a.session + '</span>' +
+        '<span class="si-machine">' + a.machine + '</span>' +
+        '<span class="si-status">' + statusLabel[a.status] + '</span>';
+      btn.addEventListener('click', function(){
+        current = { machine:a.machine, session:a.session, status:a.status };
+        renderTarget();
+        closeSheet();
+        $('term-result').textContent = '已 attach ' + a.machine + '/' + a.session;
+        $('term-result').style.color = 'var(--working)';
+      });
+      ul.appendChild(btn);
+    });
+  }
+
+  function openSheet(){ renderList(); $('switch-sheet').hidden = false; $('switchTab').setAttribute('aria-expanded','true'); }
+  function closeSheet(){ $('switch-sheet').hidden = true; $('switchTab').setAttribute('aria-expanded','false'); }
+
+  $('switchTab').addEventListener('click', function(){ $('switch-sheet').hidden ? openSheet() : closeSheet(); });
+  $('switch-close').addEventListener('click', closeSheet);
+
+  // term-input 单发(Enter 发给当前被控,非扇出)
+  $('term-input-form').addEventListener('submit', function(e){
+    e.preventDefault();
+    var v = $('term-input').value.trim();
+    if (!v) return;
+    // 模拟:WS {type:'input', target:current, data:v} → 该 agent 已 attach
+    $('term-result').textContent = '已发送 → ' + current.machine + '/' + current.session;
+    $('term-result').style.color = 'var(--working)';
+    $('term-input').value = '';
+    var screen = $('term-screen');
+    screen.appendChild(document.createTextNode('\n'));
+    var cmd = document.createElement('span');
+    cmd.className = 'ts-cmd';
+    cmd.textContent = '> ' + v;
+    screen.appendChild(cmd);
+    screen.scrollTop = screen.scrollHeight;
+  });
+
+  // 折叠 / 全屏(演示)
+  document.querySelector('.term-collapse-btn').addEventListener('click', function(){
+    var t = document.querySelector('.console-term');
+    var collapsed = t.dataset.collapsed === 'true';
+    t.dataset.collapsed = collapsed ? 'false' : 'true';
+    this.setAttribute('aria-expanded', collapsed ? 'true' : 'false');
+  });
+  document.querySelector('.term-fullscreen-btn').addEventListener('click', function(){
+    var on = this.getAttribute('aria-pressed') === 'true';
+    this.setAttribute('aria-pressed', on ? 'false' : 'true');
+  });
+
+  renderTarget();
+</script>
+</body>
+</html>

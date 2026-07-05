@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>mockup v2 · 看板 = 监控 + 扇出(:7685)</title>
+<style>
+  :root{
+    --bg:#f2f1ed; --bg-2:#f7f7f4; --surface:#ebeae5; --surface-2:#e3e2dc; --surface-3:#d9d8d1;
+    --fg:#26251e; --fg-2:rgba(38,37,30,0.70); --fg-3:rgba(38,37,30,0.35);
+    --border:rgba(38,37,30,0.1); --border-2:rgba(38,37,30,0.2);
+    --accent:#d9651a; --accent-2:#b54e0e; --accent-bg:rgba(217,101,26,0.08); --accent-dim:rgba(217,101,26,0.25);
+    --waiting:#c08532; --working:#1f8a65; --idle:rgba(38,37,30,0.3); --errored:#c01a4b;
+    --sans:system-ui,-apple-system,'Segoe UI',sans-serif; --mono:'SF Mono',ui-monospace,Menlo,monospace;
+    --r-xs:3px; --r-sm:6px; --r:10px; --r-pill:9999px;
+    --term-bg:#1a1815;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;font-family:var(--sans);font-size:14px;background:var(--bg);color:var(--fg)}
+  body{display:flex;flex-direction:column;height:100dvh;height:100vh;overflow:hidden}
+  .mockup-banner{flex-shrink:0;background:#fff8db;border-bottom:1px solid var(--border-2);padding:8px 16px;font-family:var(--mono);font-size:11px;color:#7a5b00;line-height:1.5}
+
+  .console-topbar{flex-shrink:0;display:flex;align-items:center;gap:12px;padding:8px 16px;border-bottom:1px solid var(--border);background:var(--surface)}
+  .console-topbar h1{font-size:1rem}
+  .topbar-back{color:var(--fg-2);text-decoration:none;font-size:.85em}
+  .fleet-summary{margin-left:auto;display:flex;gap:10px;align-items:center;color:var(--fg-2);font-size:.95em}
+
+  .console-board{flex:1;min-height:0;overflow:auto;padding:12px 16px}
+  .machine-group{margin-bottom:18px}
+  .machine-group__title{display:flex;align-items:center;gap:8px;font-size:.85em;color:var(--fg-2);padding:6px 4px;min-height:44px;cursor:pointer;list-style:none}
+  .machine-group__title::-webkit-details-marker{display:none}
+  .machine-group__caret{display:inline-block;width:1em;color:var(--fg-3);text-align:center}
+  .machine-group__name{font-weight:600;color:var(--fg)}
+  .machine-group--offline .machine-group__name{color:var(--fg-3);font-weight:400}
+  .machine-group__count{font-family:var(--mono);font-size:.85em;background:var(--surface-2);padding:1px 8px;border-radius:var(--r-pill);color:var(--fg-2)}
+  .machine-group--offline .machine-group__count{background:var(--surface-3)}
+  .board-grid{list-style:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;margin-top:4px}
+
+  /* 卡片(对齐 board_render.cjs buildCardInner DOM) */
+  .card{position:relative;display:grid;grid-template-columns:auto auto auto 1fr auto;grid-template-rows:auto auto auto;align-items:center;gap:2px 6px;min-height:72px;padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);cursor:pointer;text-decoration:none;color:var(--fg);box-shadow:inset 3px 0 0 transparent;transition:border-color .15s ease,box-shadow .15s ease}
+  .card:hover{border-color:var(--border-2)}
+  .card__select{grid-column:1;grid-row:1;font-size:1em;color:var(--fg-2);user-select:none;display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;border-radius:var(--r-xs);cursor:pointer}
+  .card__select:hover{background:var(--accent-bg)}
+  .card .s-dot{grid-column:2;grid-row:1;width:9px;height:9px;border-radius:50%;background:var(--idle);flex-shrink:0}
+  .card .s-dot--working{background:var(--working)}
+  .card .s-dot--idle{background:var(--idle);box-shadow:0 0 0 1.5px var(--fg-2)}
+  .card .s-dot--errored{background:var(--errored)}
+  .card .s-dot--waiting{background:var(--waiting)}
+  .card .s-dot--offline{background:var(--fg-3)}
+  .card .s-icon{grid-column:3;grid-row:1;color:var(--fg-2);font-size:.9em}
+  .card__name{grid-column:4;grid-row:1;font-weight:600;font-size:.9em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .card__time{grid-column:5;grid-row:1;color:var(--fg-2);font-size:.7em;font-family:var(--mono)}
+  .card__session{grid-column:4;grid-row:2;color:var(--fg-2);font-size:.75em;font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .card__last{grid-column:1/-1;grid-row:3;color:var(--fg-3);font-size:.72em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
+  .card[data-status="errored"]{box-shadow:inset 3px 0 0 var(--errored)}
+  .card[data-status="waiting"]{background:rgba(192,133,50,0.08)}
+  .card[data-status="offline"]{border-style:dashed;opacity:.7}
+  .card.card--selected{border-color:var(--accent-2);box-shadow:inset 0 0 0 2px var(--accent-2)}
+  .card.card--selected[data-status="errored"]{box-shadow:inset 3px 0 0 var(--errored),inset 0 0 0 2px var(--accent-2)}
+  .card.card--selected::after{content:'';position:absolute;top:0;right:0;width:0;height:0;border-style:solid;border-width:0 13px 13px 0;border-color:transparent var(--accent-2) transparent transparent}
+  .card.card--selected .card__select{color:var(--accent-2)}
+
+  /* 扇出 bar(看板内直接扇出,不跳控制台) — shell 内 flex 子元素,非 fixed */
+  .fanout-bar{flex-shrink:0;background:var(--surface);border-top:1px solid var(--accent-dim);padding:10px 16px;padding-bottom:calc(10px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:10px;box-shadow:0 -4px 14px rgba(38,37,30,0.08)}
+  .fanout-bar .sel-count{font-weight:700;color:var(--accent-2);flex-shrink:0}
+  .fanout-bar .sel-clear{min-height:44px;padding:0 12px;border:1px solid var(--accent-dim);border-radius:var(--r);background:transparent;color:var(--accent-2);font-size:13px;cursor:pointer;flex-shrink:0}
+  .fanout-bar .term-input{flex:1;min-height:44px;padding:8px 12px;border:1px solid var(--border-2);border-radius:var(--r-sm);font:inherit;background:var(--bg-2);color:var(--fg)}
+  .fanout-bar .term-input:focus{outline:2px solid var(--accent-2);outline-offset:1px;border-color:var(--accent-2)}
+  .fanout-bar .term-badge{font-size:.75em;background:var(--accent-2);color:#fff;padding:3px 10px;border-radius:var(--r-pill);font-weight:600;flex-shrink:0}
+  .fanout-bar .bc-result{font-size:.75em;color:var(--working);flex-shrink:0}
+
+  .bottom-tabbar{flex-shrink:0;display:flex;background:var(--surface-2);border-top:1px solid var(--border);padding-bottom:env(safe-area-inset-bottom)}
+  .tab{position:relative;flex:1;min-height:44px;padding:8px 0;display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--fg-2);text-decoration:none;font-size:11px}
+  .tab--active{color:var(--accent-2);font-weight:600}
+  .tab--active::before{content:'';position:absolute;top:0;left:30%;right:30%;height:2px;background:var(--accent-2)}
+</style>
+</head>
+<body>
+<div class="mockup-banner">
+📐 MOCKUP v2 · 看板 = <strong>监控(按机分组)+ 扇出(选被控直接发)</strong> · :7685<br>
+点卡片 ☐=选中(扇出目标) / 点卡片其余区域=跳<strong>单机控制台</strong>看该被控终端 · 选中后底部 bar 直接 Enter 扇出(不跳控制台)
+</div>
+
+<header class="console-topbar">
+  <span aria-hidden="true">◇</span>
+  <h1>CC 看板 · 多机</h1>
+  <a class="topbar-back" href="console-crosspage-fanout.html">控制台 →</a>
+  <div class="fleet-summary" aria-live="polite">
+    <span>▶ 2</span><span>⏸ 3</span><span>✕ 1</span><span>在线 2/3</span>
+  </div>
+</header>
+
+<main class="console-board" id="board-body">
+  <section class="machine-group" data-machine="hostA">
+    <h2 class="machine-group__title">
+      <span class="machine-group__caret">▼</span>
+      <span class="machine-group__name">host-A</span>
+      <span class="machine-group__count">3</span>
+    </h2>
+    <ul class="board-grid">
+      <li class="card-row"><a class="card card--selected" href="#" data-status="working" data-m="hostA" data-s="web-refactor" title="→ 单机控制台(console.html?m=hostA&s=web-refactor)">
+        <span class="card__select" data-toggle="1">☑</span>
+        <span class="s-dot s-dot--working"></span><span class="s-icon">▶</span>
+        <span class="card__name">host-A</span><span class="card__time">now</span>
+        <span class="card__session">web-refactor</span>
+        <span class="card__last">Refactoring dashboard.js renderBoard…</span>
+      </a></li>
+      <li class="card-row"><a class="card" href="#" data-status="idle" data-m="hostA" data-s="docs-polish">
+        <span class="card__select" data-toggle="1">☐</span>
+        <span class="s-dot s-dot--idle"></span><span class="s-icon">⏸</span>
+        <span class="card__name">host-A</span><span class="card__time">12m 前</span>
+        <span class="card__session">docs-polish</span>
+        <span class="card__last">$ git status (idle)</span>
+      </a></li>
+      <li class="card-row"><a class="card card--selected" href="#" data-status="working" data-m="hostA" data-s="api-tests">
+        <span class="card__select" data-toggle="1">☑</span>
+        <span class="s-dot s-dot--working"></span><span class="s-icon">▶</span>
+        <span class="card__name">host-A</span><span class="card__time">3m 前</span>
+        <span class="card__session">api-tests</span>
+        <span class="card__last">PASS board_render.test.cjs 18/18</span>
+      </a></li>
+    </ul>
+  </section>
+
+  <section class="machine-group" data-machine="hostB">
+    <h2 class="machine-group__title">
+      <span class="machine-group__caret">▼</span>
+      <span class="machine-group__name">host-B</span>
+      <span class="machine-group__count">2</span>
+    </h2>
+    <ul class="board-grid">
+      <li class="card-row"><a class="card" href="#" data-status="errored" data-m="hostB" data-s="deploy-job">
+        <span class="card__select" data-toggle="1">☐</span>
+        <span class="s-dot s-dot--errored"></span><span class="s-icon">✕</span>
+        <span class="card__name">host-B</span><span class="card__time">1m 前</span>
+        <span class="card__session">deploy-job</span>
+        <span class="card__last">Error: ECONNREFUSED 172.x.x.x</span>
+      </a></li>
+      <li class="card-row"><a class="card" href="#" data-status="waiting" data-m="hostB" data-s="review-bot">
+        <span class="card__select" data-toggle="1">☐</span>
+        <span class="s-dot s-dot--waiting"></span><span class="s-icon">⏳</span>
+        <span class="card__name">host-B</span><span class="card__time">8m 前</span>
+        <span class="card__session">review-bot</span>
+        <span class="card__last">Waiting for user input…</span>
+      </a></li>
+    </ul>
+  </section>
+
+  <section class="machine-group machine-group--offline" data-machine="hostC">
+    <details>
+      <summary class="machine-group__title">
+        <span class="machine-group__caret">▸</span>
+        <span class="machine-group__name">host-C · offline</span>
+        <span class="machine-group__count">1</span>
+      </summary>
+      <ul class="board-grid">
+        <li class="card-row"><a class="card" href="#" data-status="offline" data-m="hostC" data-s="nightly-build">
+          <span class="card__select" data-toggle="1">☐</span>
+          <span class="s-dot s-dot--offline"></span><span class="s-icon">⌽</span>
+          <span class="card__name">host-C</span><span class="card__time">2h 前</span>
+          <span class="card__session">nightly-build</span>
+          <span class="card__last">(离线)</span>
+        </a></li>
+      </ul>
+    </details>
+  </section>
+</main>
+
+<!-- 扇出 bar(看板内直接扇出):选中卡片后显示,Enter 扇出给选中被控 -->
+<form id="fanout-bar" class="fanout-bar" hidden>
+  已选 <span class="sel-count" id="sel-count">2</span>
+  <button class="sel-clear" id="sel-clear" type="button">清除</button>
+  <input class="term-input" id="fanout-input" placeholder="输入(Enter 扇出给 2 个被控)…" autocomplete="off" />
+  <span class="term-badge" id="bc-count">扇出 2</span>
+  <span class="bc-result" id="bc-result">成功 2/2</span>
+</form>
+
+<nav class="bottom-tabbar" aria-label="主导航">
+  <a class="tab" href="console-crosspage-fanout.html"><span>▤</span><span>控制台</span></a>
+  <a class="tab tab--active"><span>◫</span><span>看板</span></a>
+</nav>
+
+<script>
+  var selected = 2;
+  var bar = document.getElementById('fanout-bar');
+  var count = document.getElementById('sel-count');
+  var bcCount = document.getElementById('bc-count');
+  var bcResult = document.getElementById('bc-result');
+  var input = document.getElementById('fanout-input');
+  function update(){
+    count.textContent = selected;
+    bar.hidden = (selected === 0);
+    bcCount.textContent = '扇出 ' + selected;
+    bcCount.hidden = (selected === 0);
+    input.placeholder = selected >= 2 ? ('输入(Enter 扇出给 ' + selected + ' 个被控)…')
+                          : selected === 1 ? '输入(Enter 发送给该被控)…'
+                          : '输入…';
+  }
+  document.getElementById('board-body').addEventListener('click', function(e){
+    var tog = e.target.closest('[data-toggle]');
+    if (!tog) return;              // 非命中区 → 放行(实际跳单机控制台 console.html?m=&s=)
+    e.preventDefault();            // 命中区:阻止跳转,toggle 选中
+    var card = tog.closest('.card');
+    var isSel = card.classList.toggle('card--selected');
+    tog.textContent = isSel ? '☑' : '☐';
+    selected += isSel ? 1 : -1;
+    update();
+  });
+  document.getElementById('sel-clear').addEventListener('click', function(e){
+    e.preventDefault();
+    document.querySelectorAll('.card--selected').forEach(function(c){
+      c.classList.remove('card--selected');
+      var t = c.querySelector('[data-toggle]'); if (t) t.textContent = '☐';
+    });
+    selected = 0; update();
+  });
+  bar.addEventListener('submit', function(e){
+    e.preventDefault();
+    if (selected === 0) { bcResult.textContent = '未选目标'; bcResult.style.color = 'var(--errored)'; return; }
+    bcResult.style.color = 'var(--working)';
+    bcResult.textContent = '成功 ' + selected + '/' + selected;
+    input.value = '';
+  });
+  update();
+</script>
+</body>
+</html>

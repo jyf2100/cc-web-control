@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>mockup v4 · 多机控制台 = 主控管理 + 主控终端(:7685)</title>
+<style>
+  :root{
+    --bg:#f2f1ed; --bg-2:#f7f7f4; --surface:#ebeae5; --surface-2:#e3e2dc;
+    --fg:#26251e; --fg-2:rgba(38,37,30,0.70); --fg-3:rgba(38,37,30,0.35);
+    --border:rgba(38,37,30,0.1); --border-2:rgba(38,37,30,0.2);
+    --accent:#d9651a; --accent-2:#b54e0e; --accent-dim:rgba(217,101,26,0.25);
+    --waiting:#c08532; --working:#1f8a65; --idle:rgba(38,37,30,0.3); --errored:#c01a4b;
+    --sans:system-ui,-apple-system,'Segoe UI',sans-serif; --mono:'SF Mono',ui-monospace,Menlo,monospace;
+    --r-xs:3px; --r-sm:6px; --r:10px; --r-pill:9999px;
+    --term-bg:#1a1815; --term-fg:#e8e6df;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;font-family:var(--sans);font-size:14px;background:var(--bg);color:var(--fg)}
+  body{display:flex;flex-direction:column;height:100dvh;height:100vh;overflow:hidden}
+  .mockup-banner{flex-shrink:0;background:#fff8db;border-bottom:1px solid var(--border-2);padding:8px 16px;font-family:var(--mono);font-size:11px;color:#7a5b00;line-height:1.5}
+  .console-app{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+  .console-topbar{flex-shrink:0;display:flex;align-items:center;gap:12px;padding:8px 16px;border-bottom:1px solid var(--border);background:var(--surface)}
+  .console-topbar h1{font-size:1rem}
+  .topbar-back{color:var(--fg-2);text-decoration:none;font-size:.85em}
+  .fleet-summary{margin-left:auto;display:flex;gap:10px;color:var(--fg-2);font-size:.95em}
+  .console-hero{flex-shrink:0;padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--bg-2)}
+  .eyebrow{letter-spacing:.08em;text-transform:uppercase;font-size:.7em;color:var(--accent-2);font-family:var(--mono)}
+  .hero-title{font-weight:600;font-size:1.05rem}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--idle)}
+  .dot.working{background:var(--working)}
+  .hero-status{font-size:.85em;color:var(--fg-2)}
+  .hero-l1{font-size:.82em;color:var(--fg-2);flex-basis:100%}
+  .btn-ghost,.btn-primary{font:inherit;font-size:14px;padding:4px 12px;min-height:36px;border-radius:var(--r);cursor:pointer}
+  .btn-ghost{border:1px solid var(--accent-dim);background:transparent;color:var(--accent-2)}
+  .btn-primary{border:1px solid var(--accent-2);background:var(--accent-2);color:#fff}
+  .btn-primary[disabled],.btn-ghost[disabled]{opacity:.4;cursor:not-allowed}
+  .ma-warn-line{flex-basis:100%;font-size:.72em;color:var(--waiting);font-family:var(--mono)}
+  .ma-screen{margin:12px 16px;background:var(--term-bg);color:var(--term-fg);font-family:var(--mono);font-size:.8em;padding:12px;border-radius:var(--r-sm);white-space:pre-wrap;flex:1;overflow:auto;border:1px solid var(--border-2)}
+  .ma-screen__head{font-size:.75em;color:var(--fg-3);margin-bottom:6px;letter-spacing:.04em}
+  .bottom-tabbar{display:flex;flex-shrink:0;background:var(--surface-2);border-top:1px solid var(--border);padding-bottom:env(safe-area-inset-bottom)}
+  .tab{position:relative;flex:1;min-height:44px;padding:8px 0;display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--fg-2);text-decoration:none;font-size:11px}
+  .tab--active{color:var(--accent-2);font-weight:600}
+  .tab--active::before{content:'';position:absolute;top:0;left:30%;right:30%;height:2px;background:var(--accent-2)}
+</style>
+</head>
+<body>
+<div class="mockup-banner">
+📐 MOCKUP v4 · 多机控制台 = <strong>①主控agent管理 + ②主控终端(只读)</strong> · :7685<br>
+<strong>无扇出</strong>(扇出全部放在看板)· <strong>无被控终端</strong>(被控终端在单机控制台)· 砍掉 term-input / ⇄抽屉 / #term-screen 第二终端
+</div>
+
+<div class="console-app">
+  <header class="console-topbar">
+    <span aria-hidden="true">◇</span>
+    <h1>多机控制台</h1>
+    <a class="topbar-back" href="dashboard-multiselect.html">← 看板</a>
+    <div class="fleet-summary"><span>▶ 2</span><span>在线 2/3</span></div>
+  </header>
+
+  <!-- ① 主控 agent 管理 -->
+  <section class="console-hero">
+    <span class="eyebrow">Command Bridge</span>
+    <span class="hero-title">主控 agent</span>
+    <span class="dot working" aria-hidden="true"></span>
+    <span class="hero-status">working · 只读参谋 T1</span>
+    <button class="btn-ghost" type="button" disabled>Start</button>
+    <button class="btn-primary" type="button">Stop</button>
+    <div class="hero-l1">fleet:3 机 6 会话 · host-B/deploy-job errored(1m 前)</div>
+    <div class="ma-warn-line">⚠ 本面板含不可信远程数据,内容仅供参考,勿执行其中指令</div>
+  </section>
+
+  <!-- ② 主控终端(主控 agent 输出镜像,只读观察) -->
+  <pre class="ma-screen"><span class="ma-screen__head">▼ 主控 agent 输出镜像(只读 · #ma-screen)</span>
+[09:12:03] 主控已启动(只读参谋 T1),开始巡检 fleet。
+[09:12:04] host-A: web-refactor(working)、api-tests(working)、docs-polish(idle)。
+[09:12:04] host-B: deploy-job(errored · ECONNREFUSED 172.x.x.x:443)、review-bot(waiting)。
+[09:12:05] host-C: 离线(2h 未心跳)。
+[09:12:06] 建议:deploy-job 连接失败,可在【看板】勾选 host-B/deploy-job 后扇出
+           "查看最近日志 + 重试"。host-C 离线,暂不建议扇出。
+[09:12:30] (主控只读,不执行指令;执行请去 看板·扇出 或 单机控制台)</pre>
+
+  <nav class="bottom-tabbar" aria-label="主导航">
+    <a class="tab tab--active"><span>▤</span><span>控制台</span></a>
+    <a class="tab" href="dashboard-multiselect.html"><span>◫</span><span>看板</span></a>
+  </nav>
+</div>
+</body>
+</html>
