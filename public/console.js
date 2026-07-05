@@ -17,7 +17,6 @@
     + (queryToken ? `?token=${encodeURIComponent(queryToken)}` : '');
   let ws = null;
   let currentTarget = null;       // {machine,session}
-  const selected = new Map();     // key → {machine,session}(Set 字符串 + split('/') 在 id/name 含 / 时被截断 → 改 Map 直存对象)
 
   const termTarget = document.getElementById('term-target');
   const termScreen = document.getElementById('term-screen');
@@ -26,8 +25,6 @@
   const termSection = document.querySelector('.console-term');
   const termCollapseBtn = document.getElementById('term-collapse-btn');
   const termFullscreenBtn = document.getElementById('term-fullscreen-btn');
-  const bcCount = document.getElementById('bc-count');
-  const bcResult = document.getElementById('bc-result');
   const fleetSummary = document.getElementById('fleet-summary');
   const heroCallout = document.getElementById('hero-callout');
   const maToggleBtn = document.getElementById('ma-toggle-btn');
@@ -75,10 +72,6 @@
         termScreen.scrollTop = termScreen.scrollHeight;
       } else if (msg.type === 'error' && isCurrent) {
         termScreen.textContent += `\n[错误] ${msg.data}`;
-      } else if (msg.type === 'broadcast_result') {
-        const arr = Array.isArray(msg.results) ? msg.results : [];
-        const okN = arr.filter((r) => r.ok).length;
-        bcResult.textContent = `成功 ${okN}/${arr.length}`;
       }
     };
     ws.onopen = () => {
@@ -115,8 +108,6 @@
 
   function attachTarget(t) {
     currentTarget = t;
-    // H1:单选 attach 清空多选 selection,防陈旧勾选偷偷把命令路由到错机
-    selected.clear(); refreshBroadcast();
     termTarget.textContent = t ? `${t.machine} / ${t.session}` : '未选择会话';
     termScreen.textContent = '';
     if (!t) return;
@@ -129,29 +120,11 @@
     e.preventDefault();
     if (!termInput.value) return;
     ensureWs();
-    if (selected.size >= 2) {
-      // M1:直读 Map.values() 的 {machine,session} 对象,不再 split('/')(id/name 含 / 会被截断)
-      const targets = Array.from(selected.values());
-      bcResult.textContent = '扇出中…';
-      sendWhenOpen({ type: 'broadcast', targets, data: termInput.value, enter: true });
-    } else if (selected.size === 1) {
-      // H2:多选模式只勾 1 个时,命令发到该勾选项(否则会落到 currentTarget,可能路由到错机)
-      const only = Array.from(selected.values())[0];
-      sendWhenOpen({ type: 'input', target: only, data: termInput.value, enter: true });
-    } else if (currentTarget) {
+    if (currentTarget) {
       sendWhenOpen({ type: 'input', target: currentTarget, data: termInput.value, enter: true });
-    } else {
-      return;
     }
     termInput.value = '';
   });
-
-  function refreshBroadcast() {
-    const broadcasting = selected.size >= 2;
-    bcCount.hidden = selected.size < 2;
-    bcCount.textContent = broadcasting ? `扇出 ${selected.size}` : '';
-    termInput.placeholder = broadcasting ? `给 ${selected.size} 个会话发同一条指令…` : '输入(Enter 发送)…';
-  }
 
   // 控制台只 poll main-agent 状态;看板数据(global dashboard)归 dashboard.html,此处不再拉取
   async function poll() {
@@ -284,7 +257,6 @@
   // ---- 切换抽屉(createSwitchSheet,数据 /api/machines 按需,多选 → 广播)----
   const switchTab = document.getElementById('switchTab');
   let switchSheet = null;
-  let multiSelectMode = false;
 
   // 扁平化 machine/session 列表 → 渲染项(含 key 与离线后缀)
   function flattenItems(machines) {
@@ -327,7 +299,7 @@
     renderMachineItems(flattenItems(machines), { loading: false, error: loadError });
   }
 
-  // 渲染机器项到 sheet(单选 attach+关 / 多选 toggle selected);每次 toggle 重建列表刷新选中态。
+  // 渲染机器项到 sheet(单选 attach+关);扇出已挪看板,控制台抽屉只做单选切换。
   // state={loading,error} 控制加载/失败/正常三态(M2/M4:与"暂无机器"区分);restoreKey 用于重建后还原焦点(M5)。
   function renderMachineItems(items, state, restoreKey) {
     const sheetEl = document.getElementById('switchSheet'); // createSwitchSheet 注入的根元素(id 见 switch_sheet.cjs)
@@ -338,11 +310,9 @@
     const focusBtn = sheetEl.querySelector('.switch-sheet-btn:focus[data-key]');
     const focusKey = restoreKey || (focusBtn ? focusBtn.getAttribute('data-key') : null);
     const old = sheetEl.querySelector('.switch-sheet-machines'); if (old) old.remove();
-    const oldToggle = sheetEl.querySelector('.switch-sheet-multitoggle'); if (oldToggle) oldToggle.remove();
     const wrap = document.createElement('div'); wrap.className = 'switch-sheet-machines';
     const title = document.createElement('p'); title.className = 'switch-sheet-section-title';
-    title.textContent = loading ? '机器(加载中…)'
-      : (multiSelectMode ? `机器(已选 ${selected.size} · 扇出)` : '机器');
+    title.textContent = loading ? '机器(加载中…)' : '机器';
     wrap.appendChild(title);
     const list = document.createElement('ul'); list.className = 'switch-sheet-list'; list.setAttribute('role', 'list');
     if (loading) {
@@ -361,20 +331,13 @@
       empty.textContent = '暂无机器'; wrap.appendChild(empty);
     } else {
       items.forEach((it) => {
-        const isSel = selected.has(it.key);
         const li = document.createElement('li'); li.className = 'switch-sheet-item';
         const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'switch-sheet-btn';
-        btn.setAttribute('aria-pressed', String(isSel));
+        // aria-pressed 反映"是否为当前 attach 目标";currentTarget 可能为 null(multi 模式未 attach)→ 守卫防解引用
+        btn.setAttribute('aria-pressed', String(!!currentTarget && it.machine === currentTarget.machine && it.session === currentTarget.session));
         btn.setAttribute('data-key', it.key); // M5:重建后还原焦点
-        btn.textContent = (multiSelectMode ? (isSel ? '☑ ' : '☐ ') : '') + it.label;
+        btn.textContent = it.label;
         btn.addEventListener('click', () => {
-          if (multiSelectMode) {
-            // Map 化:存 {machine,session} 对象,不再依赖 key 字符串(避免 split('/'))
-            selected.has(it.key) ? selected.delete(it.key) : selected.set(it.key, { machine: it.machine, session: it.session });
-            refreshBroadcast();
-            renderMachineItems(items, state, it.key); // 重建刷新选中态(避免陈旧闭包)+ 还原焦点
-            return;
-          }
           attachTarget({ machine: it.machine, session: it.session });
           if (switchSheet) switchSheet.close();
         });
@@ -382,17 +345,6 @@
       });
     }
     wrap.appendChild(list); sheetEl.appendChild(wrap);
-    // 多选模式开关
-    const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'switch-sheet-btn switch-sheet-multitoggle';
-    toggle.textContent = multiSelectMode ? '✓ 多选模式(广播)' : '切多选模式';
-    toggle.setAttribute('data-key', '__multi_toggle__'); // M5:模式切换后还原焦点到此按钮
-    toggle.addEventListener('click', () => {
-      multiSelectMode = !multiSelectMode;
-      // H1:退出多选模式清空 selected,防陈旧勾选偷偷路由命令
-      if (!multiSelectMode) { selected.clear(); refreshBroadcast(); }
-      renderMachineItems(items, state, '__multi_toggle__');
-    });
-    sheetEl.appendChild(toggle);
     // M5:还原焦点到刚操作的按钮(key 可能含特殊字符 → CSS.escape)
     if (focusKey) {
       const target = sheetEl.querySelector(`.switch-sheet-btn[data-key="${CSS.escape(focusKey)}"]`);
@@ -420,17 +372,24 @@
     });
   }
 
-  // ---- 跨页 openSwitchSheet flag(看板「切换」tab 写入)----
-  if (sessionStorage.getItem('openSwitchSheet') === '1') {
-    sessionStorage.removeItem('openSwitchSheet');
-    // M3:switch_sheet.cjs 同步先于 console.js 加载,window.SwitchSheet 通常已就绪。
-    //     去掉魔法 300ms,留 5 × 50ms 重试预算以防未来改成异步加载。
-    let attempts = 0;
-    const tryOpenSwitchSheet = () => {
-      if (window.SwitchSheet) { openSwitchSheet(); return; }
-      if (++attempts < 5) setTimeout(tryOpenSwitchSheet, 50);
-    };
-    tryOpenSwitchSheet();
+  // ---- 三页面:detectConsoleMode 按 ?m=&s= 切 hero/term 显隐 ----
+  // single(?m=&s= 存在):隐藏多机 hero/ma,显示 console-term + switchTab,并 attach URL 指定会话。
+  // multi(无参):hero + 主控终端常驻,console-term/switchTab 隐藏(扇出归看板,多机不再从此切会话)。
+  function detectConsoleMode() {
+    const single = !!(urlM && urlS);
+    if (single) {
+      if (maPanel) maPanel.hidden = true;
+      if (maScreen) { maScreen.hidden = true; maScreen.setAttribute('aria-hidden', 'true'); }
+      if (termSection) termSection.hidden = false;
+      if (switchTab) switchTab.hidden = false;
+      tryAttachFromUrl();
+    } else {
+      if (maPanel) maPanel.hidden = false;
+      if (maScreen) { maScreen.hidden = false; maScreen.setAttribute('aria-hidden', 'false'); }
+      if (termSection) termSection.hidden = true;
+      if (switchTab) switchTab.hidden = true;
+    }
+    return single ? 'single' : 'multi';
   }
 
   // ---- topbar 当前机告警(替代旧 fleet 摘要;复用 #fleet-summary 挂点)----
@@ -442,9 +401,13 @@
   }
 
   setInterval(renderMaCallout, 30000);
-  setInterval(poll, 2000);
-  poll();
-  ensureWs();
-  tryAttachFromUrl();
+  const mode = detectConsoleMode();
+  if (mode === 'multi') {
+    setInterval(poll, 2000);
+    poll();
+    ensureMaWs();
+  } else {
+    ensureWs();   // 单机模式确保 term ws(tryAttachFromUrl 内已调,幂等)
+  }
   renderTopbarAlert();
 })();

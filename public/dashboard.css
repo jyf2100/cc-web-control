@@ -212,7 +212,7 @@ html, body {
 .s-icon[aria-hidden="true"] { color:var(--fg-2); }
 .s-icon { font-variant-emoji:text; }
 
-.console-term { display:flex; flex-direction:column; border-top:1px solid var(--border); flex:0 0 40vh; min-height:180px; }
+.console-term { display:flex; flex-direction:column; border-top:1px solid var(--border); flex:1; min-height:0; }
 .term-header { display:flex; align-items:center; gap:6px; padding:4px 16px; border-bottom:1px solid var(--border); }
 #term-target { flex:1; min-width:0; font-size:.8em; color:var(--fg-2); display:flex; align-items:center; gap:6px; }
 #term-target[data-state="disconnected"] { color:var(--errored); }
@@ -247,7 +247,6 @@ html, body {
   /* stale 态豁免:fleet 数据过期提示在移动端也须可见(否则仅桌面端可见,移动端无任何过期信号)*/
   .console-hero .hero-l1--stale { display:flex; }
   .console-hero .ma-btn { padding:2px 8px; }
-  .console-term { flex-basis:38vh; }
 }
 @media (hover: none) { .card:active { background:var(--surface-2); } }
 @media (prefers-reduced-motion: reduce) {
@@ -291,5 +290,5 @@ html, body {
 /* === 三页面:控制台撑满(多机 ma-screen / 单机 console-term 各 flex:1)=== */
 .console-hero{flex-shrink:0}
 #ma-screen{flex:1;min-height:0;max-height:none;overflow:auto;margin:0;padding:12px 16px;border-radius:0}
-/* .console-term flex:1 挪到 Task 6(与 detectConsoleMode 同提交)—— 此处先不加,否则 Task 2-6 中间态 /console.html 多机模式 term 会吃光剩余高度、hero 被挤瘪 */
+/* .console-term base 规则已改 flex:1;min-height:0(单机模式 detectConsoleMode 显示 term 时撑满剩余视口;多机模式 term hidden 不占位)*/
 .console-term[data-collapsed="true"]{flex:0 0 auto} /* 折叠态不撑满 */

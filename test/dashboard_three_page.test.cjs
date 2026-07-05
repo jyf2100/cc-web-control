@@ -50,3 +50,10 @@ test('契约:扇出 WS payload = {type:broadcast, targets:[{machine,session}], d
   assert.deepEqual(payload.targets[0], { machine: 'A', session: 's1' });
   assert.equal(payload.enter, true);
 });
+
+test('契约:控制台 detectMode —— ?m=&s= 存在 → single;否则 multi', () => {
+  const hasParam = (qs) => !!(new URLSearchParams(qs).get('m') && new URLSearchParams(qs).get('s'));
+  assert.equal(hasParam('m=A&s=s1'), true);
+  assert.equal(hasParam(''), false);
+  assert.equal(hasParam('m=A'), false);
+});

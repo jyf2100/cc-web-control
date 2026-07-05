@@ -102,5 +102,5 @@ test('三页面样式:存在 .machine-group / .fanout-bar / .card__select[aria-c
   assert.match(css, /\.card__select\b[^}]*min-height:\s*44/);   // 触摸目标 44px(WCAG 2.5.5)
   assert.match(css, /#ma-screen\s*\{[^}]*flex:\s*1/);           // 主控终端撑满
   assert.match(css, /#ma-screen\s*\{[^}]*max-height:\s*none/);  // 覆盖原 max-height:0,否则 flex:1 被锁死
-  // 注:.console-term flex:1 由 Task 6 加(与 detectConsoleMode 同提交),此处不断言
+  assert.match(css, /\.console-term\s*\{[^}]*flex:\s*1;\s*min-height:\s*0/);  // 三页面:单机模式 term 撑满剩余视口(Task 6 detectConsoleMode 同提交)
 });

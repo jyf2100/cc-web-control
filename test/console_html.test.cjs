@@ -68,19 +68,10 @@ test('console.js 切换抽屉:createSwitchSheet + /api/machines 按需', () => {
   assert.match(js, /\/api\/machines/);
   assert.match(js, /backdropRoot:\s*['"].console-app['"]/);  // hub 根
 });
-test('console.js 多选广播(抽屉 selected.size >= 2 扇出)', () => {
-  assert.match(js, /selected\.size/);
-  assert.match(js, /type:\s*['"]broadcast['"]/);
-  assert.match(js, /多选|multiSelect/);  // 多选模式开关
-});
 test('console.js URL ?m=&s= 读取自动 attach', () => {
   assert.match(js, /URLSearchParams/);
   assert.match(js, /['"]m['"]/);
   assert.match(js, /['"]s['"]/);
-});
-test('console.js 跨页 openSwitchSheet flag 检测开抽屉', () => {
-  assert.match(js, /openSwitchSheet/);
-  assert.match(js, /sessionStorage/);
 });
 test('console.js 保留终端/main-agent(ensureWs / main-agent poll / parseCallout / nextBackoff)', () => {
   assert.match(js, /function ensureWs/);
@@ -97,14 +88,6 @@ test('ensureWs 补 onclose/onerror + 重连', () => {
 test('断线态切 term-target data-state + 禁用输入', () => {
   assert.match(js, /setAttribute\(['"]data-state['"]/);
   assert.match(js, /termInput\.disabled\s*=\s*true/);
-});
-test('广播融合:term-input 按 selected.size 分发', () => {
-  assert.match(js, /selected\.size/);
-  assert.match(js, /type:\s*'broadcast'/);
-  assert.match(js, /type:\s*'input'/);
-});
-test('refreshBroadcast 切输入条广播态 + 徽章', () => {
-  assert.match(js, /bcCount\.hidden\s*=\s*selected\.size\s*<\s*2/);
 });
 test('scheduleTermReconnect 防重入(避免 onclose+onerror 双触发 backoff 风暴)', () => {
   assert.match(js, /if\s*\(termReconnectTimer\)\s*return\s*;/);
@@ -124,4 +107,16 @@ test('终端可折叠:term-collapse-btn + data-collapsed 联动(P1 §4.2 A6)', (
   assert.match(html, /id="term-collapse-btn"/);
   assert.match(html, /data-collapsed="false"/);
   assert.match(js, /data-collapsed/);
+});
+test('源码契约:console.js 定义 detectConsoleMode 且 init 分发调用(三页面分模式)', () => {
+  const fs = require('fs'), path = require('path');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'console.js'), 'utf8');
+  assert.match(src, /function\s+detectConsoleMode\s*\(/);
+  assert.match(src, /detectConsoleMode\(\)/);
+});
+test('源码契约:console.js submit 单发 type:input,无 broadcast(扇出已挪看板)', () => {
+  const fs = require('fs'), path = require('path');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'console.js'), 'utf8');
+  assert.match(src, /type:\s*['"]input['"]/);
+  assert.doesNotMatch(src, /type:\s*['"]broadcast['"]/);
 });
