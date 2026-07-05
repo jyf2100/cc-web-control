@@ -153,8 +153,8 @@ html, body {
 .hero-callout[hidden] { display:none; }
 .ma-warn-line { color:var(--fg-2); font-size:.75em; display:none; }
 .console-hero[data-ma-open="true"] .ma-warn-line { display:block; }
-#ma-screen { margin:0; max-height:0; overflow:auto; background:var(--term-bg); color:var(--term-fg); font-family:var(--mono); font-size:.8em; padding:0 8px; transition:max-height .2s ease; }
-.console-hero[data-ma-open="true"] #ma-screen { max-height:240px; padding:8px; position:absolute; z-index:50; left:16px; right:16px; box-shadow:var(--shadow-card); border:1px solid var(--border); border-radius:var(--r-sm); }
+/* ma-screen 浮层规则已删(Task 7 提位后常驻撑满,max-height:0/transition 由末尾 #ma-screen 块覆盖) */
+#ma-screen { margin:0; overflow:auto; background:var(--term-bg); color:var(--term-fg); font-family:var(--mono); font-size:.8em; padding:0 8px; }
 .dot { display:inline-block; width:10px; height:10px; border-radius:50%; }
 .dot.running { background:var(--working); }
 .dot.stopped { background:var(--idle); }
@@ -254,3 +254,42 @@ html, body {
   .card, #ma-screen { transition:none; }
   .card:hover { transform:none; }
 }
+
+/* === 三页面:看板按机分节 === */
+.machine-group{margin-bottom:14px}
+.machine-group > details > summary,
+.machine-group__title{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;
+  font-size:.8em;color:var(--fg-2);padding:6px 4px;min-height:44px}
+.machine-group > details > summary::-webkit-details-marker{display:none}
+.machine-group__caret{display:inline-block;width:1em;color:var(--fg-3);text-align:center}
+.machine-group__name{font-weight:600;color:var(--fg)}
+.machine-group__count{font-family:var(--mono);font-size:.85em;background:var(--surface-2);
+  padding:1px 8px;border-radius:var(--r-pill);color:var(--fg-2)}
+.machine-group--offline .machine-group__name{color:var(--fg-3);font-weight:400}
+.machine-group--offline .machine-group__count{background:var(--surface-3)}
+.machine-group .board-grid{margin-top:4px}
+
+/* 卡片多选交互态(选中由 JS 加 card--selected + aria-checked=true) */
+.card__select{cursor:pointer;min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
+.card__select:hover{background:var(--accent-bg);border-radius:var(--r-xs)}
+.card__select[aria-checked="true"]{color:var(--accent-2)}
+
+/* === 三页面:看板扇出 bar(shell 内 flex 子元素,非 fixed)=== */
+.fanout-bar{flex-shrink:0;display:flex;align-items:center;gap:10px;padding:10px 16px;
+  padding-bottom:calc(10px + env(safe-area-inset-bottom));background:var(--surface);
+  border-top:1px solid var(--border)}
+.fanout-bar .sel-count{font-weight:700;color:var(--accent-2);flex-shrink:0}
+.fanout-bar .sel-clear{min-height:44px;padding:0 12px;border:1px solid var(--border-2);
+  border-radius:var(--r);background:transparent;color:var(--fg-2);font:inherit;font-size:13px;cursor:pointer;flex-shrink:0}
+.fanout-bar .term-input{flex:1;min-height:44px;padding:8px 12px;border:1px solid var(--border-2);
+  border-radius:var(--r-sm);font:inherit;background:var(--bg-2);color:var(--fg)}
+.fanout-bar .term-input:focus{outline:2px solid var(--accent-2);outline-offset:1px;border-color:var(--accent-2)}
+.fanout-bar .term-badge{font-size:.75em;background:var(--accent-2);color:#fff;padding:3px 10px;
+  border-radius:var(--r-pill);font-weight:600;flex-shrink:0}
+.fanout-bar .bc-result{font-size:.75em;color:var(--working);flex-shrink:0;font-family:var(--mono)}
+
+/* === 三页面:控制台撑满(多机 ma-screen / 单机 console-term 各 flex:1)=== */
+.console-hero{flex-shrink:0}
+#ma-screen{flex:1;min-height:0;max-height:none;overflow:auto;margin:0;padding:12px 16px;border-radius:0}
+/* .console-term flex:1 挪到 Task 6(与 detectConsoleMode 同提交)—— 此处先不加,否则 Task 2-6 中间态 /console.html 多机模式 term 会吃光剩余高度、hero 被挤瘪 */
+.console-term[data-collapsed="true"]{flex:0 0 auto} /* 折叠态不撑满 */

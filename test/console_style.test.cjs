@@ -94,3 +94,13 @@ test('陈旧折叠 summary 有 focus-visible 焦点环(WCAG 2.4.7)', () => {
   assert.match(CONSOLE_SECTION, /\.board-stale-group\s*>\s*details\s*>\s*summary:focus-visible/);
   assert.match(CONSOLE_SECTION, /\.board-stale-group\s*>\s*details\s*>\s*summary:focus-visible[\s\S]*?outline/);
 });
+test('三页面样式:存在 .machine-group / .fanout-bar / .card__select[aria-checked] 规则', () => {
+  assert.match(css, /\.machine-group\b/);
+  assert.match(css, /\.machine-group--offline\b/);
+  assert.match(css, /\.fanout-bar\b/);
+  assert.match(css, /\.card__select\[aria-checked="true"\]/);
+  assert.match(css, /\.card__select\b[^}]*min-height:\s*44/);   // 触摸目标 44px(WCAG 2.5.5)
+  assert.match(css, /#ma-screen\s*\{[^}]*flex:\s*1/);           // 主控终端撑满
+  assert.match(css, /#ma-screen\s*\{[^}]*max-height:\s*none/);  // 覆盖原 max-height:0,否则 flex:1 被锁死
+  // 注:.console-term flex:1 由 Task 6 加(与 detectConsoleMode 同提交),此处不断言
+});
