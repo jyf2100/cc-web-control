@@ -55,12 +55,11 @@ test('buildCardHTML data-status 随 status 变化,缺省 unknown', () => {
   assert.match(B.buildCardHTML(m, { name: 's1', status: 'errored' }, {}), /data-status="errored"/);
   assert.match(B.buildCardHTML(m, { name: 's1' }, {}), /data-status="unknown"/);
 });
-test('buildCardHTML card__select 仅视觉 ☐(对齐 mockup),无多选交互状态(无 ☑/card--selected/已选)', () => {
+test('buildCardHTML card__select 带多选 checkbox 语义(data-toggle/role/aria-checked),初始 ☐ 未选', () => {
   const html = B.buildCardHTML({ id: 'm1', name: 'a', online: true }, { name: 's', status: 'idle' }, {});
-  assert.match(html, /<span class="card__select"[^>]*>☐<\/span>/); // ☐ 视觉对齐 mockup
-  assert.doesNotMatch(html, /☑/); // 无选中态
-  assert.doesNotMatch(html, /card--selected/); // 无多选交互状态
-  assert.doesNotMatch(html, /已选/);
+  assert.match(html, /<span class="card__select" data-toggle="select" role="checkbox" aria-checked="false"[^>]*>☐<\/span>/);
+  assert.doesNotMatch(html, /☑/);            // 初始未选(JS toggle 才变 ☑)
+  assert.doesNotMatch(html, /card--selected/); // selected 由 JS 重建时加,非 buildCardInner
 });
 test('buildCardHTML 离线机器 lastLine 回退 (离线)', () => {
   const html = B.buildCardHTML({ id: 'm2', name: 'b', online: false }, { name: 's', status: 'idle', lastLine: '' });
@@ -280,4 +279,31 @@ test('buildCardInner → 含 card__select ☐(对齐 mockup 视觉,激活 dashbo
 test('flattenFleet 透传 session.cwd', () => {
   const cards = B.flattenFleet([{ id: 'm1', name: 'm', online: true, sessions: [{ name: 's', status: 'idle', cwd: '/proj' }] }]);
   assert.equal(cards[0].session.cwd, '/proj');
+});
+
+// ---- groupByMachine(按机分节,离线机排末尾)----
+test('groupByMachine 按 machine.id 分组,保留组内顺序', () => {
+  const cards = [
+    { machine: { id: 'A', online: true },  session: { name: 's1' }, key: 'A/s1' },
+    { machine: { id: 'B', online: true },  session: { name: 's2' }, key: 'B/s2' },
+    { machine: { id: 'A', online: true },  session: { name: 's3' }, key: 'A/s3' },
+  ];
+  const groups = B.groupByMachine(cards);
+  assert.equal(groups.length, 2);
+  assert.equal(groups[0].machine.id, 'A');
+  assert.deepEqual(groups[0].cards.map(c => c.key), ['A/s1', 'A/s3']);
+  assert.equal(groups[1].machine.id, 'B');
+});
+test('groupByMachine 离线机组排末尾', () => {
+  const cards = [
+    { machine: { id: 'off', online: false }, session: { name: 's' }, key: 'off/s' },
+    { machine: { id: 'on', online: true },   session: { name: 's' }, key: 'on/s' },
+  ];
+  const groups = B.groupByMachine(cards);
+  assert.equal(groups[0].machine.id, 'on');
+  assert.equal(groups[1].machine.id, 'off');
+});
+test('groupByMachine null/空 → []', () => {
+  assert.deepEqual(B.groupByMachine(null), []);
+  assert.deepEqual(B.groupByMachine([]), []);
 });

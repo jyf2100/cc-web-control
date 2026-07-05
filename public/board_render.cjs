@@ -1,6 +1,6 @@
 /**
  * Board render pure functions(看板卡片网格,浏览器 + 测试双跑)。
- * 从 console_render.cjs 抽出;看板纯监控 click-to-navigate(无多选 ☐/☑)。
+ * 从 console_render.cjs 抽出;看板 click-to-navigate + .card__select 多选 checkbox 语义(JS toggle ☐/☑)。
  * 对齐范本:dashboard_render.cjs / console_render.cjs(UMD)。
  */
 (function (root, factory) {
@@ -45,7 +45,8 @@
     return `${Math.floor(diff / 2592000000)}个月前`;                        // ≥30d
   }
 
-  // 看板卡片内层:click-to-navigate 的 <a>(跳 /console.html?m=&s=),无 select 多选语义。
+  // 看板卡片内层:click-to-navigate 的 <a>(跳 /console.html?m=&s=),内含 .card__select 多选 checkbox
+  // 语义(data-toggle/role/aria-checked,初始 ☐ 未选;JS 重建时变 ☑ + card--selected)。
   // buildCardHTML 在外层包 <li class="card-row" data-key>;keyed-diff 场景(dashboard.js)只需内层。
   function buildCardInner(machine, session, opts) {
     const m = machine || {};
@@ -73,7 +74,7 @@
     const sessRaw = s.name == null ? '' : s.name;
     const href = `/console.html?m=${encodeURIComponent(midRaw)}&s=${encodeURIComponent(sessRaw)}`;
     return `<a class="${classes.join(' ')}" href="${escapeHtml(href)}" data-machine="${mid}" data-session="${sess}" data-status="${escapeHtml(s.status || 'unknown')}" aria-label="${label}">` +
-      `<span class="card__select" aria-hidden="true">☐</span>` +
+      `<span class="card__select" data-toggle="select" role="checkbox" aria-checked="false" tabindex="0">☐</span>` +
       `<span class="s-dot ${meta.dot}" aria-hidden="true"></span>` +
       `<span class="s-icon" aria-hidden="true">${meta.icon}</span>` +
       `<span class="card__name">${primaryName}</span>` +
@@ -159,6 +160,25 @@
     return c;
   }
 
+  // 按机分节:cards(已 sortCardsByRelevance 排序)→ 按 machine.id 分组;离线机组排末尾。
+  // 组内顺序保留(排序已定);返回 [{machine, cards:[]}]。纯函数。
+  function groupByMachine(cards) {
+    const order = [];
+    const map = new Map();
+    for (const c of (cards || [])) {
+      const mid = c && c.machine && c.machine.id;
+      if (mid == null) continue;
+      if (!map.has(mid)) { map.set(mid, { machine: c.machine, cards: [] }); order.push(mid); }
+      map.get(mid).cards.push(c);
+    }
+    const online = [], offline = [];
+    for (const mid of order) {
+      const g = map.get(mid);
+      (g.machine && g.machine.online === false ? offline : online).push(g);
+    }
+    return online.concat(offline);
+  }
 
-  return { statusMeta, escapeHtml, relativeTime, buildCardHTML, buildCardInner, flattenFleet, sortCardsByRelevance, summarizeFleet, isStale, partitionStale };
+
+  return { statusMeta, escapeHtml, relativeTime, buildCardHTML, buildCardInner, flattenFleet, sortCardsByRelevance, summarizeFleet, isStale, partitionStale, groupByMachine };
 });
