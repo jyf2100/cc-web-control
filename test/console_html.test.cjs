@@ -73,10 +73,12 @@ test('图标 span 标注 aria-hidden', () => {
   assert.match(html, /aria-hidden="true"/);
 });
 
-test('console.js 不再渲染卡片(无 buildCardHTML/renderBoard/global-dashboard)', () => {
+test('console.js 不再渲染卡片(无 buildCardHTML/renderBoard)', () => {
   assert.doesNotMatch(js, /ConsoleRender\.(buildCardHTML|sortCardsErroredFirst|diffCards|summarizeFleet)/);
   assert.doesNotMatch(js, /function renderBoard/);
-  assert.doesNotMatch(js, /\/api\/global-dashboard/);  // 控制台不 poll 看板数据
+  // /api/global-dashboard 现由 tryAttachFromUrl 一次性 session 验证(三页面 §4.2),非 poll;
+  // 控制台 poll 只拉 /api/main-agent/status(见下),不重复拉看板数据。
+  assert.match(js, /function poll[\s\S]{0,150}\/api\/main-agent\/status/);
 });
 test('console.js 切换抽屉:createSwitchSheet + /api/machines 按需', () => {
   assert.match(js, /createSwitchSheet/);
@@ -138,4 +140,10 @@ test('源码契约:console.js submit 单发 type:input,无 broadcast(扇出已�
 
 test('console.html viewport 含 viewport-fit=cover(iOS 缺口机 safe-area env() 生效前提) — T8 §7', () => {
   assert.match(html, /name="viewport"[^>]*viewport-fit=cover/);
+});
+test('tryAttachFromUrl 用 /api/global-dashboard 验证 session(/api/machines 无 sessions→验证必失败→单机永不 attach) — 三页面 §4.2', () => {
+  // /api/machines 只返回 registry 静态快照(machine 无 sessions 字段);session 存在性验证须走
+  // /api/global-dashboard(其 machine 含 sessions[]),否则 found 永远 false → 单机控制台永不 attach。
+  assert.match(js, /tryAttachFromUrl[\s\S]{0,260}\/api\/global-dashboard/);
+  assert.doesNotMatch(js, /tryAttachFromUrl[\s\S]{0,260}\/api\/machines/);
 });

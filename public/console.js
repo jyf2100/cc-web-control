@@ -359,7 +359,7 @@
   const urlM = params.get('m'), urlS = params.get('s');
   function tryAttachFromUrl() {
     if (!urlM || !urlS) return;
-    fetch('/api/machines').then((r) => r.ok ? r.json() : { machines: [] }).then((d) => {
+    fetch('/api/global-dashboard').then((r) => r.ok ? r.json() : { machines: [] }).then((d) => {
       const found = (d.machines || []).some((m) => m.id === urlM && (m.sessions || []).some((s) => s.name === urlS));
       if (found) attachTarget({ machine: urlM, session: urlS });
       else {
