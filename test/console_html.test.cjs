@@ -80,10 +80,16 @@ test('console.js 不再渲染卡片(无 buildCardHTML/renderBoard)', () => {
   // 控制台 poll 只拉 /api/main-agent/status(见下),不重复拉看板数据。
   assert.match(js, /function poll[\s\S]{0,150}\/api\/main-agent\/status/);
 });
-test('console.js 切换抽屉:createSwitchSheet + /api/machines 按需', () => {
+test('console.js 切换抽屉:createSwitchSheet + /api/global-dashboard(hub 含 sessions)+ hideProjects — 三页面 §4.2 P0-2', () => {
+  // /api/machines 只 registry 快照(无 sessions)→ flattenItems 恒空 → 抽屉恒显「暂无机器」;
+  // 必须走 /api/global-dashboard(machine 含 sessions[],实测 mac-pro 9 个会话)。
+  // 项目段在 hub 无 /api/projects 数据源(只被控机 :7684 有)→ hideProjects:true 隐藏,只留机器/会话单选 attach。
   assert.match(js, /createSwitchSheet/);
-  assert.match(js, /\/api\/machines/);
+  assert.match(js, /openSwitchSheet[\s\S]{0,1000}\/api\/global-dashboard/);
+  assert.doesNotMatch(js, /openSwitchSheet[\s\S]{0,1000}\/api\/machines/);
   assert.match(js, /backdropRoot:\s*['"].console-app['"]/);  // hub 根
+  assert.match(js, /hideProjects:\s*true/);                   // 项目段无数据源,隐藏
+  assert.match(js, /ariaLabel:\s*['"]切换被控/);              // 抽屉语义是切换被控,非「启动项目」
 });
 test('console.js URL ?m=&s= 读取自动 attach', () => {
   assert.match(js, /URLSearchParams/);

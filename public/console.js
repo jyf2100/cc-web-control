@@ -254,7 +254,7 @@
     if (e.key === 'Escape' && termSection.getAttribute('data-fullscreen') === 'true') setFullscreen(false);
   });
 
-  // ---- 切换抽屉(createSwitchSheet,数据 /api/machines 按需,多选 → 广播)----
+  // ---- 切换抽屉(createSwitchSheet,数据 global-dashboard 按需,单选 attach)----
   const switchTab = document.getElementById('switchTab');
   let switchSheet = null;
 
@@ -281,7 +281,9 @@
       switchSheet = window.SwitchSheet.createSwitchSheet({
         trigger: switchTab,
         backdropRoot: '.console-app',
-        // 不用 onPick:交互全在 renderMachineItems 内(支持多选不关闭);createSwitchSheet 默认 onPick 为 noop
+        hideProjects: true,                // P0-2:hub 无 /api/projects 数据源,隐藏项目段只留机器/会话单选
+        ariaLabel: '切换被控 agent',        // 抽屉语义是切换被控,非「启动项目」
+        // 不用 onPick:交互全在 renderMachineItems 内(单选 attach+关);createSwitchSheet 默认 onPick 为 noop
       });
     }
     renderMachineItems([], { loading: true });     // 即时"加载中…"
@@ -289,7 +291,9 @@
     switchTab.setAttribute('aria-expanded', 'true');
     let machines = [], loadError = false;
     try {
-      const r = await fetch('/api/machines');
+      // P0-2:machines 端点(registry 快照,无 sessions)→ flattenItems 恒空 → 抽屉恒显「暂无机器」;
+      // 必须走 global-dashboard(其 machine 含 sessions[],实测 mac-pro 9 个会话)。
+      const r = await fetch('/api/global-dashboard');
       if (r.ok) machines = (await r.json()).machines || []; else loadError = true;
     } catch (e) {
       // M4:fetch / JSON 解析失败不再静默 —— 记一条 warn 便于排障

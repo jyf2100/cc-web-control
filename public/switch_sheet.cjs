@@ -71,13 +71,17 @@
     const onLaunch = (opts && typeof opts.onLaunch === 'function') ? opts.onLaunch : () => {};
     const projects = (opts && Array.isArray(opts.projects)) ? opts.projects : [];
     const meta = (opts && opts.meta && typeof opts.meta === 'object') ? opts.meta : null;
+    // P0-2:hub 无 /api/projects 数据源(只被控机 :7684 有)→ hideProjects:true 跳过项目段,只留机器/会话单选;
+    // ariaLabel 可注入(hub 抽屉语义「切换被控 agent」,单机客户端默认「启动项目」向后兼容)。
+    const hideProjects = !!(opts && opts.hideProjects);
+    const ariaLabel = (opts && typeof opts.ariaLabel === 'string' && opts.ariaLabel) ? opts.ariaLabel : '启动项目';
 
     const backdrop = doc.createElement('div');
     backdrop.className = 'switch-sheet-backdrop'; backdrop.hidden = true; backdrop.setAttribute('aria-hidden', 'true');
     const sheet = doc.createElement('div');
     sheet.className = 'switch-sheet'; sheet.id = 'switchSheet';
     sheet.setAttribute('role', 'dialog'); sheet.setAttribute('aria-modal', 'true');
-    sheet.setAttribute('aria-label', '启动项目'); sheet.hidden = true;
+    sheet.setAttribute('aria-label', ariaLabel); sheet.hidden = true;
     sheet.setAttribute('tabindex', '-1');
     const handle = doc.createElement('div');
     handle.className = 'switch-sheet-handle'; handle.setAttribute('aria-hidden', 'true'); sheet.appendChild(handle);
@@ -92,7 +96,8 @@
       sheet.appendChild(metaRow);
     }
 
-    // 第 2 段:项目启动区(复用 buildProjectItems + onLaunch);无项目时空状态
+    // 第 2 段:项目启动区(hideProjects:true 跳过 —— hub 无 /api/projects 数据源,只留机器/会话单选 attach)
+    if (!hideProjects) {
     const projWrap = doc.createElement('div');
     projWrap.className = 'switch-sheet-projects';
     const projTitle = doc.createElement('p');
@@ -124,6 +129,7 @@
       projWrap.appendChild(empty);
     }
     sheet.appendChild(projWrap);
+    } // end if (!hideProjects)
     doc.body.appendChild(backdrop); doc.body.appendChild(sheet);
 
     let openState = false, savedOverflow = '', lastFocused = null;

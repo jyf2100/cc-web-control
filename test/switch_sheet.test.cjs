@@ -118,3 +118,13 @@ test('createSwitchSheet backdropRoot 可经 opts 注入(默认 .console-card 兼
   assert.match(src, /\.console-card/);                                 // 默认回退单机根
   assert.doesNotMatch(src, /querySelector\(['"]\.console-card['"]\)/); // 不再写死
 });
+
+test('createSwitchSheet 源码契约:hideProjects 可跳过项目段 + ariaLabel 可注入(默认「启动项目」) — 三页面 §4.2 P0-2', () => {
+  // hub 无 /api/projects 端点(只被控机 :7684 有),hub 抽屉项目段永久空态;
+  // hideProjects:true 跳过 projWrap,只留机器/会话单选 attach。ariaLabel 注入「切换被控 agent」。
+  // 默认值 '启动项目' 保留(向后兼容单机客户端 client.js 的 createSwitchSheet 调用 + :93-107 契约)。
+  const src = fs.readFileSync('public/switch_sheet.cjs', 'utf8');
+  assert.match(src, /opts\.hideProjects/);
+  assert.match(src, /opts\.ariaLabel/);
+  assert.match(src, /'启动项目'/);   // 默认值保留(向后兼容)
+});
