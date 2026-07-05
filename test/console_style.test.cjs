@@ -77,6 +77,23 @@ test('switch-sheet 焦点陷阱 + Esc/Ctrl-C 关闭 + focus return', () => {
   assert.match(switchSheetSrc, /shouldCloseOnKey/);
   assert.match(switchSheetSrc, /lastFocused\.focus/);
 });
+test('switch-sheet 模态 CSS 在 dashboard.css(底部 fixed 抽屉 + backdrop 遮罩,非 static 挂下面) — 三页面 §4.2 P0', () => {
+  // 三页面重构把 switch_sheet.cjs(JS)拉进控制台,但漏拉模态 CSS(原只在 style.css/index.html)→
+  // 抽屉在控制台页 position:static 流式挂 body 末尾("挂在下面",2026-07-05 运行时坐实
+  // sheetPosition:static / y:606 / 视口 646 / backdrop 也是 static 无遮罩)。
+  // 修复:把 switch-sheet 模态 CSS 块从 style.css 迁入 dashboard.css(看板+控制台共用)。
+  // backdrop:fixed inset:0 全屏遮罩 z-index:1000;sheet:fixed bottom:0 底部抽屉 z-index:1001 + sheetUp 动画。
+  assert.match(css, /\.switch-sheet-backdrop\s*\{[^}]*position:\s*fixed[^}]*inset:\s*0[^}]*z-index:\s*1000/);
+  assert.match(css, /\.switch-sheet\s*\{[^}]*position:\s*fixed[^}]*bottom:\s*0[^}]*z-index:\s*1001/);
+  assert.match(css, /@keyframes\s+sheetUp/);
+  // 辅助元素一并迁移(handle/list/btn/meta/section-title/empty),否则抽屉内容裸样式
+  assert.match(css, /\.switch-sheet-handle\s*\{/);
+  assert.match(css, /\.switch-sheet-list\s*\{/);
+  assert.match(css, /\.switch-sheet-btn\s*\{[^}]*min-height:\s*44/);
+  assert.match(css, /\.switch-sheet-meta\s*\{/);
+  assert.match(css, /\.switch-sheet-section-title\s*\{/);
+  assert.match(css, /\.switch-sheet-projects-empty\s*\{/);
+});
 test('陈旧折叠区 + stale-grid CSS 契约(card--single 已随 singleMachine 移除)', () => {
   assert.match(CONSOLE_SECTION, /\.board-stale-group\b/);
   assert.match(CONSOLE_SECTION, /\.board-stale-grid\b/);
