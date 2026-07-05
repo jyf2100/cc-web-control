@@ -67,9 +67,11 @@ test('NEW-M2: detectMode 含 probe.status === 401 重定向分支', () => {
   assert.match(js, /probe\.status\s*===\s*401/);
 });
 
-// Fix 5:0 机器误标单机 + 空态混淆(看板重设计 re-review)
-test('renderBoard: 0 机器不标单机(singleMachine 需 machines.length > 0)', () => {
-  assert.match(js, /singleMachine\s*=\s*machines\.length\s*>\s*0\s*&&/);
+// Fix 5(已演进):singleMachine 判定已移除 —— :7685 是多机 hub,永远机器维度
+// (07-04 spec 错判 :7685 为单机,见 docs/superpowers/specs/2026-07-04-7685-hub-gap-audit.md §1)。
+// 反向锁:renderBoard 不得再引入 singleMachine 降级(防回归)。
+test('renderBoard: 不含 singleMachine 判定(:7685 永远机器维度)', () => {
+  assert.doesNotMatch(js, /singleMachine\s*=\s*machines\.length/);
 });
 test('renderBoard: 区分「无机器」与「无会话」空态', () => {
   assert.match(js, /machines\.length\s*===\s*0/);

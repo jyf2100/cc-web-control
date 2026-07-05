@@ -54,13 +54,13 @@
     const meta = statusMeta(s.status);
     const classes = ['card'];
     if (o.active) classes.push('active');
-    if (o.singleMachine) classes.push('card--single');
     const name = escapeHtml(m.name || m.id);
     const sess = escapeHtml(s.name);
     const mid = escapeHtml(m.id);
-    // 单机:会话名当主标题、cwd 当副行;多机:机器名主标题、会话名副行(现状)。
-    const primaryName = o.singleMachine ? escapeHtml(s.name) : name;
-    const secondary = o.singleMachine ? escapeHtml(s.cwd || '') : sess;
+    // :7685 多机 hub:永远机器名主标题 + 会话名副行(singleMachine 分支已废弃 —— 它是
+    // 07-04 spec 错把 :7685 当单机的产物,见 docs/superpowers/specs/2026-07-04-7685-hub-gap-audit.md §1)。
+    const primaryName = name;
+    const secondary = sess;
     const lastRaw = s.lastLine || (m.online === false ? '(离线)' : '');
     const lastCleanRaw = TC.cleanSummary ? TC.cleanSummary(lastRaw, 40) : lastRaw;  // aria-label 净化口径
     const last = escapeHtml(TC.cleanSummary ? TC.cleanSummary(lastRaw, 60) : lastRaw);
@@ -73,6 +73,7 @@
     const sessRaw = s.name == null ? '' : s.name;
     const href = `/console.html?m=${encodeURIComponent(midRaw)}&s=${encodeURIComponent(sessRaw)}`;
     return `<a class="${classes.join(' ')}" href="${escapeHtml(href)}" data-machine="${mid}" data-session="${sess}" data-status="${escapeHtml(s.status || 'unknown')}" aria-label="${label}">` +
+      `<span class="card__select" aria-hidden="true">☐</span>` +
       `<span class="s-dot ${meta.dot}" aria-hidden="true"></span>` +
       `<span class="s-icon" aria-hidden="true">${meta.icon}</span>` +
       `<span class="card__name">${primaryName}</span>` +

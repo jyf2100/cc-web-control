@@ -183,8 +183,7 @@ html, body {
 .card__session { grid-column:4; grid-row:2; color:var(--fg-2); font-size:.75em; }
 .card__last { grid-column:1 / -1; grid-row:3; color:var(--fg-2); font-size:.75em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
-/* 单机卡片:会话名当主标题(字号/字重沿用 .card__name),锚点 class 供契约测试 */
-.card--single { /* 单机态标记,布局同 .card */ }
+/* card--single 已移除(:7685 多机 hub 永远机器维度,singleMachine 废弃,见 gap-audit §1) */
 
 /* 陈旧会话折叠区:<li> 占整行,<details> 默认 closed 收起 */
 .board-stale-group { grid-column: 1 / -1; list-style: none; margin-top: 4px; }

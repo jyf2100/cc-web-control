@@ -114,67 +114,57 @@
     var hubModeActive = false;            // Fix 7:visibilitychange 据 hubModeActive 决定是否重启 hubLoop
     var hubPolling = false;
 
-    function renderFleetSummary(machines, singleMachine, partition) {
+    function renderFleetSummary(machines) {
         var s = BR.summarizeFleet(machines);
         // NEW-H2:showBoardError 把 fleetSummary.hidden=true;恢复时(任意 renderBoard 路径均经此)
         // 必须复位 hidden=false,否则摘要区在错误恢复后永久隐藏。
         fleetSummary.hidden = false;
-        if (singleMachine && partition) {
-            // 单机:会话维度(活跃/陈旧/异常),机器数无信息量故略
-            fleetSummary.innerHTML =
-                '<span>' + partition.active.length + ' 活跃</span>' +
-                '<span>' + partition.stale.length + ' 陈旧</span>' +
-                '<span><span class="s-icon" aria-hidden="true">✕</span> ' + s.errored + ' 异常</span>';
-        } else {
-            // 多机:机器维度(现状)
-            fleetSummary.innerHTML =
-                '<span><span class="s-icon" aria-hidden="true">▶</span> ' + s.working + '</span>' +
-                '<span><span class="s-icon" aria-hidden="true">⏸</span> ' + s.idle + '</span>' +
-                '<span><span class="s-icon" aria-hidden="true">✕</span> ' + s.errored + '</span>' +
-                '<span>在线 ' + s.online + '/' + s.total + '</span>';
-        }
-        var t = singleMachine ? 'CC 看板 · 单机' : '(' + s.online + ') CC 看板 · 多机';
+        // :7685 多机 hub:永远机器维度(▶工作/⏸空闲/✕错误/在线 N/M)。singleMachine 会话维度分支
+        // 已废弃 —— 07-04 spec 错把 :7685 当单机的产物,见 gap-audit §1。
+        fleetSummary.innerHTML =
+            '<span><span class="s-icon" aria-hidden="true">▶</span> ' + s.working + '</span>' +
+            '<span><span class="s-icon" aria-hidden="true">⏸</span> ' + s.idle + '</span>' +
+            '<span><span class="s-icon" aria-hidden="true">✕</span> ' + s.errored + '</span>' +
+            '<span>在线 ' + s.online + '/' + s.total + '</span>';
+        var t = '(' + s.online + ') CC 看板 · 多机';
         document.title = t;
         var titleEl2 = document.getElementById('title'); if (titleEl2) titleEl2.textContent = t;
     }
-    function buildCardLi(card, singleMachine) {
+    function buildCardLi(card) {
         var li = document.createElement('li');
         li.className = 'card-row'; li.dataset.key = card.key;
         // Fix 2:BR.buildCardInner 直接返回 <a href="/console.html?m=&s=">…</a>(click-to-navigate)
         li.innerHTML = BR.buildCardInner(card.machine, card.session, {
-            lastTs: card.lastTs, now: Date.now(), singleMachine: singleMachine
+            lastTs: card.lastTs, now: Date.now()
         });
         return li;
     }
     function renderBoard(payload) {
         var machines = payload.machines || [];
         var flat = BR.flattenFleet(machines);
-        // 单机判定:不同 machine.id ≤ 1 → 单机模式(弱化机器维度,强化会话/项目维度)
-        var machineIds = {};
-        for (var mi = 0; mi < machines.length; mi++) machineIds[machines[mi].id] = true;
-        // 0 机器不标单机(避免标题「单机」与正文「NO MACHINES」矛盾);单机 = 有机器且不同 id ≤ 1
-        var singleMachine = machines.length > 0 && Object.keys(machineIds).length <= 1;
+        // :7685 多机 hub:永远机器维度,不做 singleMachine 降级
+        // (07-04 spec 错判 :7685 为单机,见 docs/superpowers/specs/2026-07-04-7685-hub-gap-audit.md §1)。
         var sorted = BR.sortCardsByRelevance(flat);
         var partition = BR.partitionStale(sorted);
         if (machines.length === 0) {
             boardBody.innerHTML = '<li class="board-empty"><span class="eyebrow">NO MACHINES</span> 尚无机器注册到 hub</li>';
-            renderFleetSummary(machines, false, partition);   // 0 机器走多机空态,不标单机
+            renderFleetSummary(machines);
             return;
         }
         if (!sorted.length) {
             // 有机器但无会话:区分于「无机器」,引导启动会话而非查 hub 注册
             boardBody.innerHTML = '<li class="board-empty"><span class="eyebrow">NO SESSIONS</span> 暂无运行中的会话,在控制台启动一个。</li>';
-            renderFleetSummary(machines, singleMachine, partition);
+            renderFleetSummary(machines);
             return;
         }
         // 展开状态保持:轮询全量重建前记录陈旧折叠区 open 状态,重建后继承(免每次轮询重折叠打扰)
         var prevStaleOpen = false;
         var prevDetails = boardBody.querySelector('li.board-stale-group > details');
         if (prevDetails) prevStaleOpen = !!prevDetails.open;
-        // 全量重建:单机规模无 keyed-diff 性能压力,每次轮询无条件清空 boardBody.innerHTML。
+        // 全量重建:每次轮询无条件清空 boardBody.innerHTML。
         boardBody.innerHTML = '';
         for (var ai = 0; ai < partition.active.length; ai++) {
-            var liA = buildCardLi(partition.active[ai], singleMachine);
+            var liA = buildCardLi(partition.active[ai]);
             boardBody.appendChild(liA);
         }
         if (partition.stale.length) {
@@ -188,14 +178,14 @@
             var grid = document.createElement('ul');
             grid.className = 'board-grid board-stale-grid';
             for (var si = 0; si < partition.stale.length; si++) {
-                var liS = buildCardLi(partition.stale[si], singleMachine);
+                var liS = buildCardLi(partition.stale[si]);
                 grid.appendChild(liS);
             }
             details.appendChild(grid);
             groupLi.appendChild(details);
             boardBody.appendChild(groupLi);
         }
-        renderFleetSummary(machines, singleMachine, partition);
+        renderFleetSummary(machines);
     }
     // Fix 6:hub 降级(5xx/格式异常)时把错误消息显式呈现到看板区,替代静默回退单机
     function showBoardError(msg) {

@@ -55,11 +55,11 @@ test('buildCardHTML data-status 随 status 变化,缺省 unknown', () => {
   assert.match(B.buildCardHTML(m, { name: 's1', status: 'errored' }, {}), /data-status="errored"/);
   assert.match(B.buildCardHTML(m, { name: 's1' }, {}), /data-status="unknown"/);
 });
-test('buildCardHTML 无 select 语义(看板纯监控,无 ☐/☑/card__selected)', () => {
+test('buildCardHTML card__select 仅视觉 ☐(对齐 mockup),无多选交互状态(无 ☑/card--selected/已选)', () => {
   const html = B.buildCardHTML({ id: 'm1', name: 'a', online: true }, { name: 's', status: 'idle' }, {});
-  assert.doesNotMatch(html, /card__select/);
-  assert.doesNotMatch(html, /☐|☑/);
-  assert.doesNotMatch(html, /card--selected/);
+  assert.match(html, /<span class="card__select"[^>]*>☐<\/span>/); // ☐ 视觉对齐 mockup
+  assert.doesNotMatch(html, /☑/); // 无选中态
+  assert.doesNotMatch(html, /card--selected/); // 无多选交互状态
   assert.doesNotMatch(html, /已选/);
 });
 test('buildCardHTML 离线机器 lastLine 回退 (离线)', () => {
@@ -241,20 +241,10 @@ test('partitionStale: 按 isStale 分 active/stale 两组', () => {
   assert.equal(B.partitionStale(null).active.length, 0);
 });
 
-// ---- buildCardInner 单机感知 + flattenFleet 透传 cwd ----
-test('buildCardInner singleMachine:true → card__name=会话名 + card--single class + cwd 副行', () => {
-  const html = B.buildCardInner(
-    { id: 'm1', name: 'mac-pro', online: true },
-    { name: 'cc-web-control', status: 'working', cwd: '~/ws/cc-web-control' },
-    { singleMachine: true }
-  );
-  assert.match(html, /class="card card--single"/);
-  assert.match(html, /<span class="card__name">cc-web-control<\/span>/); // 会话名当主标题
-  assert.match(html, /<span class="card__session">~\/ws\/cc-web-control<\/span>/); // cwd 副行
-  assert.match(html, /data-machine="m1"/); // 导航属性保留
-});
-
-test('buildCardInner 默认(多机)→ card__name=机器名(现状不变)', () => {
+// ---- buildCardInner 永远机器维度(:7685 多机 hub)+ card__select + flattenFleet 透传 cwd ----
+// singleMachine 分支已移除(:7685 是多机 hub,07-04 spec 错把它当单机的产物,见
+// docs/superpowers/specs/2026-07-04-7685-hub-gap-audit.md §1)。永远机器名主标题 + 会话名副行。
+test('buildCardInner → card__name=机器名 + 会话名副行(永远机器维度)', () => {
   const html = B.buildCardInner(
     { id: 'm1', name: 'mac-pro', online: true },
     { name: 'cc-web-control', status: 'working' },
@@ -264,6 +254,27 @@ test('buildCardInner 默认(多机)→ card__name=机器名(现状不变)', () =
   assert.doesNotMatch(html, /card--single/);
   assert.match(html, /<span class="card__name">mac-pro<\/span>/);
   assert.match(html, /<span class="card__session">cc-web-control<\/span>/);
+});
+
+test('buildCardInner 废弃 singleMachine 参数被忽略 → 仍机器名(防御旧调用方)', () => {
+  const html = B.buildCardInner(
+    { id: 'm1', name: 'mac-pro', online: true },
+    { name: 'cc-web-control', status: 'working', cwd: '~/ws/cc-web-control' },
+    { singleMachine: true } // 废弃参数,应被忽略
+  );
+  assert.match(html, /<span class="card__name">mac-pro<\/span>/); // 仍机器名,非会话名
+  assert.match(html, /<span class="card__session">cc-web-control<\/span>/); // 会话名副行,非 cwd
+  assert.doesNotMatch(html, /card--single/);
+  assert.match(html, /data-machine="m1"/); // 导航属性保留
+});
+
+test('buildCardInner → 含 card__select ☐(对齐 mockup 视觉,激活 dashboard.css:178)', () => {
+  const html = B.buildCardInner(
+    { id: 'm1', name: 'mac-pro', online: true },
+    { name: 'cc-web-control', status: 'working' },
+    {}
+  );
+  assert.match(html, /<span class="card__select"[^>]*>☐<\/span>/); // [^>]* 容纳 aria-hidden(a11y,与 s-dot/s-icon 一致)
 });
 
 test('flattenFleet 透传 session.cwd', () => {
