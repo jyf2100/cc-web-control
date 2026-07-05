@@ -32,6 +32,8 @@ test('console.html 含底部三项 tab(控制台 active/看板/切换)', () => {
   assert.match(html, /class="bottom-tabbar"/);
   assert.match(html, /tab--active/);
   assert.match(html, /id="switchTab"/);
+  // T7 §4.1: switchTab 默认 hidden,detectConsoleMode 单机模式才显示
+  assert.match(html, /id="switchTab"[^>]*hidden/);
 });
 test('console.html 加载 switch_sheet.cjs(抽屉模态)', () => {
   assert.ok(html.indexOf('switch_sheet.cjs') > 0, '应加载 switch_sheet.cjs');
@@ -44,15 +46,28 @@ test('终端 term-target 支持 data-state + 融合输入', () => {
   assert.match(html, /id="term-input"/);
   assert.match(html, /id="term-input-form"/);
 });
-test('废弃广播栏已移除(单输入融合)', () => {
+test('废弃广播栏已移除(单输入融合 + 扇出挪看板)', () => {
   assert.doesNotMatch(html, /id="broadcast-bar"/);
   assert.doesNotMatch(html, /id="bc-send"/);
   assert.doesNotMatch(html, /id="bc-input"/);
+  assert.doesNotMatch(html, /id="bc-count"/);    // T7 §4.1: 扇出已挪看板
+  assert.doesNotMatch(html, /id="bc-result"/);   // T7 §4.1: 扇出已挪看板
 });
-test('保留功能挂点(ma-* / hub-status / bc-result)', () => {
-  for (const id of ['hub-status', 'main-agent-panel', 'ma-status-dot', 'ma-status-text', 'ma-screen', 'ma-start-btn', 'ma-stop-btn', 'bc-result']) {
+test('保留功能挂点(ma-* / hub-status)', () => {
+  for (const id of ['hub-status', 'main-agent-panel', 'ma-status-dot', 'ma-status-text', 'ma-screen', 'ma-start-btn', 'ma-stop-btn']) {
     assert.match(html, new RegExp(`id="${id}"`), `应保留 #${id}`);
   }
+});
+test('#ma-screen 是 .console-app 直接子元素(位于 #main-agent-panel 之后,.console-term 之前) — T7 §4.0', () => {
+  const panelStart = html.indexOf('<section id="main-agent-panel"');
+  const panelEnd = html.indexOf('</section>', panelStart);
+  assert.ok(panelStart > -1 && panelEnd > -1, '应有 #main-agent-panel section');
+  const panelSlice = html.slice(panelStart, panelEnd);
+  assert.ok(!panelSlice.includes('id="ma-screen"'), '#ma-screen 应已从 #main-agent-panel 内移出');
+  const maScreenIdx = html.indexOf('id="ma-screen"');
+  assert.ok(maScreenIdx > panelEnd, '#ma-screen 应位于 #main-agent-panel </section> 之后');
+  const termIdx = html.indexOf('class="console-term"');
+  assert.ok(maScreenIdx > -1 && termIdx > -1 && maScreenIdx < termIdx, '#ma-screen 应位于 .console-term 之前');
 });
 test('图标 span 标注 aria-hidden', () => {
   assert.match(html, /aria-hidden="true"/);
