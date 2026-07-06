@@ -141,6 +141,7 @@ html, body {
 .console-topbar h1 { font-size:1rem; margin:0; }
 .console-topbar .topbar-back { color:var(--fg-2); text-decoration:none; font-size:.85em; }
 .console-topbar .topbar-back:hover { color:var(--accent-2); }
+.console-topbar .topbar-back:focus-visible { outline:2px solid var(--accent-2); outline-offset:2px; }   /* P6:WCAG 2.4.7 */
 .fleet-summary { margin-left:auto; display:flex; gap:10px; align-items:center; color:var(--fg-2); font-size:.95em; }
 .fleet-summary .s-icon { font-size:.9em; }
 
@@ -151,8 +152,9 @@ html, body {
 .hero-l1--stale .hero-stale { color:var(--accent-2); font-weight:600; }
 .hero-callout { flex-basis:100%; color:var(--fg-2); font-size:.8em; font-family:var(--mono); }
 .hero-callout[hidden] { display:none; }
-.ma-warn-line { color:var(--fg-2); font-size:.75em; display:none; }
-.console-hero[data-ma-open="true"] .ma-warn-line { display:block; }
+/* P3 回归修复:删 #ma-toggle-btn 后镜像展开开关的属性设置点全无,原"展开才显警"门控规则永不命中
+   → 「⚠ 不可信远程数据」安全警告恒隐藏,操作者看不到。镜像已按 §4.0 常驻撑满,警告随之常驻。 */
+.ma-warn-line { color:var(--fg-2); font-size:.75em; display:block; }
 /* ma-screen 浮层规则已删(Task 7 提位后常驻撑满,max-height:0/transition 由末尾 #ma-screen 块覆盖) */
 #ma-screen { margin:0; overflow:auto; background:var(--term-bg); color:var(--term-fg); font-family:var(--mono); font-size:.8em; padding:0 8px; }
 .dot { display:inline-block; width:10px; height:10px; border-radius:50%; }
@@ -209,7 +211,7 @@ html, body {
 
 /* 状态点:几何 + working/idle/errored/waiting/unknown 色统一在 tokens.css;此处仅 console 局部增强(idle 描边达 WCAG 3:1)+ 补 offline */
 .s-dot--idle { box-shadow:0 0 0 1.5px var(--fg-2); }
-.s-dot--offline { background:var(--fg-3); }
+.s-dot--offline { background:var(--offline); }
 .s-icon[aria-hidden="true"] { color:var(--fg-2); }
 .s-icon { font-variant-emoji:text; }
 
@@ -226,8 +228,9 @@ html, body {
 .term-fullscreen-btn[aria-pressed="true"] { color:var(--accent-2); font-weight:600; }
 #term-screen { margin:0; flex:1; min-height:0; padding:8px 12px; background:var(--term-bg); color:var(--term-fg); font-family:var(--mono); font-size:.8em; overflow:auto; white-space:pre-wrap; }
 .term-input-form { display:flex; gap:6px; padding:6px 16px; border-top:1px solid var(--border); align-items:center; }
-#term-input { flex:1; }
+#term-input { flex:1; font-size:16px; }   /* P8:iOS Safari <16px 聚焦自动放大整页失焦不还原,显式锁 16px */
 #term-input:disabled { opacity:.5; }
+#term-input:focus-visible { outline:2px solid var(--accent-2); outline-offset:2px; }   /* P6:WCAG 2.4.7 */
 .term-badge { font-size:.75em; background:var(--accent-2); color:#fff; padding:2px 8px; border-radius:var(--r-pill); }
 #bc-result { font-size:.75em; color:var(--fg-2); }
 /* 折叠态:终端收为单行 header,卡片网格获更多空间(P1 §4.2 A6) */
@@ -261,11 +264,14 @@ html, body {
 .machine-group__title{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;
   font-size:.8em;color:var(--fg-2);padding:6px 4px;min-height:44px}
 .machine-group > details > summary::-webkit-details-marker{display:none}
+.machine-group > details > summary:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px}   /* P6:WCAG 2.4.7,普通组(原仅 stale-group 有) */
 .machine-group__caret{display:inline-block;width:1em;color:var(--fg-3);text-align:center}
 .machine-group__name{font-weight:600;color:var(--fg)}
 .machine-group__count{font-family:var(--mono);font-size:.85em;background:var(--surface-2);
   padding:1px 8px;border-radius:var(--r-pill);color:var(--fg-2)}
-.machine-group--offline .machine-group__name{color:var(--fg-3);font-weight:400}
+/* P5:离线机名 + caret 原 --fg-3(~2:1)不达 WCAG AA 4.5:1;改 --fg-2(~5.4:1)。font-weight:400 保留弱化语义 */
+.machine-group--offline .machine-group__name{color:var(--fg-2);font-weight:400}
+.machine-group--offline .machine-group__caret{color:var(--fg-2)}
 .machine-group--offline .machine-group__count{background:var(--surface-3)}
 .machine-group .board-grid{margin-top:4px}
 
@@ -273,6 +279,7 @@ html, body {
 .card__select{cursor:pointer;min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
 .card__select:hover{background:var(--accent-bg);border-radius:var(--r-xs)}
 .card__select[aria-checked="true"]{color:var(--accent-2)}
+.card__select:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px}   /* P6:WCAG 2.4.7,tabindex=0 键盘可达 */
 
 /* === 三页面:看板扇出 bar(shell 内 flex 子元素,非 fixed)=== */
 .fanout-bar{flex-shrink:0;display:flex;align-items:center;gap:10px;padding:10px 16px;
@@ -285,8 +292,8 @@ html, body {
 .fanout-bar .sel-clear{min-height:44px;padding:0 12px;border:1px solid var(--border-2);
   border-radius:var(--r);background:transparent;color:var(--fg-2);font:inherit;font-size:13px;cursor:pointer;flex-shrink:0}
 .fanout-bar .term-input{flex:1;min-height:44px;padding:8px 12px;border:1px solid var(--border-2);
-  border-radius:var(--r-sm);font:inherit;background:var(--bg-2);color:var(--fg)}
-.fanout-bar .term-input:focus{outline:2px solid var(--accent-2);outline-offset:1px;border-color:var(--accent-2)}
+  border-radius:var(--r-sm);font:inherit;font-size:16px;background:var(--bg-2);color:var(--fg)}   /* P8:iOS <16px 聚焦放大整页,显式锁 16px */
+.fanout-bar .term-input:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px;border-color:var(--accent-2)}   /* P6::focus → :focus-visible,避免鼠标点击常驻 */
 .fanout-bar .term-badge{font-size:.75em;background:var(--accent-2);color:#fff;padding:3px 10px;
   border-radius:var(--r-pill);font-weight:600;flex-shrink:0}
 .fanout-bar .bc-result{font-size:.75em;color:var(--working);flex-shrink:0;font-family:var(--mono)}

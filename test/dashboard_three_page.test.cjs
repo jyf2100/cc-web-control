@@ -51,6 +51,15 @@ test('契约:扇出 WS payload = {type:broadcast, targets:[{machine,session}], d
   assert.equal(payload.enter, true);
 });
 
+test('契约:P4 多选满 50 上限不再静默吞 —— 源码含「最多选 50」可见反馈', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'dashboard.js'), 'utf8');
+  // P4:click 委托 selected.size>=50 分支必须给用户可见+读屏可听的反馈(写 #bc-result aria-live 区),
+  // 不能 preventDefault 后静默 return(DOM 无变化、用户以为卡死)。
+  assert.match(src, /最多选 50/);
+});
+
 test('契约:控制台 detectMode —— ?m=&s= 存在 → single;否则 multi', () => {
   const hasParam = (qs) => !!(new URLSearchParams(qs).get('m') && new URLSearchParams(qs).get('s'));
   assert.equal(hasParam('m=A&s=s1'), true);

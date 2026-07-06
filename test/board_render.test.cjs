@@ -61,6 +61,11 @@ test('buildCardHTML card__select 带多选 checkbox 语义(data-toggle/role/aria
   assert.doesNotMatch(html, /☑/);            // 初始未选(JS toggle 才变 ☑)
   assert.doesNotMatch(html, /card--selected/); // selected 由 JS 重建时加,非 buildCardInner
 });
+test('buildCardHTML card__select 带可访问名 aria-label(读屏知所选机/会话)— P1 WCAG 4.1.2', () => {
+  // checkbox 嵌在 <a> 内须有独立可访问名,否则读屏聚焦 checkbox 只报「复选框 未选中」不知选哪台机。
+  const html = B.buildCardHTML({ id: 'm1', name: 'machine-a', online: true }, { name: 'ses-1', status: 'idle' }, {});
+  assert.match(html, /<span class="card__select"[^>]*aria-label="选择 machine-a \/ ses-1"/);
+});
 test('buildCardHTML 离线机器 lastLine 回退 (离线)', () => {
   const html = B.buildCardHTML({ id: 'm2', name: 'b', online: false }, { name: 's', status: 'idle', lastLine: '' });
   assert.match(html, /\(离线\)/);

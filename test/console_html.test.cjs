@@ -119,9 +119,32 @@ test('renderMaCallout 调 parseCallout + 默认隐藏', () => {
   assert.match(js, /parseCallout/);
   assert.match(js, /heroCallout\.hidden\s*=/);
 });
-test('ma-toggle 切 data-ma-open + aria-expanded', () => {
-  assert.match(js, /data-ma-open/);
-  assert.match(js, /aria-expanded/);
+// P3:▾镜像折叠按钮 maToggleBtn 已删除(spec §4.0 ma-screen 提位撑满 vs §4.1 折叠矛盾;
+// CSS 浮层规则已删,按钮+监听器+data-ma-open 为死代码 → 全删。多机模式 ma-screen 撑满,不需折叠)
+test('P3:▾镜像折叠按钮 ma-toggle-btn + data-ma-open 已彻底删除(console.html + console.js)', () => {
+  assert.doesNotMatch(html, /id="ma-toggle-btn"/);   // 按钮元素已删
+  assert.doesNotMatch(html, /data-ma-open/);         // section 上的死属性一并清理
+  assert.doesNotMatch(js, /maToggleBtn/);            // 元素引用已删
+  assert.doesNotMatch(js, /data-ma-open/);           // 监听器(切 data-ma-open)已删
+});
+// P7a:#ma-status-text 加 aria-live(Start/Stop 读屏反馈,WCAG 4.1.3)
+test('P7a:#ma-status-text 含 aria-live=polite + aria-atomic=true', () => {
+  assert.match(html, /id="ma-status-text"[^>]*aria-live="polite"/);
+  assert.match(html, /id="ma-status-text"[^>]*aria-atomic="true"/);
+});
+// P7b:detectConsoleMode single 分支改写 document.title + h1 为「单机控制台」(WCAG 2.4.2/2.4.6)
+test('P7b:detectConsoleMode single 分支改 document.title(单机控制台 · m/s)+ h1(单机控制台)', () => {
+  assert.match(js, /document\.title\s*=\s*['"]单机控制台 · ['"]\s*\+\s*urlM\s*\+\s*['"]\/['"]\s*\+\s*urlS/);
+  assert.match(js, /textContent\s*=\s*['"]单机控制台['"]/);
+});
+// P8:console.html <head> 含 PWA 元数据(移动端可安装,与 dashboard.html 对齐)
+test('P8:console.html <head> 含 PWA 元数据(manifest/apple-touch-icon/apple-mobile-web-app/theme-color)', () => {
+  assert.match(html, /rel="manifest"[^>]*href="manifest\.json"/);
+  assert.match(html, /rel="apple-touch-icon"[^>]*href="apple-touch-icon\.png"/);
+  assert.match(html, /name="apple-mobile-web-app-capable"[^>]*content="yes"/);
+  assert.match(html, /name="apple-mobile-web-app-status-bar-style"/);
+  assert.match(html, /name="apple-mobile-web-app-title"[^>]*content="Roc-CC"/);
+  assert.match(html, /name="theme-color"[^>]*content="#f2f1ed"/);
 });
 test('visualViewport 监听:软键盘弹起同步 --vh(移动端 P1 §4.2 A6)', () => {
   assert.match(js, /visualViewport/);
