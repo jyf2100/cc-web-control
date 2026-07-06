@@ -181,4 +181,28 @@ const SINGLE_SCHEMA = {
   wsPingInterval:      { type: 'number',  env: 'CC_WEB_WS_PING_INTERVAL',      default: 30000, min: 1 },
 };
 
-module.exports = { loadConfig, parseConfigFlag, SINGLE_SCHEMA, SINGLE_CONFIG_PATH, HUB_CONFIG_PATH, CONFIG_DIR };
+// 7685(hub)全字段 schema:env / default / type 对齐 spec §5.2(11 字段,mainAgent 为 passthrough 对象)
+const DEFAULT_HUB_MACHINES_FILE = path.join(CONFIG_DIR, 'hub-machines.json');
+
+const HUB_SCHEMA = {
+  host:              { type: 'string', env: 'CC_WEB_HUB_HOST',                  default: '127.0.0.1', nonEmpty: true },
+  port:              { type: 'port',   env: 'CC_WEB_HUB_PORT',                  default: 7685 },
+  intervalMs:        { type: 'number', env: 'CC_WEB_HUB_DASHBOARD_INTERVAL_MS', default: 2000, min: 1 },
+  machinesFile:      { type: 'string', env: 'CC_WEB_HUB_MACHINES_FILE',         default: DEFAULT_HUB_MACHINES_FILE, nonEmpty: true },
+  hubToken:          { type: 'string', env: 'CC_WEB_HUB_TOKEN',                 default: '' },
+  noOpen:            { type: 'bool',   env: 'CC_WEB_HUB_NO_OPEN',               default: false },
+  loginMax:          { type: 'number', env: 'CC_WEB_LOGIN_MAX',                 default: 5, min: 1 },
+  loginWindowMs:     { type: 'number', env: 'CC_WEB_LOGIN_WINDOW_MS',           default: 900000, min: 1 },
+  mainAgentMax:      { type: 'number', env: 'CC_WEB_MAIN_AGENT_MAX',            default: 6, min: 1 },
+  mainAgentWindowMs: { type: 'number', env: 'CC_WEB_MAIN_AGENT_WINDOW_MS',      default: 60000, min: 1 },
+  mainAgent:         { type: 'object', env: null, default: {}, fields: {
+                       enabled: 'bool', session: 'string', claudePath: 'string', dataDir: 'string',
+                       auditFile: 'string', settleMs: 'number', maxSettleMs: 'number',
+                       backoffBase: 'number', staleBump: 'number' } },
+};
+
+module.exports = {
+  loadConfig, parseConfigFlag,
+  SINGLE_SCHEMA, HUB_SCHEMA,
+  SINGLE_CONFIG_PATH, HUB_CONFIG_PATH, CONFIG_DIR, DEFAULT_HUB_MACHINES_FILE,
+};

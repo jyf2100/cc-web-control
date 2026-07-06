@@ -355,3 +355,67 @@ test('object 默认值返回新引用(防 schema default 被突变污染 — Tas
   assert.equal(r2.config.ma.injected, undefined, '第二次加载不应看到第一次的突变(object 默认值须返回新引用)');
   assert.deepEqual(r2.config.ma, {}, '第二次加载的默认 object 应干净');
 });
+
+// ---- Task 5:HUB_SCHEMA(7685 全 11 字段)+ mainAgent passthrough ----
+const { HUB_SCHEMA, HUB_CONFIG_PATH } = require('../config_loader.cjs');
+
+test('HUB_CONFIG_PATH 默认指向 ~/.cc-web-control/hub-config.json', () => {
+  assert.equal(HUB_CONFIG_PATH, path.join(os.homedir(), '.cc-web-control', 'hub-config.json'));
+});
+
+test('HUB_SCHEMA:11 字段全齐', () => {
+  const fields = Object.keys(HUB_SCHEMA);
+  assert.equal(fields.length, 11, `应有 11 字段,实际 ${fields.length}: ${fields.join(',')}`);
+  assert.equal(HUB_SCHEMA.port.env, 'CC_WEB_HUB_PORT');
+  assert.equal(HUB_SCHEMA.port.default, 7685);
+  assert.equal(HUB_SCHEMA.hubToken.env, 'CC_WEB_HUB_TOKEN');
+  assert.equal(HUB_SCHEMA.mainAgentMax.env, 'CC_WEB_MAIN_AGENT_MAX');
+  assert.equal(HUB_SCHEMA.mainAgentMax.default, 6);
+  assert.equal(HUB_SCHEMA.mainAgentWindowMs.default, 60000);
+});
+
+test('HUB_SCHEMA.machinesFile 默认 = ~/.cc-web-control/hub-machines.json', () => {
+  assert.equal(
+    HUB_SCHEMA.machinesFile.default,
+    path.join(os.homedir(), '.cc-web-control', 'hub-machines.json')
+  );
+});
+
+test('mainAgent:file 合法对象 → passthrough(子字段类型校验通过,env/default 留给桥接)', () => {
+  const f = writeTmp(JSON.stringify({
+    hubToken: 't', mainAgent: { enabled: true, settleMs: 30000, claudePath: '/x/claude' },
+  }));
+  try {
+    const { config } = loadConfig({ schema: HUB_SCHEMA, defaultFilePath: f, argv: [], env: {} });
+    assert.deepEqual(config.mainAgent, { enabled: true, settleMs: 30000, claudePath: '/x/claude' });
+  } finally { rm(path.dirname(f)); }
+});
+
+test('mainAgent:子字段类型错(settleMs 非数字)→ throw', () => {
+  const f = writeTmp(JSON.stringify({ mainAgent: { settleMs: 'fast' } }));
+  try {
+    assert.throws(
+      () => loadConfig({ schema: HUB_SCHEMA, defaultFilePath: f, argv: [], env: {} }),
+      /mainAgent\.settleMs.*数字/
+    );
+  } finally { rm(path.dirname(f)); }
+});
+
+test('mainAgent:mainAgent 非对象 → throw', () => {
+  const f = writeTmp(JSON.stringify({ mainAgent: 'oops' }));
+  try {
+    assert.throws(
+      () => loadConfig({ schema: HUB_SCHEMA, defaultFilePath: f, argv: [], env: {} }),
+      /mainAgent.*对象/
+    );
+  } finally { rm(path.dirname(f)); }
+});
+
+test('HUB_SCHEMA:env 不读 CC_WEB_HUB_MAIN_AGENT_*(mainAgent 不经 loader 合并 env)', () => {
+  assert.equal(HUB_SCHEMA.mainAgent.env, null);
+  const { config } = loadConfig({
+    schema: HUB_SCHEMA, defaultFilePath: '/x', argv: [],
+    env: { CC_WEB_HUB_MAIN_AGENT_ENABLED: '1' },
+  });
+  assert.deepEqual(config.mainAgent, {});  // env 不进 mainAgent
+});
