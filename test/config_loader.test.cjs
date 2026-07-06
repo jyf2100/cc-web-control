@@ -132,3 +132,50 @@ test('JSON null → throw 含 "null"', () => {
     );
   } finally { rm(path.dirname(f)); }
 });
+
+// ---- Task 2:字段校验(port 范围 / session 正则 / array of strings / number min)----
+const V = {
+  port:        { type: 'port',    env: 'P', default: 7684 },
+  sess:        { type: 'session', env: 'S', default: 'claude-web-session' },
+  roots:       { type: 'array',   env: 'R', default: [] },
+  intervalMs:  { type: 'number',  env: 'I', default: 100, min: 1 },
+};
+
+test('port 非整数 → throw', () => {
+  assert.throws(() => loadConfig({ schema: V, defaultFilePath: '/x', argv: [], env: { P: '7684.5' } }), /port.*整数/);
+  assert.throws(() => loadConfig({ schema: V, defaultFilePath: '/x', argv: [], env: { P: 'abc' } }), /port.*整数/);
+});
+test('port 越界(0 / 70000)→ throw', () => {
+  assert.throws(() => loadConfig({ schema: V, defaultFilePath: '/x', argv: [], env: { P: '0' } }), /port.*1-65535/);
+  assert.throws(() => loadConfig({ schema: V, defaultFilePath: '/x', argv: [], env: { P: '70000' } }), /port.*1-65535/);
+});
+test('port 合法边界(1 / 65535)→ 通过', () => {
+  assert.equal(loadConfig({ schema: V, defaultFilePath: '/x', argv: [], env: { P: '1' } }).config.port, 1);
+  assert.equal(loadConfig({ schema: V, defaultFilePath: '/x', argv: [], env: { P: '65535' } }).config.port, 65535);
+});
+test('session 不合正则(含空格/斜杠/超 64)→ throw', () => {
+  assert.throws(() => loadConfig({ schema: V, defaultFilePath: '/x', argv: [], env: { S: 'a b' } }), /sess/);
+  assert.throws(() => loadConfig({ schema: V, defaultFilePath: '/x', argv: [], env: { S: 'a/b' } }), /sess/);
+  assert.throws(() => loadConfig({ schema: V, defaultFilePath: '/x', argv: [], env: { S: 'x'.repeat(65) } }), /sess/);
+});
+test('projectRoots:env 逗号分隔 → string[];file 数组每元素 string', () => {
+  assert.deepEqual(
+    loadConfig({ schema: V, defaultFilePath: '/x', argv: [], env: { R: '/a, /b ,/c' } }).config.roots,
+    ['/a', '/b', '/c']
+  );
+  const f = writeTmp(JSON.stringify({ roots: ['/x', '/y'] }));
+  try {
+    assert.deepEqual(loadConfig({ schema: V, defaultFilePath: f, argv: [], env: {} }).config.roots, ['/x', '/y']);
+  } finally { rm(path.dirname(f)); }
+});
+test('projectRoots:file 非数组 → throw;元素非 string → throw', () => {
+  const f1 = writeTmp(JSON.stringify({ roots: '/not-array' }));
+  try { assert.throws(() => loadConfig({ schema: V, defaultFilePath: f1, argv: [], env: {} }), /roots.*数组/); }
+  finally { rm(path.dirname(f1)); }
+  const f2 = writeTmp(JSON.stringify({ roots: [123] }));
+  try { assert.throws(() => loadConfig({ schema: V, defaultFilePath: f2, argv: [], env: {} }), /roots.*string/); }
+  finally { rm(path.dirname(f2)); }
+});
+test('number 低于 min → throw', () => {
+  assert.throws(() => loadConfig({ schema: V, defaultFilePath: '/x', argv: [], env: { I: '0' } }), /intervalMs.*>= 1/);
+});

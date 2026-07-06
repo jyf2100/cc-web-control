@@ -46,6 +46,34 @@ function resolveField(field, spec, raw, source) {
       if (spec.nonEmpty && !s) throwBad(field, '不可为空');
       return s;
     }
+    case 'port': {
+      const n = Number(raw);
+      if (!Number.isInteger(n) || n < 1 || n > 65535) {
+        throwBad(field, `须为整数 1-65535,实际 ${JSON.stringify(raw)}`);
+      }
+      return n;
+    }
+    case 'session': {
+      const s = raw == null ? '' : String(raw);
+      if (!/^[A-Za-z0-9._-]{1,64}$/.test(s)) {
+        throwBad(field, `须匹配 /^[A-Za-z0-9._-]{1,64}$/`);
+      }
+      return s;
+    }
+    case 'array': {
+      let arr;
+      if (source === 'env') {
+        arr = String(raw).split(',').map(x => x.trim()).filter(Boolean);
+      } else if (Array.isArray(raw)) {
+        arr = raw;
+      } else {
+        throwBad(field, `须为数组,实际 ${JSON.stringify(raw)}`);
+      }
+      for (const el of arr) {
+        if (typeof el !== 'string') throwBad(field, '元素须为 string');
+      }
+      return arr;
+    }
     case 'bool':
       // env '1'→true(对齐现有 === '1' 口径);file 须为字面 boolean(防引号 footgun)
       if (source === 'env') return raw === '1';
