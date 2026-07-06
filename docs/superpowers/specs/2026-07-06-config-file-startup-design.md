@@ -130,7 +130,11 @@ bool 约定:文件里 `true`/`false`;env 里 `'1'` = true(对齐现有 `CC_WEB_*
 | backoffBase | number | CC_WEB_HUB_MAIN_AGENT_BACKOFF_BASE | 2 | >0 |
 | staleBump | number | CC_WEB_HUB_MAIN_AGENT_STALE_BUMP | 1 | >0 |
 
-**协同机制(B2)**:loader 把 `config.mainAgent.*` 映射回虚拟 env(`enabled:true` → `CC_WEB_HUB_MAIN_AGENT_ENABLED='1'`;数值 → 字符串),与真实 `process.env` 合并(env 仍优先),整体传 `resolveMainAgentConfig(mergedEnv)`。`resolveMainAgentConfig` **零改动**,config 与 env 走同一入口。
+**数值校验归属**:上表 settleMs / maxSettleMs / backoffBase / staleBump 的 ">0" 由 `resolveMainAgentConfig` enforce —— `Math.max(1, Number(...))`,非法 / ≤0 / NaN → 回退该字段默认值,**不阻断启动**(对齐 §6 容错基调;mainAgent 是 T1 只读参谋,容错优先)。loader 的 object passthrough 分支**仅校验子字段类型**(number/string/bool),不做 min —— 通用分支不耦合 mainAgent 语义。
+
+**协同机制(B2)**:loader 把 `config.mainAgent.*` 映射回虚拟 env(`enabled:true` → `CC_WEB_HUB_MAIN_AGENT_ENABLED='1'`;数值 → 字符串),与真实 `process.env` 合并(env 仍优先),整体传 `resolveMainAgentConfig(mergedEnv)`。`resolveMainAgentConfig` **零改动**(仅加 >0 clamp,见上),config 与 env 走同一入口。
+
+**命名遗留(向后兼容,不改)**:同为 hub 的 mainAgent 相关,限流参数 env 是 `CC_WEB_MAIN_AGENT_MAX` / `CC_WEB_MAIN_AGENT_WINDOW_MS`(**无** HUB 前缀),而子配置 env 是 `CC_WEB_HUB_MAIN_AGENT_*`(**有** HUB 前缀)。历史遗留,改 env 名会破坏现有部署,保留现状。
 
 ## 6. 错误处理
 
@@ -144,6 +148,7 @@ bool 约定:文件里 `true`/`false`;env 里 `'1'` = true(对齐现有 `CC_WEB_*
 | 未知字段 | 忽略(向前兼容)+ **warning 提示字段名**(帮发现拼写错误,如 `authoken`) |
 | machinesFile 路径不存在 | 委托 `loadMachines` 报错(config 层不重复校验) |
 | 权限过松(含 token 且 group/other 可读) | warnings(不阻断),启动日志打印建议 `chmod 600` |
+| mainAgent 数值字段 ≤0 / 非法(settleMs 等) | `resolveMainAgentConfig` clamp 到默认值,**不阻断**(见 §5.2) |
 
 ## 7. 安全
 
