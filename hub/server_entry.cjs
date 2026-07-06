@@ -36,7 +36,7 @@ startHub({
   console.log(`[hub] listening on ${hub.host}:${hub.port} (machines: ${CFG.machinesFile})`);
   console.log(`[hub] 访问地址: ${hub.url}`);
   if (NO_OPEN) {
-    console.log('[hub] 已禁用自动开浏览器(CC_WEB_HUB_NO_OPEN=1 / --no-open)');
+    console.log('[hub] 已禁用自动开浏览器(CC_WEB_HUB_NO_OPEN=1 / config.noOpen:true / --no-open)');
     return;
   }
   // 延迟 1.5s 开浏览器:hub 刚起,aggregator 首轮聚合需 ~intervalMs,留点余量

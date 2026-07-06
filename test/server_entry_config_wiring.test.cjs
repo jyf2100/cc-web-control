@@ -36,8 +36,10 @@ test('server_entry.cjs:startHub 入参读 CFG.*(machinesFile/hubToken/host/port/
   assert.match(src, /intervalMs:\s*CFG\.intervalMs/);
 });
 
-test('server_entry.cjs:startHub 透传限流 opts(loginMax/mainAgentWindowMs)', () => {
+test('server_entry.cjs:startHub 透传 4 限流 opts(loginMax/loginWindowMs/mainAgentMax/mainAgentWindowMs)', () => {
   assert.match(src, /loginMax:\s*CFG\.loginMax/);
+  assert.match(src, /loginWindowMs:\s*CFG\.loginWindowMs/);
+  assert.match(src, /mainAgentMax:\s*CFG\.mainAgentMax/);
   assert.match(src, /mainAgentWindowMs:\s*CFG\.mainAgentWindowMs/);
 });
 
