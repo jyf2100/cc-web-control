@@ -1,0 +1,17 @@
+{
+  "port": 7684,
+  "host": "127.0.0.1",
+  "session": "claude-web-session",
+  "authToken": "",
+  "projectRoots": [],
+  "captureHistory": "",
+  "pollInterval": 100,
+  "claudeContinue": false,
+  "noOpen": false,
+  "noAttach": false,
+  "webOnly": false,
+  "loginMax": 5,
+  "loginWindowMs": 900000,
+  "dashboardIntervalMs": 2000,
+  "wsPingInterval": 30000
+}

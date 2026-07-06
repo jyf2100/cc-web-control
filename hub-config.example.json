@@ -1,0 +1,22 @@
+{
+  "host": "127.0.0.1",
+  "port": 7685,
+  "intervalMs": 2000,
+  "hubToken": "",
+  "noOpen": false,
+  "loginMax": 5,
+  "loginWindowMs": 900000,
+  "mainAgentMax": 6,
+  "mainAgentWindowMs": 60000,
+  "mainAgent": {
+    "enabled": false,
+    "session": "",
+    "claudePath": "",
+    "dataDir": "/home/you/.cc-web-control/main-agent",
+    "auditFile": "",
+    "settleMs": 60000,
+    "maxSettleMs": 900000,
+    "backoffBase": 2,
+    "staleBump": 1
+  }
+}
