@@ -22,34 +22,43 @@ const { cwdToSlug } = require('./dashboard_slug.cjs');
 const { readBinding, deleteBinding, migrateStaleBindings } = require('./dashboard_binding.cjs');
 const { shouldContinue } = require('./claude_session.cjs');
 const { createRateLimiter } = require('./rate_limit.cjs');
+const { loadConfig, SINGLE_SCHEMA, SINGLE_CONFIG_PATH } = require('./config_loader.cjs');
+
+// 配置文件(~/.cc-web-control/config.json,--config 覆盖)+ env 覆盖(env > file > default)。
+// 无文件 = 纯 env/默认 = 现状行为(向后兼容)。warnings:未知字段 / token 权限过松。
+const { config: CFG, warnings: cfgWarnings } = loadConfig({
+  schema: SINGLE_SCHEMA,
+  defaultFilePath: SINGLE_CONFIG_PATH,
+});
+if (cfgWarnings.length) {
+  console.error('[config] 警告:');
+  for (const w of cfgWarnings) console.error(`  ⚠ ${w}`);
+}
 
 // 登录速率限制:默认 5 次/15 分钟(可经环境变量调整),防爆破
 const loginRateLimiter = createRateLimiter({
-  max: Number.parseInt(process.env.CC_WEB_LOGIN_MAX || '', 10) || 5,
-  windowMs: Number.parseInt(process.env.CC_WEB_LOGIN_WINDOW_MS || '', 10) || 15 * 60 * 1000,
+  max: CFG.loginMax,
+  windowMs: CFG.loginWindowMs,
 });
 
 function hasFlag(flag) {
   return process.argv.includes(flag);
 }
 
-const PORT = Number.parseInt(process.env.CC_WEB_PORT || '', 10) || 7684;
-const HOST = process.env.CC_WEB_HOST || '127.0.0.1';
-const DEFAULT_SESSION = process.env.CC_WEB_SESSION || 'claude-web-session';
-const POLL_INTERVAL = Number.parseInt(process.env.CC_WEB_POLL_INTERVAL || '', 10) || 100;
+const PORT = CFG.port;
+const HOST = CFG.host;
+const DEFAULT_SESSION = CFG.session;
+const POLL_INTERVAL = CFG.pollInterval;
 // 控制台可回看的 tmux scrollback 历史行数:未设/0=原行为(只抓当前屏);正整数 N=抓当前屏+往上N行。
 // 用户反馈滚动条只能看当前一屏;显式设 CC_WEB_CAPTURE_HISTORY=N 开启 scrollback 回看。
-const CAPTURE_HISTORY = tmux.parseCaptureHistory(process.env.CC_WEB_CAPTURE_HISTORY);
-const NO_OPEN = process.env.CC_WEB_NO_OPEN === '1' || hasFlag('--no-open');
-const NO_ATTACH = process.env.CC_WEB_NO_ATTACH === '1' || hasFlag('--no-attach');
-const WEB_ONLY = process.env.CC_WEB_WEB_ONLY === '1' || hasFlag('--web-only');
+const CAPTURE_HISTORY = tmux.parseCaptureHistory(CFG.captureHistory);
+const NO_OPEN = CFG.noOpen || hasFlag('--no-open');
+const NO_ATTACH = CFG.noAttach || hasFlag('--no-attach');
+const WEB_ONLY = CFG.webOnly || hasFlag('--web-only');
 const CLAUDE_WRAPPER = path.join(__dirname, 'claude-wrapper.sh');
-const AUTH_TOKEN = process.env.CC_WEB_AUTH_TOKEN || '';
-const CLAUDE_CONTINUE = process.env.CC_WEB_CLAUDE_CONTINUE === '1';
-const PROJECT_ROOTS = (process.env.CC_WEB_PROJECT_ROOTS || '')
-  .split(',')
-  .map(s => s.trim())
-  .filter(Boolean);
+const AUTH_TOKEN = CFG.authToken;
+const CLAUDE_CONTINUE = CFG.claudeContinue;
+const PROJECT_ROOTS = CFG.projectRoots;
 
 // 创建 Express 应用
 const app = express();
@@ -380,7 +389,7 @@ function startWebServer() {
 
   // 多会话看板:聚合 tmux 会话 + 状态缓存(M3 从不 500,M7 轮询,M9 tmux 探测缓存)
   const dashboardCache = getDashboardCache({
-    intervalMs: Number.parseInt(process.env.CC_WEB_DASHBOARD_INTERVAL_MS || '', 10) || 2000,
+    intervalMs: CFG.dashboardIntervalMs,
   });
   dashboardCache.start();
 
@@ -500,7 +509,7 @@ function startWebServer() {
 
   // WebSocket
   const wss = new WebSocketServer({ server });
-  const WS_PING_INTERVAL_MS = Number.parseInt(process.env.CC_WEB_WS_PING_INTERVAL || '', 10) || 30_000;
+  const WS_PING_INTERVAL_MS = CFG.wsPingInterval;
 
   const allowedKeyNames = new Set(['Tab', 'Enter', 'Escape', 'Up', 'Down', 'Left', 'Right', 'BSpace', 'Delete', 'C-u', 'C-c']);
 
