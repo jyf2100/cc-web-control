@@ -179,3 +179,12 @@ test('projectRoots:file 非数组 → throw;元素非 string → throw', () => {
 test('number 低于 min → throw', () => {
   assert.throws(() => loadConfig({ schema: V, defaultFilePath: '/x', argv: [], env: { I: '0' } }), /intervalMs.*>= 1/);
 });
+test('projectRoots:file 数组元素 trim 空白 + 丢空串(与 env 归一一致)', () => {
+  const f = writeTmp(JSON.stringify({ roots: ['/a ', ' /b', '', '/c'] }));
+  try {
+    assert.deepEqual(
+      loadConfig({ schema: V, defaultFilePath: f, argv: [], env: {} }).config.roots,
+      ['/a', '/b', '/c']
+    );
+  } finally { rm(path.dirname(f)); }
+});

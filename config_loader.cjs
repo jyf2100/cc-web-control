@@ -61,16 +61,22 @@ function resolveField(field, spec, raw, source) {
       return s;
     }
     case 'array': {
-      let arr;
+      let rawArr;
       if (source === 'env') {
-        arr = String(raw).split(',').map(x => x.trim()).filter(Boolean);
+        rawArr = String(raw).split(',');
       } else if (Array.isArray(raw)) {
-        arr = raw;
+        rawArr = raw;
       } else {
         throwBad(field, `须为数组,实际 ${JSON.stringify(raw)}`);
       }
-      for (const el of arr) {
-        if (typeof el !== 'string') throwBad(field, '元素须为 string');
+      const arr = [];
+      for (let i = 0; i < rawArr.length; i++) {
+        const el = rawArr[i];
+        if (typeof el !== 'string') {
+          throwBad(field, `元素 #${i} 须为 string,实际 ${JSON.stringify(el)}`);
+        }
+        const trimmed = el.trim();
+        if (trimmed) arr.push(trimmed);
       }
       return arr;
     }
