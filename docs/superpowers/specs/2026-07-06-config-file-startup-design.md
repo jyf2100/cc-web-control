@@ -88,7 +88,7 @@ loader 读文件返回 `cfg`;各字段读取处:`process.env.X !== undefined ? p
 | session | string | CC_WEB_SESSION | claude-web-session | `/^[A-Za-z0-9._-]{1,64}$/` |
 | authToken | string | CC_WEB_AUTH_TOKEN | '' | — |
 | projectRoots | string[] | CC_WEB_PROJECT_ROOTS(逗号分) | [] | 数组,每元素 string |
-| captureHistory | number | CC_WEB_CAPTURE_HISTORY | 0 | ≥0 |
+| captureHistory | string | CC_WEB_CAPTURE_HISTORY | '' | 透传 `tmux.parseCaptureHistory`(空/非法/负→0,正整数 N→N 行 scrollback);config 层不做数值校验,由下游 parseCaptureHistory 容错 |
 | pollInterval | number | CC_WEB_POLL_INTERVAL | 100 | >0 |
 | claudeContinue | bool | CC_WEB_CLAUDE_CONTINUE('1') | false | — |
 | noOpen | bool | CC_WEB_NO_OPEN | false | — |
