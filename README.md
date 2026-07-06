@@ -193,7 +193,7 @@ cc-web-control hub --config /path/to/my-hub-config.json
 字段名、类型、默认值的权威清单见仓库根的两份模板（避免本节与 schema 漂移）：
 
 - 单机 15 字段：[`config.example.json`](./config.example.json)
-- hub 10 顶层字段 + `mainAgent` 子对象：[`hub-config.example.json`](./hub-config.example.json)
+- hub 11 顶层字段（含 `mainAgent` 子对象）：[`hub-config.example.json`](./hub-config.example.json)
 
 复制模板作起点：
 

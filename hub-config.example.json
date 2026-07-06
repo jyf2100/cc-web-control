@@ -12,7 +12,7 @@
     "enabled": false,
     "session": "",
     "claudePath": "",
-    "dataDir": "/home/you/.cc-web-control/main-agent",
+    "dataDir": "",
     "auditFile": "",
     "settleMs": 60000,
     "maxSettleMs": 900000,
