@@ -188,3 +188,64 @@ test('projectRoots:file 数组元素 trim 空白 + 丢空串(与 env 归一一�
     );
   } finally { rm(path.dirname(f)); }
 });
+
+// ---- Task 3:未知字段 warning + token 权限告警 ----
+const T = {
+  port:      { type: 'port',   env: 'P', default: 7684 },
+  authToken: { type: 'string', env: 'CC_WEB_AUTH_TOKEN', default: '' },
+  hubToken:  { type: 'string', env: 'CC_WEB_HUB_TOKEN', default: '' },
+};
+
+test('未知字段 → warning 提示字段名(帮发现拼写错误,如 authoken)', () => {
+  const f = writeTmp(JSON.stringify({ port: 8000, authoken: 'typo' }));
+  try {
+    const { warnings } = loadConfig({ schema: T, defaultFilePath: f, argv: [], env: {} });
+    assert.ok(warnings.some(w => /未知字段 "authoken"/.test(w)), `应 warn authoken,实际 ${JSON.stringify(warnings)}`);
+  } finally { rm(path.dirname(f)); }
+});
+test('已知字段全部命中 → 无未知字段 warning', () => {
+  const f = writeTmp(JSON.stringify({ port: 8000, authToken: 't' }));
+  try {
+    const { warnings } = loadConfig({ schema: T, defaultFilePath: f, argv: [], env: {} });
+    assert.ok(!warnings.some(w => /未知字段/.test(w)), `不应有未知字段 warning,实际 ${JSON.stringify(warnings)}`);
+  } finally { rm(path.dirname(f)); }
+});
+
+// 权限告警用 fsImpl 注入,确定性控制 mode(免 chmod/umask 干扰)
+function fakeFs(fileContent, mode) {
+  return {
+    existsSync: () => true,
+    readFileSync: () => fileContent,
+    statSync: () => ({ mode }),
+  };
+}
+test('含 token 且 group/other 可读(mode 0o644)→ 权限 warning 含 chmod 600,不阻断', () => {
+  const { config, warnings } = loadConfig({
+    schema: T, defaultFilePath: '/fake/config.json', argv: [], env: {},
+    fsImpl: fakeFs(JSON.stringify({ authToken: 'secret' }), 0o644),
+  });
+  assert.equal(config.authToken, 'secret');  // 不阻断
+  assert.ok(warnings.some(w => /权限过松.*chmod 600/.test(w)), `应 warn 权限,实际 ${JSON.stringify(warnings)}`);
+});
+test('含 token 且仅 owner 可读(mode 0o600)→ 无权限 warning', () => {
+  const { warnings } = loadConfig({
+    schema: T, defaultFilePath: '/fake/config.json', argv: [], env: {},
+    fsImpl: fakeFs(JSON.stringify({ hubToken: 'secret' }), 0o600),
+  });
+  assert.ok(!warnings.some(w => /权限过松/.test(w)), `0o600 不应 warn,实际 ${JSON.stringify(warnings)}`);
+});
+test('warnings 不含 token 值(安全:不回显 secret)', () => {
+  const { warnings } = loadConfig({
+    schema: T, defaultFilePath: '/fake/config.json', argv: [], env: {},
+    fsImpl: fakeFs(JSON.stringify({ authToken: 'super-secret-value' }), 0o644),
+  });
+  const all = JSON.stringify(warnings);
+  assert.ok(!all.includes('super-secret-value'), `warnings 不应含 token 值,实际 ${all}`);
+});
+test('不含 token 字段值 → 即使权限松也不 warn(无敏感数据)', () => {
+  const { warnings } = loadConfig({
+    schema: T, defaultFilePath: '/fake/config.json', argv: [], env: {},
+    fsImpl: fakeFs(JSON.stringify({ port: 8000 }), 0o644),
+  });
+  assert.ok(!warnings.some(w => /权限过松/.test(w)), `无 token 不应 warn,实际 ${JSON.stringify(warnings)}`);
+});

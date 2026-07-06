@@ -113,6 +113,26 @@ function loadConfig({ schema, defaultFilePath, argv = process.argv, env = proces
       throw new Error(`config 须为 JSON 对象(实际 ${got}): ${filePath}`);
     }
     fileValues = parsed;
+
+    // 未知字段 → warning(帮发现拼写错误,如 authoken)
+    for (const k of Object.keys(fileValues)) {
+      if (!Object.prototype.hasOwnProperty.call(schema, k)) {
+        warnings.push(`未知字段 "${k}"(已忽略,请检查拼写)`);
+      }
+    }
+
+    // 权限告警:含 token 类字段值且 group/other 可读 → warning(不阻断,不回显 token)
+    const hasToken = Object.keys(schema).some(
+      (f) => /token/i.test(f) && fileValues[f]
+    );
+    if (hasToken) {
+      try {
+        const mode = fsImpl.statSync(filePath).mode;
+        if (mode & 0o077) {
+          warnings.push(`config 文件权限过松(mode ${mode & 0o777} 含 group/other 读)且含 token,建议 chmod 600 ${filePath}`);
+        }
+      } catch { /* stat 失败不阻断启动 */ }
+    }
   }
 
   // 逐字段:env ?? file ?? default
