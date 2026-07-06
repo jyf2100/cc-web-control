@@ -249,3 +249,18 @@ test('不含 token 字段值 → 即使权限松也不 warn(无敏感数据)', (
   });
   assert.ok(!warnings.some(w => /权限过松/.test(w)), `无 token 不应 warn,实际 ${JSON.stringify(warnings)}`);
 });
+test('权限 warning 的 mode 显示为八进制(防 chmod 420 误用 — chmod 按八进制解析)', () => {
+  const { warnings } = loadConfig({
+    schema: T, defaultFilePath: '/fake/config.json', argv: [], env: {},
+    fsImpl: fakeFs(JSON.stringify({ authToken: 'secret' }), 0o644),
+  });
+  // 须出现八进制 644(0o644 或 mode 644),不可出现十进制 420
+  assert.ok(
+    warnings.some(w => /0o644|mode 644/.test(w)),
+    `应显示八进制 mode 644,实际 ${JSON.stringify(warnings)}`
+  );
+  assert.ok(
+    !warnings.some(w => /mode 420/.test(w)),
+    `不应显示十进制 420(chmod 420 = r---w---- 误用),实际 ${JSON.stringify(warnings)}`
+  );
+});

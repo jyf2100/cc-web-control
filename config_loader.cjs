@@ -128,8 +128,8 @@ function loadConfig({ schema, defaultFilePath, argv = process.argv, env = proces
     if (hasToken) {
       try {
         const mode = fsImpl.statSync(filePath).mode;
-        if (mode & 0o077) {
-          warnings.push(`config 文件权限过松(mode ${mode & 0o777} 含 group/other 读)且含 token,建议 chmod 600 ${filePath}`);
+        if (process.platform !== 'win32' && (mode & 0o077)) {
+          warnings.push(`config 文件权限过松(mode 0o${(mode & 0o777).toString(8)} 含 group/other 读)且含 token,建议 chmod 600 ${filePath}`);
         }
       } catch { /* stat 失败不阻断启动 */ }
     }
