@@ -80,13 +80,26 @@ function resolveField(field, spec, raw, source) {
       }
       return arr;
     }
+    case 'object': {
+      // passthrough:仅校验子字段类型(如 mainAgent);env/default 解析交给调用方桥接
+      if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) {
+        throwBad(field, `须为对象,实际 ${JSON.stringify(raw)}`);
+      }
+      if (spec.fields) {
+        for (const [k, subType] of Object.entries(spec.fields)) {
+          if (!Object.prototype.hasOwnProperty.call(raw, k)) continue;
+          resolveField(`${field}.${k}`, { type: subType }, raw[k], 'file');
+        }
+      }
+      return raw;
+    }
     case 'bool':
       // env '1'→true(对齐现有 === '1' 口径);file 须为字面 boolean(防引号 footgun)
       if (source === 'env') return raw === '1';
       if (typeof raw !== 'boolean') throwBad(field, 'bool 须为 true/false(文件值勿加引号)');
       return raw;
     default:
-      throwBad(field, `未知 schema type "${spec.type}"(Task 2-5 补齐 port/session/array/object)`);
+      throwBad(field, `未知 schema type "${spec.type}"`);
   }
 }
 
@@ -148,4 +161,23 @@ function loadConfig({ schema, defaultFilePath, argv = process.argv, env = proces
   return { config, warnings, filePath };
 }
 
-module.exports = { loadConfig, parseConfigFlag, SINGLE_CONFIG_PATH, HUB_CONFIG_PATH, CONFIG_DIR };
+// 7684(单机)全字段 schema:env / default / type 对齐 spec §5.1(15 字段)
+const SINGLE_SCHEMA = {
+  port:                { type: 'port',    env: 'CC_WEB_PORT',                  default: 7684 },
+  host:                { type: 'string',  env: 'CC_WEB_HOST',                  default: '127.0.0.1', nonEmpty: true },
+  session:             { type: 'session', env: 'CC_WEB_SESSION',               default: 'claude-web-session' },
+  authToken:           { type: 'string',  env: 'CC_WEB_AUTH_TOKEN',            default: '' },
+  projectRoots:        { type: 'array',   env: 'CC_WEB_PROJECT_ROOTS',         default: [] },
+  captureHistory:      { type: 'string',  env: 'CC_WEB_CAPTURE_HISTORY',       default: '' },
+  pollInterval:        { type: 'number',  env: 'CC_WEB_POLL_INTERVAL',         default: 100, min: 1 },
+  claudeContinue:      { type: 'bool',    env: 'CC_WEB_CLAUDE_CONTINUE',       default: false },
+  noOpen:              { type: 'bool',    env: 'CC_WEB_NO_OPEN',               default: false },
+  noAttach:            { type: 'bool',    env: 'CC_WEB_NO_ATTACH',             default: false },
+  webOnly:             { type: 'bool',    env: 'CC_WEB_WEB_ONLY',              default: false },
+  loginMax:            { type: 'number',  env: 'CC_WEB_LOGIN_MAX',             default: 5, min: 1 },
+  loginWindowMs:       { type: 'number',  env: 'CC_WEB_LOGIN_WINDOW_MS',       default: 900000, min: 1 },
+  dashboardIntervalMs: { type: 'number',  env: 'CC_WEB_DASHBOARD_INTERVAL_MS', default: 2000, min: 1 },
+  wsPingInterval:      { type: 'number',  env: 'CC_WEB_WS_PING_INTERVAL',      default: 30000, min: 1 },
+};
+
+module.exports = { loadConfig, parseConfigFlag, SINGLE_SCHEMA, SINGLE_CONFIG_PATH, HUB_CONFIG_PATH, CONFIG_DIR };

@@ -264,3 +264,83 @@ test('权限 warning 的 mode 显示为八进制(防 chmod 420 误用 — chmod 
     `不应显示十进制 420(chmod 420 = r---w---- 误用),实际 ${JSON.stringify(warnings)}`
   );
 });
+
+// ---- Task 4:SINGLE_SCHEMA(7684 全 15 字段)+ object passthrough ----
+const { SINGLE_SCHEMA } = require('../config_loader.cjs');
+
+test('SINGLE_SCHEMA:15 字段全齐,env/default/type 对齐 spec §5.1', () => {
+  const fields = Object.keys(SINGLE_SCHEMA);
+  assert.equal(fields.length, 15, `应有 15 字段,实际 ${fields.length}: ${fields.join(',')}`);
+  assert.equal(SINGLE_SCHEMA.port.env, 'CC_WEB_PORT');
+  assert.equal(SINGLE_SCHEMA.port.default, 7684);
+  assert.equal(SINGLE_SCHEMA.port.type, 'port');
+  assert.equal(SINGLE_SCHEMA.authToken.env, 'CC_WEB_AUTH_TOKEN');
+  assert.equal(SINGLE_SCHEMA.authToken.default, '');
+  assert.equal(SINGLE_SCHEMA.projectRoots.type, 'array');
+  assert.deepEqual(SINGLE_SCHEMA.projectRoots.default, []);
+  assert.equal(SINGLE_SCHEMA.dashboardIntervalMs.env, 'CC_WEB_DASHBOARD_INTERVAL_MS');
+  assert.equal(SINGLE_SCHEMA.dashboardIntervalMs.default, 2000);
+  assert.equal(SINGLE_SCHEMA.wsPingInterval.env, 'CC_WEB_WS_PING_INTERVAL');
+  assert.equal(SINGLE_SCHEMA.wsPingInterval.default, 30000);
+  assert.equal(SINGLE_SCHEMA.captureHistory.type, 'string');
+});
+
+test('SINGLE_SCHEMA 全字段从文件加载(端到端)', () => {
+  const f = writeTmp(JSON.stringify({
+    port: 8000, host: '0.0.0.0', session: 'sess-1', authToken: 'tok',
+    projectRoots: ['/p1', '/p2'], captureHistory: '100', pollInterval: 200,
+    claudeContinue: true, noOpen: true, noAttach: true, webOnly: true,
+    loginMax: 10, loginWindowMs: 60000, dashboardIntervalMs: 5000, wsPingInterval: 40000,
+  }));
+  try {
+    const { config } = loadConfig({ schema: SINGLE_SCHEMA, defaultFilePath: f, argv: [], env: {} });
+    assert.equal(config.port, 8000);
+    assert.equal(config.host, '0.0.0.0');
+    assert.equal(config.session, 'sess-1');
+    assert.equal(config.authToken, 'tok');
+    assert.deepEqual(config.projectRoots, ['/p1', '/p2']);
+    assert.equal(config.captureHistory, '100');
+    assert.equal(config.pollInterval, 200);
+    assert.equal(config.claudeContinue, true);
+    assert.equal(config.noOpen, true);
+    assert.equal(config.noAttach, true);
+    assert.equal(config.webOnly, true);
+    assert.equal(config.loginMax, 10);
+    assert.equal(config.loginWindowMs, 60000);
+    assert.equal(config.dashboardIntervalMs, 5000);
+    assert.equal(config.wsPingInterval, 40000);
+  } finally { rm(path.dirname(f)); }
+});
+
+test('bool:env "0"/"2" → false(仅 "1" 为 true);file false → false', () => {
+  assert.equal(loadConfig({ schema: SINGLE_SCHEMA, defaultFilePath: '/x', argv: [], env: { CC_WEB_CLAUDE_CONTINUE: '0' } }).config.claudeContinue, false);
+  assert.equal(loadConfig({ schema: SINGLE_SCHEMA, defaultFilePath: '/x', argv: [], env: { CC_WEB_CLAUDE_CONTINUE: '2' } }).config.claudeContinue, false);
+  const f = writeTmp(JSON.stringify({ claudeContinue: false }));
+  try {
+    assert.equal(loadConfig({ schema: SINGLE_SCHEMA, defaultFilePath: f, argv: [], env: {} }).config.claudeContinue, false);
+  } finally { rm(path.dirname(f)); }
+});
+
+// 增补(计划缺口):object 分支是 Task 4 新增的生产代码,须有直接失败测试(TDD 完整性)
+test('object passthrough:原样返回对象 + 子字段类型校验 + 非对象 throw(为 Task 5 mainAgent 预置)', () => {
+  const SC = { ma: { type: 'object', default: {}, fields: { enabled: 'bool', settleMs: 'number', session: 'string' } } };
+  // 合法对象 → 原样返回
+  const f1 = writeTmp(JSON.stringify({ ma: { enabled: true, settleMs: 100, session: 's1' } }));
+  try {
+    const { config } = loadConfig({ schema: SC, defaultFilePath: f1, argv: [], env: {} });
+    assert.deepEqual(config.ma, { enabled: true, settleMs: 100, session: 's1' });
+  } finally { rm(path.dirname(f1)); }
+  // 坏子字段:settleMs 非数字 → throw(字段名含 ma.settleMs)
+  const f2 = writeTmp(JSON.stringify({ ma: { settleMs: 'abc' } }));
+  try {
+    assert.throws(() => loadConfig({ schema: SC, defaultFilePath: f2, argv: [], env: {} }), /ma\.settleMs/);
+  } finally { rm(path.dirname(f2)); }
+  // 非对象(数组)→ throw
+  const f3 = writeTmp(JSON.stringify({ ma: [1, 2] }));
+  try {
+    assert.throws(() => loadConfig({ schema: SC, defaultFilePath: f3, argv: [], env: {} }), /ma.*须为对象/);
+  } finally { rm(path.dirname(f3)); }
+  // default {} 通过(无子字段要校验)
+  const { config } = loadConfig({ schema: SC, defaultFilePath: '/no-such-file', argv: [], env: {} });
+  assert.deepEqual(config.ma, {});
+});
