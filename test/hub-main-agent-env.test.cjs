@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { resolveMainAgentConfig } = require('../hub/main_agent_env.cjs');
+const { resolveMainAgentConfig, resolveMainAgentFromConfig } = require('../hub/main_agent_env.cjs');
 
 test('默认关闭(enabled=false),可选项均 undefined', () => {
   const cfg = resolveMainAgentConfig({});
@@ -79,4 +79,61 @@ test('全空 env:4 数值字段均为各自默认(回归保护)', () => {
   assert.equal(cfg.maxSettleMs, 900_000);
   assert.equal(cfg.backoffBase, 2);
   assert.equal(cfg.staleBump, 1);
+});
+
+// ---- resolveMainAgentFromConfig:config.mainAgent → 虚拟 env → 合并(env 优先)→ resolveMainAgentConfig ----
+// spec §5.2 B2:config 文件值 < 真实 env(真实 env 是逃生口)。数值 ≤0/非法由 resolveMainAgentConfig numOr clamp。
+
+test('桥接:config enabled:true → result.enabled true(空 realEnv)', () => {
+  const r = resolveMainAgentFromConfig({ enabled: true }, {});
+  assert.equal(r.enabled, true);
+});
+
+test('桥接:config 未设 mainAgent(空 {})+ 空 realEnv → 全默认', () => {
+  const r = resolveMainAgentFromConfig({}, {});
+  assert.equal(r.enabled, false);
+  assert.equal(r.session, undefined);
+  assert.equal(r.settleMs, 60_000);
+  assert.equal(r.maxSettleMs, 900_000);
+  assert.equal(r.backoffBase, 2);
+  assert.equal(r.staleBump, 1);
+});
+
+test('桥接:config settleMs:0 → clamp 默认 60000(≤0 经桥接仍 clamp)', () => {
+  const r = resolveMainAgentFromConfig({ settleMs: 0 }, {});
+  assert.equal(r.settleMs, 60_000);
+});
+
+test('桥接:config settleMs:30000 → 30000', () => {
+  const r = resolveMainAgentFromConfig({ settleMs: 30000 }, {});
+  assert.equal(r.settleMs, 30_000);
+});
+
+test('桥接:config session:"my-agent" → result.session "my-agent"', () => {
+  const r = resolveMainAgentFromConfig({ session: 'my-agent' }, {});
+  assert.equal(r.session, 'my-agent');
+});
+
+test('桥接 env 优先:config enabled:true + realEnv ENABLED="0" → result.enabled false', () => {
+  const r = resolveMainAgentFromConfig({ enabled: true }, { CC_WEB_HUB_MAIN_AGENT_ENABLED: '0' });
+  assert.equal(r.enabled, false);
+});
+
+test('桥接 env 优先(数值):config settleMs:30000 + realEnv SETTLE_MS="9999" → 9999', () => {
+  const r = resolveMainAgentFromConfig({ settleMs: 30000 }, { CC_WEB_HUB_MAIN_AGENT_SETTLE_MS: '9999' });
+  assert.equal(r.settleMs, 9999);
+});
+
+test('桥接:未设子字段走默认(config 只传 enabled:true → settleMs === 60000)', () => {
+  const r = resolveMainAgentFromConfig({ enabled: true }, {});
+  assert.equal(r.enabled, true);
+  assert.equal(r.settleMs, 60_000);
+  assert.equal(r.maxSettleMs, 900_000);
+  assert.equal(r.backoffBase, 2);
+  assert.equal(r.staleBump, 1);
+});
+
+test('桥接:config enabled:false 不注入 → result.enabled false', () => {
+  const r = resolveMainAgentFromConfig({ enabled: false }, {});
+  assert.equal(r.enabled, false);
 });
