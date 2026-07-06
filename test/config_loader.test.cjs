@@ -99,3 +99,36 @@ test('JSON 非对象(数组)→ throw', () => {
     );
   } finally { rm(path.dirname(f)); }
 });
+
+test('bool:file 非布尔值(字符串 "true"/数字 1)→ throw(fail-fast 防引号 footgun)', () => {
+  const f = writeTmp(JSON.stringify({ debug: 'true' }));
+  try {
+    assert.throws(() => loadConfig({ schema: MINI, defaultFilePath: f, argv: [], env: {} }), /bool.*true\/false/);
+  } finally { rm(path.dirname(f)); }
+  const f2 = writeTmp(JSON.stringify({ debug: 1 }));
+  try {
+    assert.throws(() => loadConfig({ schema: MINI, defaultFilePath: f2, argv: [], env: {} }), /bool.*true\/false/);
+  } finally { rm(path.dirname(f2)); }
+});
+
+test('bool:file 合法 true/false 仍正确(env 不受影响)', () => {
+  const f = writeTmp(JSON.stringify({ debug: false }));
+  try {
+    assert.equal(loadConfig({ schema: MINI, defaultFilePath: f, argv: [], env: {} }).config.debug, false);
+  } finally { rm(path.dirname(f)); }
+});
+
+test('parseConfigFlag: --config 缺路径 / --config= 空 → throw(防静默用错文件)', () => {
+  assert.throws(() => parseConfigFlag(['node', 'x', '--config']), /--config.*路径/);
+  assert.throws(() => parseConfigFlag(['node', 'x', '--config=']), /--config/);
+});
+
+test('JSON null → throw 含 "null"', () => {
+  const f = writeTmp('null');
+  try {
+    assert.throws(
+      () => loadConfig({ schema: MINI, defaultFilePath: f, argv: [], env: {} }),
+      /须为 JSON 对象\(实际 null\)/
+    );
+  } finally { rm(path.dirname(f)); }
+});

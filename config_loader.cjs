@@ -10,24 +10,25 @@ const CONFIG_DIR = path.join(os.homedir(), '.cc-web-control');
 const SINGLE_CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
 const HUB_CONFIG_PATH = path.join(CONFIG_DIR, 'hub-config.json');
 
-// --config <path> 或 --config=<path>;返回路径或 undefined
+// --config <path> 或 --config=<path>;返回路径或 undefined;畸形 → throw(防静默用错文件)
 function parseConfigFlag(argv) {
   const i = argv.indexOf('--config');
-  if (i >= 0 && i + 1 < argv.length) return argv[i + 1];
+  if (i >= 0) {
+    if (i + 1 >= argv.length) throw new Error('--config 须跟一个路径参数(如 --config /path/x.json)');
+    return argv[i + 1];
+  }
   for (const a of argv) {
-    if (a.startsWith('--config=')) return a.slice('--config='.length);
+    if (a.startsWith('--config=')) {
+      const v = a.slice('--config='.length);
+      if (!v) throw new Error('--config= 不能为空(如 --config=/path/x.json)');
+      return v;
+    }
   }
   return undefined;
 }
 
 function throwBad(field, msg) {
   throw new Error(`config 字段 "${field}" ${msg}`);
-}
-
-// bool:env '1'→true(对齐现有 === '1' 口径);file true→true
-function toBool(raw, source) {
-  if (source === 'env') return raw === '1';
-  return raw === true;
 }
 
 // 单字段解析:按 spec.type 强转 + 校验,返回最终值。source='env'|'file'|'default'
@@ -46,7 +47,10 @@ function resolveField(field, spec, raw, source) {
       return s;
     }
     case 'bool':
-      return toBool(raw, source);
+      // env '1'→true(对齐现有 === '1' 口径);file 须为字面 boolean(防引号 footgun)
+      if (source === 'env') return raw === '1';
+      if (typeof raw !== 'boolean') throwBad(field, 'bool 须为 true/false(文件值勿加引号)');
+      return raw;
     default:
       throwBad(field, `未知 schema type "${spec.type}"(Task 2-5 补齐 port/session/array/object)`);
   }
@@ -71,7 +75,8 @@ function loadConfig({ schema, defaultFilePath, argv = process.argv, env = proces
       throw new Error(`config JSON 解析失败 ${filePath}: ${e.message}`);
     }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new Error(`config 须为 JSON 对象: ${filePath}`);
+      const got = Array.isArray(parsed) ? 'array' : (parsed === null ? 'null' : typeof parsed);
+      throw new Error(`config 须为 JSON 对象(实际 ${got}): ${filePath}`);
     }
     fileValues = parsed;
   }
