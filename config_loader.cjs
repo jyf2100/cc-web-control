@@ -81,7 +81,8 @@ function resolveField(field, spec, raw, source) {
       return arr;
     }
     case 'object': {
-      // passthrough:仅校验子字段类型(如 mainAgent);env/default 解析交给调用方桥接
+      // passthrough:仅校验子字段类型(如 mainAgent);env/default 解析交给调用方桥接。
+      // 返回浅拷贝(非 raw 引用),防调用方突变污染 schema default(Task 2 array 同款防御)。
       if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) {
         throwBad(field, `须为对象,实际 ${JSON.stringify(raw)}`);
       }
@@ -91,7 +92,7 @@ function resolveField(field, spec, raw, source) {
           resolveField(`${field}.${k}`, { type: subType }, raw[k], 'file');
         }
       }
-      return raw;
+      return { ...raw };
     }
     case 'bool':
       // env '1'→true(对齐现有 === '1' 口径);file 须为字面 boolean(防引号 footgun)

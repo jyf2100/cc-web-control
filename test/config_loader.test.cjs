@@ -344,3 +344,14 @@ test('object passthrough:原样返回对象 + 子字段类型校验 + 非对象 
   const { config } = loadConfig({ schema: SC, defaultFilePath: '/no-such-file', argv: [], env: {} });
   assert.deepEqual(config.ma, {});
 });
+
+test('object 默认值返回新引用(防 schema default 被突变污染 — Task 4 质量审查 Important)', () => {
+  const SC = { ma: { type: 'object', default: {}, fields: { enabled: 'bool' } } };
+  const r1 = loadConfig({ schema: SC, defaultFilePath: '/no-such-file', argv: [], env: {} });
+  // 第一次加载拿到默认 {},注入一个键
+  r1.config.ma.injected = 'BOOM';
+  // 第二次加载:若返回 schema default 同一引用,会被 BOOM 污染
+  const r2 = loadConfig({ schema: SC, defaultFilePath: '/no-such-file', argv: [], env: {} });
+  assert.equal(r2.config.ma.injected, undefined, '第二次加载不应看到第一次的突变(object 默认值须返回新引用)');
+  assert.deepEqual(r2.config.ma, {}, '第二次加载的默认 object 应干净');
+});
