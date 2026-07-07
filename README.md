@@ -2,7 +2,7 @@
 
 通过 Web 页面对话形式控制本地 Claude Code，实现双向同步：Web 输入发送给 Claude Code，Claude Code 输出显示在 Web 上。
 
-另支持 **hub 多机模式**：一条 `cc-web-control hub` 子命令聚合多台机器的 cc-web-control，提供统一看板、终端切换与批量广播。详见下文 [hub 多机模式](#hub-多机模式)。
+另支持 **hub 多机模式**：一条 `cc-web-control hub` 子命令聚合多台机器的 cc-web-control，提供统一看板、点卡片新标签直达任一单机、多选批量广播。详见下文 [hub 多机模式](#hub-多机模式)。
 
 ## 快速开始
 
@@ -36,7 +36,7 @@ cc-web-control
 - **深色主题**: 类似 Claude Code 的深色界面风格
 - **单行输入**: Enter 发送（当前输入框为单行）
 - **补全/命令面板按键**: 支持 `Tab` 补全、`↑/↓` 选择、`Esc` 退出（输入框为空时发送按键）
-- **多机 hub 聚合**: `cc-web-control hub` 子命令聚合 N 台机器，统一全局看板 / 点行切换终端 / 多选批量广播
+- **多机 hub 聚合**: `cc-web-control hub` 子命令聚合 N 台机器，统一全局看板 / 点卡片新标签直达单机 / 多选批量广播
 
 ## 技术架构
 
@@ -279,10 +279,10 @@ hub 专用环境变量：
 
 ### 4) 使用
 
-浏览器打开 `http://<hub 所在机>:7685/` → 输入 `CC_WEB_HUB_TOKEN` 登录 → 进入多机控制台：
+浏览器打开 `http://<hub 所在机>:7685/` → 输入 `CC_WEB_HUB_TOKEN` 登录 → 进入多机看板（hub 只服务 `/dashboard.html`）：
 
 - **看板**：顶部全局 dashboard 展示所有机器及其会话状态（每 2s 聚合一次）。
-- **切换终端**：点某行 → 右侧终端切换到该会话（一条 WS 到 hub，hub 代理到目标机）。
+- **点卡片新标签直达**：点任一会话卡片 → hub 颁一张 15s TTL 一次性 ticket 并 302 → 浏览器新标签打开该机 `:7684` 单机页（已登录态）。中键 / Cmd+点击 等浏览器原生行为均可用。
 - **批量广播**：多选若干会话 → 在广播栏输入 → 一次性扇出到所有选中会话。
 
 > `http://<hub>/?token=<CC_WEB_HUB_TOKEN>` 直链可跳过登录页，**仅供本地测试**，勿用于日常/外网。
@@ -291,7 +291,7 @@ hub 专用环境变量：
 
 三层 token 各自独立、互不通用：
 
-1. **浏览器 → hub**：`CC_WEB_HUB_TOKEN`，登录后写 httpOnly + sameSite=lax cookie（`cc_web_auth`）。
+1. **浏览器 → hub**：`CC_WEB_HUB_TOKEN`，登录后写 httpOnly + sameSite=lax cookie（`cc_web_hub_auth`，与单机 `cc_web_auth` 同 localhost 不互染）。
 2. **hub → 各机**：hub 用清单里每台的 `token`，以 `Authorization: Bearer <token>` 调各机 HTTP 与 WS。
 3. **各机对内网暴露**：各机自己的 `CC_WEB_AUTH_TOKEN` 把关。
 
