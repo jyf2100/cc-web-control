@@ -81,7 +81,7 @@ async function maFetch(hub, pathname, init = {}) {
   const res = await fetch(url, {
     ...init,
     headers: {
-      Cookie: 'cc_web_auth=T',
+      Cookie: 'cc_web_hub_auth=T',
       Origin: `http://127.0.0.1:${hub.port}`,
       ...(init.body ? { 'Content-Type': 'application/json' } : {}),
       ...init.headers,
@@ -184,7 +184,7 @@ test('CSRF:start 缺同源 → 403', async () => {
   await withMainAgentHub({ tmux: stubTmuxOwned() }, async (hub) => {
     const r = await fetch(`http://127.0.0.1:${hub.port}/api/main-agent/start`, {
       method: 'POST',
-      headers: { Cookie: 'cc_web_auth=T', Origin: 'http://evil.example', 'Content-Type': 'application/json' },
+      headers: { Cookie: 'cc_web_hub_auth=T', Origin: 'http://evil.example', 'Content-Type': 'application/json' },
       body: '{}',
     });
     assert.equal(r.status, 403);

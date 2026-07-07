@@ -118,7 +118,7 @@ function startHub(opts) {
     loginRateLimiter.reset(req.ip); // 合法用户,清空该 IP 计数
 
     const secure = req.secure || String(req.get('x-forwarded-proto') || '').toLowerCase().startsWith('https');
-    res.cookie('cc_web_auth', token, {
+    res.cookie('cc_web_hub_auth', token, {
       httpOnly: true,
       sameSite: 'lax',
       secure,
@@ -131,7 +131,7 @@ function startHub(opts) {
   // POST /logout:清 cookie,回登录页
   app.post('/logout', (req, res) => {
     if (!requireSameOriginForUnsafeMethods(req, res)) return;
-    res.clearCookie('cc_web_auth', { path: '/' });
+    res.clearCookie('cc_web_hub_auth', { path: '/' });
     res.redirect('/login');
   });
 
@@ -160,6 +160,7 @@ function startHub(opts) {
     const ok = auth.isAuthorized(
       { cookieHeader: req.headers.cookie, authorizationHeader: req.headers.authorization },
       hubToken,
+      'cc_web_hub_auth',
     );
     if (ok) return next();
 
@@ -418,6 +419,7 @@ function startHub(opts) {
         authorizationHeader: queryToken ? `Bearer ${queryToken}` : req.headers.authorization,
       },
       hubToken,
+      'cc_web_hub_auth',
     );
     if (!ok) {
       try { ws.close(1008, 'Unauthorized'); } catch {}
