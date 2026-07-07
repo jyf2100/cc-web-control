@@ -45,17 +45,20 @@ function req(port, method, p, { headers = {}, body } = {}) {
   });
 }
 
-async function withServer(fn) {
+async function withServer(fn, { token = TOKEN } = {}) {
   const port = await pickFreePort();
+  const env = {
+    ...process.env,
+    CC_WEB_HOST: HOST,
+    CC_WEB_PORT: String(port),
+    CC_WEB_NO_OPEN: '1',
+    CC_WEB_WEB_ONLY: '1',
+  };
+  // 显式注入(含空串):config_loader 仅在 env[spec.env] !== undefined 时覆盖,
+  // 否则 ~/.cc-web-control/config.json 的 authToken 会落回到子进程。传 null 才是「不注入」。
+  if (token !== null) env.CC_WEB_AUTH_TOKEN = token;
   const child = spawn(process.execPath, [SERVER_PATH], {
-    env: {
-      ...process.env,
-      CC_WEB_AUTH_TOKEN: TOKEN,
-      CC_WEB_HOST: HOST,
-      CC_WEB_PORT: String(port),
-      CC_WEB_NO_OPEN: '1',
-      CC_WEB_WEB_ONLY: '1',
-    },
+    env,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let stderrBuf = '';
@@ -108,4 +111,52 @@ test('POST /api/auth/ticket mints a ticket with valid Bearer', async () => {
     const parsed = JSON.parse(ok.body);
     assert.ok(parsed.ticket && parsed.ticket.length >= 40, `ticket missing/too short: ${ok.body}`);
   });
+});
+
+// ---------- Task 4: GET /login 消费 ticket + next preservation ----------
+
+test('GET /login consumes ticket, sets cookie, redirects', async () => {
+  await withServer(async (port) => {
+    // mint 与 consume 必须在同一 subprocess:tickets 是模块级 Map,跨进程不可见。
+    const minted = await req(port, 'POST', '/api/auth/ticket', {
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+    const { ticket } = JSON.parse(minted.body);
+    const consumed = await req(port, 'GET', `/login?ticket=${encodeURIComponent(ticket)}&next=/?session=s1`);
+    assert.equal(consumed.status, 302);
+    assert.equal(consumed.headers.location, '/?session=s1');
+    const setCookie = consumed.headers['set-cookie'] || [];
+    assert.ok(
+      setCookie.some((c) => /^cc_web_auth=/.test(c)),
+      `expected cc_web_auth cookie, got: ${JSON.stringify(setCookie)}`
+    );
+  });
+});
+
+test('GET /login rejects already-consumed ticket (one-time)', async () => {
+  await withServer(async (port) => {
+    const minted = await req(port, 'POST', '/api/auth/ticket', {
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+    const { ticket } = JSON.parse(minted.body);
+    await req(port, 'GET', `/login?ticket=${encodeURIComponent(ticket)}`);
+    // 同一 ticket 二次消费:必须失败回登录页,且不得再设 cc_web_auth cookie。
+    const second = await req(port, 'GET', `/login?ticket=${encodeURIComponent(ticket)}`);
+    assert.equal(second.status, 302);
+    const setCookie = second.headers['set-cookie'] || [];
+    assert.ok(
+      !setCookie.some((c) => /^cc_web_auth=[^;]+;/.test(c) && !/Max-Age=0/.test(c)),
+      `unexpected cc_web_auth on second consume: ${JSON.stringify(setCookie)}`
+    );
+  });
+});
+
+test('GET /login without AUTH_TOKEN preserves next (bug fix)', async () => {
+  // auth disabled:不注入 CC_WEB_AUTH_TOKEN 启动 subprocess。
+  // 旧代码 res.redirect('/') 丢 next → 期望改为保留 nextPath。
+  await withServer(async (port) => {
+    const r = await req(port, 'GET', '/login?next=/?session=s2');
+    assert.equal(r.status, 302);
+    assert.equal(r.headers.location, '/?session=s2');
+  }, { token: '' });
 });

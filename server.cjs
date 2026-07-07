@@ -301,8 +301,33 @@ function startWebServer() {
   };
 
   app.get('/login', (req, res) => {
+    const nextRaw = typeof req.query.next === 'string' ? req.query.next : '';
+    const nextPath = auth.normalizeNextPath(nextRaw) || '/';
+
+    // ticket 消费(hub /jump 跳来):get → delete → check,三步无 await,锁死一次性。
+    // 任何失败分支都中性回登录页(保留 next、不设 cookie),防止重放与信息泄漏。
+    const ticketRaw = typeof req.query.ticket === 'string' ? req.query.ticket : '';
+    if (ticketRaw) {
+      const entry = tickets.get(ticketRaw);
+      if (entry) tickets.delete(ticketRaw);           // 先删,保证一次性
+      if (!entry || entry.expires <= Date.now()) {
+        return res.redirect(`/login?next=${encodeURIComponent(nextPath)}`);
+      }
+      // 消费成功 → 设 cookie(选项与 POST /login 完全一致)
+      const secure = req.secure || String(req.get('x-forwarded-proto') || '').toLowerCase().startsWith('https');
+      res.cookie('cc_web_auth', AUTH_TOKEN, {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure,
+        path: '/',
+      });
+      return res.redirect(nextPath);
+    }
+
+    // AUTH_TOKEN 未设时不再丢 next(bug fix):auth disabled = 用户已通过,
+    // 直接跳到 next,而不是把 next 扔掉只回 /。
     if (!AUTH_TOKEN) {
-      res.redirect('/');
+      res.redirect(nextPath);
       return;
     }
     res.sendFile(path.join(__dirname, 'public', 'login.html'));
