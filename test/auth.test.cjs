@@ -52,3 +52,29 @@ test('normalizeNextPath allows only safe relative paths', () => {
   assert.equal(auth.normalizeNextPath('javascript:alert(1)'), null);
   assert.equal(auth.normalizeNextPath(''), null);
 });
+
+test('isAuthorized accepts custom cookie name (hub)', () => {
+  const ok = auth.isAuthorized(
+    { cookieHeader: 'cc_web_hub_auth=hubtok', authorizationHeader: '' },
+    'hubtok',
+    'cc_web_hub_auth'
+  );
+  assert.equal(ok, true);
+});
+
+test('isAuthorized default cookie name still works (single-machine)', () => {
+  const ok = auth.isAuthorized(
+    { cookieHeader: 'cc_web_auth=tok', authorizationHeader: '' },
+    'tok'
+  );
+  assert.equal(ok, true);
+});
+
+test('isAuthorized ignores wrong-name cookie', () => {
+  const ok = auth.isAuthorized(
+    { cookieHeader: 'cc_web_auth=tok', authorizationHeader: '' },
+    'tok',
+    'cc_web_hub_auth'
+  );
+  assert.equal(ok, false);
+});

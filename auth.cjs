@@ -35,7 +35,7 @@ function extractBearerToken(authorizationHeader) {
   return token || null;
 }
 
-function isAuthorized({ cookieHeader, authorizationHeader }, expectedToken) {
+function isAuthorized({ cookieHeader, authorizationHeader }, expectedToken, cookieName = 'cc_web_auth') {
   const token = typeof expectedToken === 'string' ? expectedToken : '';
   if (!token) return true; // auth disabled
 
@@ -43,7 +43,7 @@ function isAuthorized({ cookieHeader, authorizationHeader }, expectedToken) {
   if (bearer && safeEqual(bearer, token)) return true;
 
   const cookies = parseCookieHeader(cookieHeader);
-  const cookieToken = cookies.cc_web_auth;
+  const cookieToken = cookies[cookieName];
   if (cookieToken && safeEqual(cookieToken, token)) return true;
 
   return false;
