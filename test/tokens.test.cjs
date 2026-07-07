@@ -62,3 +62,38 @@ test('tokens.css 含 --shadow-card 卡片阴影令牌', () => {
   const css = fs.readFileSync(`${P}/tokens.css`, 'utf8');
   assert.ok(css.includes('--shadow-card'), 'tokens.css 应定义 --shadow-card(控制台卡片容器用)');
 });
+
+// ============================================================
+// P5:--offline token + 与 --idle 拉开(WCAG 1.4.3 AA 离线可辨)
+// 迁自 console_style.test.cjs(Task 13 拆分)。仅锁 tokens.css 内的 token 定义与差距;
+// 读 dashboard.css 的离线视觉规则(.machine-group--offline / .s-dot--offline)见
+// dashboard_style.test.cjs(按"断言读哪个源文件就归哪个测试文件"的路由原则)。
+// ============================================================
+test('P5:tokens.css 存在 --offline token(与 --idle 拉开,用于离线状态)', () => {
+  // 原 .s-dot--offline 退回 --fg-3,与 --idle 几乎不可分;机名用 --fg-3 仅 ~2:1 不达 4.5:1。
+  // tokens.css 自己注释「fg-3 仅装饰禁承载阅读文字」。修:新增 --offline 独立 token。
+  const css = fs.readFileSync(`${P}/tokens.css`, 'utf8');
+  assert.match(css, /--offline:/);
+});
+test('P5:--offline 与 --idle 拉开(≥2 倍 alpha 差或色相差)', () => {
+  // --idle: rgba(38,37,30,0.3) alpha 0.3
+  // --offline 须与 --idle 在 alpha 或色相上明显区分,否则两个状态点视觉不可分。
+  const css = fs.readFileSync(`${P}/tokens.css`, 'utf8');
+  const idleMatch = css.match(/--idle:\s*rgba\(38,\s*37,\s*30,\s*(0\.\d+)\)/);
+  assert.ok(idleMatch, '--idle 应为 rgba(38,37,30,0.x)');
+  const idleAlpha = parseFloat(idleMatch[1]);
+  // 提取 --offline 值
+  const offlineMatch = css.match(/--offline:\s*([^;]+);/);
+  assert.ok(offlineMatch, '--offline 应有值');
+  const offlineVal = offlineMatch[1];
+  // 若 --offline 也是 rgba(38,37,30,a),则 alpha 须 >= 2*idle 或 <= 0.5*idle,拉开层次
+  const offlineAlphaMatch = offlineVal.match(/rgba\(38,\s*37,\s*30,\s*(0\.\d+)\)/);
+  if (offlineAlphaMatch) {
+    const offlineAlpha = parseFloat(offlineAlphaMatch[1]);
+    assert.ok(
+      offlineAlpha >= idleAlpha * 2 || offlineAlpha <= idleAlpha * 0.5,
+      `--offline alpha ${offlineAlpha} 须与 --idle alpha ${idleAlpha} 拉开 ≥2 倍`
+    );
+  }
+  // 若 --offline 用不同色相(如偏紫灰/偏蓝灰)也算通过(色相差路径),此处不强制。
+});
