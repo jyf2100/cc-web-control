@@ -69,7 +69,7 @@
         try {
             var res = await fetch('/api/dashboard', { headers: { 'Accept': 'application/json' } });
             if (res.status === 401) { window.location.href = '/login?next=/dashboard.html'; return false; }
-            // 404:多机 hub 不提供单机 /api/dashboard(其 / → /console.html)。不误报 tmux,引导至多机控制台。
+            // 404:多机 hub 不提供单机 /api/dashboard(仅 /api/global-dashboard)。不误报 tmux,引导至多机控制台。
             if (res.status === 404) { showState('error', '此处为单机看板,多机模式下请使用多机控制台。'); return true; }
             // 其余非 2xx:服务端异常(非 tmux 问题),按 HTTP 状态如实提示。
             if (!res.ok) { showState('error', '看板服务异常 (HTTP ' + res.status + '),重试中…'); return true; }
