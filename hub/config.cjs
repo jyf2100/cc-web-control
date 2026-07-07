@@ -15,6 +15,16 @@ function validateMachine(raw, index = -1) {
   if (typeof url !== 'string' || !url) {
     throw new Error(`machine "${id}": 缺 url`);
   }
+  let parsed;
+  try { parsed = new URL(url); } catch {
+    throw new Error(`machine "${id}": url 非法`);
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(`machine "${id}": url 须 http/https`);
+  }
+  if (parsed.hostname === '169.254.169.254') {
+    throw new Error(`machine "${id}": url 拒云元数据地址`);
+  }
   if (typeof token !== 'string' || !token) {
     throw new Error(`machine "${id}": 缺 token`);
   }
