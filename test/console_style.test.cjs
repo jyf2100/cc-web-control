@@ -28,9 +28,11 @@ test('.console-app 是顶层 flex 列容器', () => {
   assert.match(m[1], /flex-direction:\s*column/);
   assert.match(m[1], /overflow:\s*hidden/);
 });
-test('终端色用局部 token --term-bg/--term-fg(非 #000)', () => {
-  assert.match(CONSOLE_SECTION, /--term-bg:\s*#1a1815/);
-  assert.match(CONSOLE_SECTION, /--term-fg:\s*#e8e6df/);
+test('终端色用局部 token --term-bg/--term-fg(浅化对齐 7684,alias 到设计 token)', () => {
+  // 终端对齐 7684 浅色 editorial:`--term-bg` alias 到 `--surface`(暖灰米 #ebeae5),
+  // `--term-fg` alias 到 `--fg`(暖黑 #26251e);屏元素仍引 `var(--term-bg/--term-fg)`。
+  assert.match(CONSOLE_SECTION, /--term-bg:\s*var\(--surface\)/);
+  assert.match(CONSOLE_SECTION, /--term-fg:\s*var\(--fg\)/);
   assert.match(CONSOLE_SECTION, /background:\s*var\(--term-bg\)/);
   assert.match(CONSOLE_SECTION, /color:\s*var\(--term-fg\)/);
 });
