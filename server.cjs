@@ -85,6 +85,9 @@ app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Referrer-Policy:同源——单机 ticket 登录跳转链不漏 Referer(spec §3.4)
+app.use((req, res, next) => { res.setHeader('Referrer-Policy', 'same-origin'); next(); });
+
 // WebSocket 客户端
 const clients = new Map();
 

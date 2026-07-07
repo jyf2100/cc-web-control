@@ -61,6 +61,10 @@ function startHub(opts) {
   app.use(express.json());
   app.use(express.urlencoded({ extended: false }));
 
+  // Referrer-Policy:同源策略——hub/jump 302 到目标机时,目标页 Referer 不应携带 hub URL
+  // (避免把 hub 内部地址 / query 漏给下游;spec §3.4)
+  app.use((req, res, next) => { res.setHeader('Referrer-Policy', 'same-origin'); next(); });
+
   // 注:req.ip 取 socket 对端地址(未设 trust proxy)。反代部署时所有请求 IP 相同,
   // 限流计数会共享——内网单用户可接受;多用户/公网部署应按需设 app.set('trust proxy', N)。
   // 登录速率限制:对齐单机 server.cjs 配置(默认 5 次/15 分钟;opts 优先,未传回退 env/默认)
@@ -72,6 +76,13 @@ function startHub(opts) {
   const mainAgentRateLimiter = createRateLimiter({
     max: mainAgentMax,
     windowMs: mainAgentWindowMs,
+  });
+
+  // Task 6:/jump 端点限流 + 审计。30/min/IP(浏览器新标签低频,留余量防滥用);
+  // jumpAudit 落 ~/.cc-web-control/jump-audit.jsonl(与 main-agent-audit.jsonl 同目录)。
+  const jumpRateLimiter = createRateLimiter({ max: 30, windowMs: 60_000 });
+  const jumpAudit = new AuditLog({
+    filePath: path.join(process.env.HOME || '/tmp', '.cc-web-control', 'jump-audit.jsonl'),
   });
 
   const expectedOriginForHttp = (req) => ({
@@ -173,6 +184,55 @@ function startHub(opts) {
   };
 
   app.use(requireAuth);
+
+  // Task 6:GET /jump?m=&s= → 服务端到端拉下游 ticket,302 引浏览器直达单机已登录态。
+  // 安全:m/s 必填 + SESSION_RE 限字符 + machine 经 registry.getSecret(无注册即拒,无 SSRF)
+  // + AbortSignal.timeout(3s) 防挂起 + 502 中性文案不漏 ECONNREFUSED/堆栈(spec §3.2/§3.4)。
+  // 不在 requireAuth 白名单:必经 hub cookie(已通过上面 requireAuth)。
+  const SESSION_RE = /^[A-Za-z0-9._-]{1,64}$/;
+
+  app.get('/jump', (req, res) => {
+    const { limited } = jumpRateLimiter.check(req.ip);
+    if (limited) { res.status(429).type('text/plain').send('rate limited'); return; }
+
+    const m = String(req.query.m || '');
+    const s = String(req.query.s || '');
+    if (!m || !s) { res.status(400).type('text/plain').send('missing m or s'); return; }
+    if (!SESSION_RE.test(s)) { res.status(400).type('text/plain').send('bad session'); return; }
+
+    const secret = registry.getSecret(m);
+    if (!secret) { res.status(400).type('text/plain').send('unknown machine'); return; }
+
+    const nextPath = auth.normalizeNextPath(typeof req.query.next === 'string' ? req.query.next : '')
+      || `/?session=${encodeURIComponent(s)}`;
+    const encNext = encodeURIComponent(nextPath);
+
+    fetch(`${secret.url}/api/auth/ticket`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${secret.token}` },
+      signal: AbortSignal.timeout(3000),
+    })
+      .then((up) => {
+        if (!up.ok) throw new Error(`http_${up.status}`);
+        return up.json();
+      })
+      .then((body) => {
+        const ticket = body && typeof body.ticket === 'string' ? body.ticket : '';
+        if (!ticket) throw new Error('no_ticket');
+        res.header('Cache-Control', 'no-store');
+        res.redirect(302, `${secret.url}/login?ticket=${encodeURIComponent(ticket)}&next=${encNext}`);
+      })
+      .catch((e) => {
+        // 中性文案:不向浏览器回写 ECONNREFUSED/ENOTFOUND/error.message/堆栈(spec §3.4)。
+        // 细节进 jumpAudit(本地文件,运维侧可见)。
+        const code = e && (e.code || e.message) ? String(e.code || e.message) : 'unknown';
+        jumpAudit.log({
+          scope: 'jump', runId: null, event: 'fetch_ticket_failed',
+          detail: { machine: m, session: s, code },
+        }).catch(() => { /* 审计落盘失败不阻断响应 */ });
+        res.status(502).type('text/plain').send('Bad Gateway');
+      });
+  });
 
   // hub 入口:登录后直达多机控制台(而非共享 public/ 里的单机 index.html,
   // 那会去请求 hub 不存在的 /api/dashboard 等端点)。放在 requireAuth 之后、
