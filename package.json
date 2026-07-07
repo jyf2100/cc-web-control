@@ -1,6 +1,6 @@
 {
   "name": "cc-web-control",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "通过 Web 页面以对话框形式控制本地 tmux 会话",
   "type": "module",
   "main": "server.cjs",
@@ -11,6 +11,7 @@
   "files": [
     "*.cjs",
     "*.example.json",
+    "hub/",
     "public/",
     "claude-wrapper.sh",
     "bin/",
