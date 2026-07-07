@@ -21,6 +21,7 @@ const { getDashboardCache, buildDashboardPayload } = require('./dashboard_cache.
 const { cwdToSlug } = require('./dashboard_slug.cjs');
 const { readBinding, deleteBinding, migrateStaleBindings } = require('./dashboard_binding.cjs');
 const { shouldContinue } = require('./claude_session.cjs');
+const crypto = require('node:crypto');
 const { createRateLimiter } = require('./rate_limit.cjs');
 const { loadConfig, SINGLE_SCHEMA, SINGLE_CONFIG_PATH } = require('./config_loader.cjs');
 
@@ -40,6 +41,21 @@ const loginRateLimiter = createRateLimiter({
   max: CFG.loginMax,
   windowMs: CFG.loginWindowMs,
 });
+
+// 一次性 ticket 存储:mint 时写入,GET /login?ticket= 消费时立即删除(Task 4)。
+// hub→单机自动登录流:hub 持 Bearer 调此端点拿 15s ticket,再引导浏览器 GET /login?ticket=
+// 完成登录(浏览器无 Bearer)。DoS 双闸:TICKET_MAX 防内存爆,rate limiter 防滥mint。
+const tickets = new Map();
+const TICKET_TTL_MS = 15_000;
+const TICKET_MAX = 1024;
+// 定时清扫过期 ticket(30s);unref 让测试进程 / CLI 能自然退出,不被 interval 挂住。
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of tickets) {
+    if (v.expires <= now) tickets.delete(k);
+  }
+}, 30_000).unref();
+const ticketRateLimiter = createRateLimiter({ max: 30, windowMs: 60_000 });
 
 function hasFlag(flag) {
   return process.argv.includes(flag);
@@ -363,6 +379,20 @@ function startWebServer() {
   };
 
   app.use(requireAuth);
+
+  // 一次性 ticket mint:hub 持 Bearer 调此端点 → 返回 15s 内有效的 ticket。
+  // requireAuth 已校验 Bearer(经 auth.isAuthorized);rate limit 防滥 mint;
+  // TICKET_MAX 防内存 DoS。Task 4 在 GET /login?ticket= 立即删除消费。
+  app.post('/api/auth/ticket', (req, res) => {
+    const { limited } = ticketRateLimiter.check(req.ip);
+    if (limited) return res.status(429).type('text/plain').send('rate limited');
+    if (tickets.size >= TICKET_MAX) {
+      return res.status(503).type('json').send(JSON.stringify({ error: 'ticket capacity' }));
+    }
+    const ticket = crypto.randomBytes(32).toString('base64url');
+    tickets.set(ticket, { expires: Date.now() + TICKET_TTL_MS });
+    res.type('json').send(JSON.stringify({ ticket }));
+  });
 
   // API 路由
   app.get('/api/config', (req, res) => {
