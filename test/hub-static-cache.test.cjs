@@ -30,7 +30,7 @@ test('前端 .js/.html/.cjs 静态资源带 Cache-Control: no-store', async () =
   await withHub(async (hub) => {
     const base = `http://127.0.0.1:${hub.port}`;
     const h = { Cookie: 'cc_web_hub_auth=tok' };
-    for (const p of ['/console.js', '/console.html', '/dashboard_render.cjs']) {
+    for (const p of ['/dashboard.js', '/dashboard.html', '/dashboard_render.cjs']) {
       const res = await fetch(base + p, { headers: h });
       assert.equal(res.status, 200, `${p} status`);
       assert.equal(res.headers.get('cache-control'), 'no-store', `${p} cache-control`);

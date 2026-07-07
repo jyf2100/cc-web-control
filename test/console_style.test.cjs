@@ -6,7 +6,6 @@ const path = require('node:path');
 const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'dashboard.css'), 'utf8');
 const tokens = fs.readFileSync(path.join(__dirname, '..', 'public', 'tokens.css'), 'utf8');
 const CONSOLE_SECTION = css.slice(css.indexOf('===== 多机控制台'));
-const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'console.html'), 'utf8');
 const switchSheetSrc = fs.readFileSync(path.join(__dirname, '..', 'public', 'switch_sheet.cjs'), 'utf8');
 
 test('console 段无硬编码 Tailwind 状态色', () => {
@@ -72,10 +71,6 @@ test('P3 回归防护:.ma-warn-line 安全警告常驻可见(不被 data-ma-open
   // 锁:CSS 无 data-ma-open 残留 + .ma-warn-line 默认 display:block 常驻可见。
   assert.doesNotMatch(css, /data-ma-open/, 'CSS 不应残留 data-ma-open 死门控(P3 清理留尾)');
   assert.match(css, /\.ma-warn-line\s*\{[^}]*display:\s*block/, '.ma-warn-line 应常驻 display:block 可见');
-});
-test('切换抽屉 trigger 44pt 触摸目标 + aria-haspopup', () => {
-  assert.match(html, /id="switchTab"[^>]*aria-haspopup="dialog"/);
-  assert.match(css, /\.tab\b[\s\S]*?min-height:\s*44/);  // 复用 .tab 44pt
 });
 test('switch-sheet a11y:role=dialog + aria-modal + inert 背景', () => {
   // switch_sheet.cjs 用 setAttribute('role','dialog') 两参形式,非属性字面量 → 按实际源码匹配

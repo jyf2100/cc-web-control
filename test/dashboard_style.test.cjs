@@ -32,3 +32,7 @@ test('tabbar and switch-sheet dead CSS removed', () => {
   assert.ok(!/\.bottom-tabbar/.test(css));
   assert.ok(!/\.switch-sheet-backdrop/.test(css));
 });
+
+test('.visually-hidden retained (a11y helper, survives tabbar removal — 迁自 dashboard_tabbar.test.cjs)', () => {
+  assert.match(css, /\.visually-hidden\s*\{/);
+});
