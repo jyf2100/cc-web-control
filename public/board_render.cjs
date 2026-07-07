@@ -45,9 +45,11 @@
     return `${Math.floor(diff / 2592000000)}个月前`;                        // ≥30d
   }
 
-  // 看板卡片内层:click-to-navigate 的 <a>(跳 /console.html?m=&s=),内含 .card__select 多选 checkbox
-  // 语义(data-toggle/role/aria-checked,初始 ☐ 未选;JS 重建时变 ☑ + card--selected)。
-  // buildCardHTML 在外层包 <li class="card-row" data-key>;keyed-diff 场景(dashboard.js)只需内层。
+  // 看板卡片内层:click-to-navigate 的 <a>(跳 hub /jump?m=&s=,新标签打开目标单机控制台)。
+  // Plan A(2026-07-07 spec §6.2):a 只含展示 spans(s-dot/s-icon/card__name/card__session/card__last/card__time),
+  // 不再嵌 .card__select(改由 buildCardRow 在 a 之前放同级 <button>),不再带 data-machine/session/key
+  // (上移到 <li>,供 dashboard.js 事件委托读取);data-status 留在 a(供 CSS 按状态上色)。
+  // aria-label 用 机器名/会话名/statusLabel/「在新标签打开控制台」,不含 lastLine(避免 2s 轮询刷新干扰读屏)。
   function buildCardInner(machine, session, opts) {
     const m = machine || {};
     const s = session || {};
@@ -57,24 +59,23 @@
     if (o.active) classes.push('active');
     const name = escapeHtml(m.name || m.id);
     const sess = escapeHtml(s.name);
-    const mid = escapeHtml(m.id);
     // :7685 多机 hub:永远机器名主标题 + 会话名副行(singleMachine 分支已废弃 —— 它是
     // 07-04 spec 错把 :7685 当单机的产物,见 docs/superpowers/specs/2026-07-04-7685-hub-gap-audit.md §1)。
     const primaryName = name;
     const secondary = sess;
     const lastRaw = s.lastLine || (m.online === false ? '(离线)' : '');
-    const lastCleanRaw = TC.cleanSummary ? TC.cleanSummary(lastRaw, 40) : lastRaw;  // aria-label 净化口径
     const last = escapeHtml(TC.cleanSummary ? TC.cleanSummary(lastRaw, 60) : lastRaw);
     const time = escapeHtml(relativeTime(o.lastTs, o.now));
-    const label = escapeHtml(`${m.name || m.id} / ${s.name},${meta.label},${lastCleanRaw || '无输出'}`);
     // href:query 值先 encodeURIComponent(< → %3C,& → %26 防参数边界混淆),
     // 再整体 escapeHtml 放入属性(& 分隔符 → &amp;,防 " breakout)。
     // 浏览器解析:HTML 解码(&amp;→&)→ URL 解码(%3C→<),最终 m/s 参数值还原。
     const midRaw = m.id == null ? '' : m.id;
     const sessRaw = s.name == null ? '' : s.name;
-    const href = `/console.html?m=${encodeURIComponent(midRaw)}&s=${encodeURIComponent(sessRaw)}`;
-    return `<a class="${classes.join(' ')}" href="${escapeHtml(href)}" data-machine="${mid}" data-session="${sess}" data-status="${escapeHtml(s.status || 'unknown')}" aria-label="${label}">` +
-      `<span class="card__select" data-toggle="select" role="checkbox" aria-checked="false" aria-label="选择 ${name} / ${sess}" tabindex="0">☐</span>` +
+    const href = `/jump?m=${encodeURIComponent(midRaw)}&s=${encodeURIComponent(sessRaw)}`;
+    // aria-label 不含 lastLine(2s 轮询刷新会打断读屏);显式告知「在新标签打开控制台」。
+    const label = `${m.name || m.id} / ${s.name}, ${meta.label}, 在新标签打开控制台`;
+    const st = escapeHtml(String(s.status || 'unknown'));
+    return `<a class="${classes.join(' ')}" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" data-status="${st}" aria-label="${escapeHtml(label)}">` +
       `<span class="s-dot ${meta.dot}" aria-hidden="true"></span>` +
       `<span class="s-icon" aria-hidden="true">${meta.icon}</span>` +
       `<span class="card__name">${primaryName}</span>` +
@@ -84,12 +85,28 @@
       `</a>`;
   }
 
-  // 看板卡片:<li data-key> + buildCardInner(供需独立 <li> 的场景使用)。
-  function buildCardHTML(machine, session, opts) {
+  // 看板卡片行(Plan A):<li class="card-row"> 同级 <button class="card__select"> + <a class="card">。
+  // button 在 a 之前(DOM 顺序),用原生 button + aria-pressed 替代旧版嵌套 checkbox(ARIA 合规:
+  // interactive role=checkbox 不能嵌在 <a> 里)。data-machine/session/key/status + role=group + aria-label
+  // 全部上移到 <li>,供 dashboard.js 事件委托读取(Task 8);button 的 aria-pressed 初始 false,JS toggle。
+  function buildCardRow(machine, session, opts) {
     const m = machine || {};
     const s = session || {};
-    const key = `${m.id}/${s.name}`;
-    return `<li class="card-row" data-key="${escapeHtml(key)}">` + buildCardInner(machine, session, opts) + `</li>`;
+    const midRaw = String(m.id != null ? m.id : '');
+    const sessRaw = String(s.name != null ? s.name : '');
+    const key = `${midRaw}/${sessRaw}`;
+    const st = escapeHtml(String(s.status || 'unknown'));
+    const grpLabel = escapeHtml(`${m.name || m.id} / ${s.name}`);
+    const togLabel = escapeHtml(`选择 ${m.name || m.id} / ${s.name}`);
+    return `<li class="card-row" data-machine="${escapeHtml(midRaw)}" data-session="${escapeHtml(sessRaw)}" data-status="${st}" data-key="${escapeHtml(key)}" role="group" aria-label="${grpLabel}">` +
+      `<button class="card__select" type="button" data-toggle="select" aria-pressed="false" aria-label="${togLabel}">☐</button>` +
+      buildCardInner(machine, session, opts) +
+      `</li>`;
+  }
+
+  // 看板卡片:thin wrapper → buildCardRow(保留旧调用方兼容,dashboard.js Task 8 改调 buildCardRow)。
+  function buildCardHTML(machine, session, opts) {
+    return buildCardRow(machine, session, opts);
   }
 
   // hub fleet → 卡片数组:把 status 提升到顶层(供 sortCardsByRelevance 读取),
@@ -180,5 +197,5 @@
   }
 
 
-  return { statusMeta, escapeHtml, relativeTime, buildCardHTML, buildCardInner, flattenFleet, sortCardsByRelevance, summarizeFleet, isStale, partitionStale, groupByMachine };
+  return { statusMeta, escapeHtml, relativeTime, buildCardHTML, buildCardRow, buildCardInner, flattenFleet, sortCardsByRelevance, summarizeFleet, isStale, partitionStale, groupByMachine };
 });
