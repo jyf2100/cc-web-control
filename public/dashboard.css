@@ -131,7 +131,7 @@ html, body {
 /* ===== 多机控制台 Fleet Dashboard(token 化,删除原硬编码)===== */
 .console-app {
   height: 100dvh; height: var(--vh, 100dvh); display: flex; flex-direction: column; overflow: hidden;
-  --term-bg: #1a1815; --term-fg: #e8e6df;
+  --term-bg: var(--surface); --term-fg: var(--fg);
   --waiting-bg: rgba(192, 133, 50, 0.08);
 }
 .console-hero.disabled { opacity: .5; pointer-events: none; }
@@ -156,7 +156,7 @@ html, body {
    → 「⚠ 不可信远程数据」安全警告恒隐藏,操作者看不到。镜像已按 §4.0 常驻撑满,警告随之常驻。 */
 .ma-warn-line { color:var(--fg-2); font-size:.75em; display:block; }
 /* ma-screen 浮层规则已删(Task 7 提位后常驻撑满,max-height:0/transition 由末尾 #ma-screen 块覆盖) */
-#ma-screen { margin:0; overflow:auto; background:var(--term-bg); color:var(--term-fg); font-family:var(--mono); font-size:.8em; padding:0 8px; }
+#ma-screen { margin:0; overflow:auto; background:var(--term-bg); color:var(--term-fg); font-family:var(--mono); font-size:12.5px; line-height:1.65; padding:0 8px; }
 .dot { display:inline-block; width:10px; height:10px; border-radius:50%; }
 .dot.running { background:var(--working); }
 .dot.stopped { background:var(--idle); }
@@ -216,7 +216,7 @@ html, body {
 .s-icon { font-variant-emoji:text; }
 
 .console-term { display:flex; flex-direction:column; border-top:1px solid var(--border); flex:1; min-height:0; }
-.term-header { display:flex; align-items:center; gap:6px; padding:4px 16px; border-bottom:1px solid var(--border); }
+.term-header { display:flex; align-items:center; gap:6px; padding:4px 16px; border-bottom:1px solid var(--border); background:var(--surface-2); }
 #term-target { flex:1; min-width:0; font-size:.8em; color:var(--fg-2); display:flex; align-items:center; gap:6px; }
 #term-target[data-state="disconnected"] { color:var(--errored); }
 .term-collapse-btn { font:inherit; font-size:.75em; color:var(--fg-2); background:transparent; border:none; padding:2px 8px; min-height:44px; cursor:pointer; touch-action:manipulation; }
@@ -226,11 +226,12 @@ html, body {
 .term-fullscreen-btn:hover { color:var(--accent-2); }
 .term-fullscreen-btn:focus-visible { outline:2px solid var(--accent-2); outline-offset:2px; }
 .term-fullscreen-btn[aria-pressed="true"] { color:var(--accent-2); font-weight:600; }
-#term-screen { margin:0; flex:1; min-height:0; padding:8px 12px; background:var(--term-bg); color:var(--term-fg); font-family:var(--mono); font-size:.8em; overflow:auto; white-space:pre-wrap; }
-.term-input-form { display:flex; gap:6px; padding:6px 16px; border-top:1px solid var(--border); align-items:center; }
-#term-input { flex:1; font-size:16px; }   /* P8:iOS Safari <16px 聚焦自动放大整页失焦不还原,显式锁 16px */
+#term-screen { margin:0; flex:1; min-height:0; padding:12px 14px; background:var(--term-bg); color:var(--term-fg); font-family:var(--mono); font-size:12.5px; line-height:1.65; overflow:auto; white-space:pre-wrap; }
+.term-input-form { display:flex; gap:8px; padding:6px 16px; border-top:1px solid var(--border); align-items:center; background:var(--surface-2); }
+#term-input { flex:1; font-size:16px; font-family:var(--mono); color:var(--fg); background:transparent; border:none; }   /* P8:iOS Safari <16px 聚焦自动放大整页失焦不还原,显式锁 16px */
 #term-input:disabled { opacity:.5; }
 #term-input:focus-visible { outline:2px solid var(--accent-2); outline-offset:2px; }   /* P6:WCAG 2.4.7 */
+.term-prompt { color:var(--accent-2); font-weight:600; font-family:var(--mono); font-size:14px; user-select:none; flex-shrink:0; }
 .term-badge { font-size:.75em; background:var(--accent-2); color:#fff; padding:2px 8px; border-radius:var(--r-pill); }
 #bc-result { font-size:.75em; color:var(--fg-2); }
 /* 折叠态:终端收为单行 header,卡片网格获更多空间(P1 §4.2 A6) */
@@ -240,7 +241,7 @@ html, body {
 /* 全屏态:终端覆盖整个视口(position:fixed inset:0),topbar/hero/board 被遮在底下 */
 .console-term[data-fullscreen="true"] { position:fixed; inset:0; z-index:200; flex-basis:auto; min-height:0; border:none; border-radius:0; }
 .console-term[data-fullscreen="true"] .term-header { padding:6px 16px; background:var(--surface); border-bottom:1px solid var(--border); }
-.console-term[data-fullscreen="true"] #term-screen { font-size:.9em; }
+.console-term[data-fullscreen="true"] #term-screen { font-size:14px; }
 
 @media (max-width: 768px) {
   /* HERO 折叠入顶部栏(P1 §4.2 A6):fleet 详情已在 #fleet-summary,只留状态点 + 文字 + 镜像按钮 */
