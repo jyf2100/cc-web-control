@@ -294,3 +294,14 @@ html, body {
 #main-agent-panel[hidden], .console-term[hidden] { display: none; }
 
 /* switch-sheet 模态 CSS 块已删(switch-sheet 功能随三页面收尾移除;switch_sheet.cjs JS 暂留,T13/T11 处理)。*/
+
+/* === Task 10:header 登出按钮(tabbar 删除后,登出入口下沉到 header 右侧)=== */
+.topbar-logout-form { margin-left: auto; }
+.topbar-logout-btn {
+  min-height: 44px; min-width: 44px; padding: 0 12px;   /* WCAG 2.5.5 44pt 触摸目标 */
+  font: inherit; font-size: 13px; color: var(--fg-2);
+  background: transparent; border: 1px solid var(--border-2); border-radius: var(--r);
+  cursor: pointer; touch-action: manipulation;
+}
+.topbar-logout-btn:hover { color: var(--accent-2); border-color: var(--accent-2); }
+.topbar-logout-btn:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }   /* WCAG 2.4.7 */

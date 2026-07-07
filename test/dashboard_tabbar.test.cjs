@@ -5,11 +5,11 @@ const fs = require('node:fs');
 const readHtml = () => fs.readFileSync('public/dashboard.html', 'utf8');
 const readCss = () => fs.readFileSync('public/dashboard.css', 'utf8');
 
-test('dashboard.html: 底部 .bottom-tabbar(看板 active + 控制台)', () => {
+test('dashboard.html: 底部 .bottom-tabbar 已删(Task 10 三页面:hub 仅看板)', () => {
     const h = readHtml();
-    assert.ok(h.includes('class="bottom-tabbar"'), '应有 .bottom-tabbar');
-    assert.ok(/class="tab tab--active"[^>]*href="\/dashboard\.html"[^>]*aria-current="page"/.test(h), '看板 tab=active');
-    assert.ok(/class="tab"[^>]*href="\/" /.test(h) || /class="tab"[^>]*href="\/"/.test(h), '控制台 tab');
+    assert.ok(!h.includes('class="bottom-tabbar"'), '不应再有 .bottom-tabbar');
+    assert.ok(!/tab--active/.test(h), '不应再有 tab--active');
+    assert.ok(!/class="tab"/.test(h), '不应再有 .tab');
 });
 
 test('dashboard.html: 无 nav / 登录 nav-link', () => {
