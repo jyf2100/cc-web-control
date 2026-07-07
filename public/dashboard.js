@@ -54,7 +54,7 @@
             showState('error', 'tmux 不可用,请确认 tmux 已安装并在 PATH 中。'); return;
         }
         if (sessions.length === 0) {
-            showState('ready', '还没有会话。在主控制台启动一个会话,这里会显示状态。'); return;
+            showState('ready', '在本机启动 cc-web-control 会话后,这里会显示状态。'); return;
         }
         stateMsg.hidden = true;
         var changed = R.diffChangedStatus(prevSessions, sessions);
@@ -131,13 +131,14 @@
         var titleEl2 = document.getElementById('title'); if (titleEl2) titleEl2.textContent = t;
     }
     function buildCardLi(card) {
-        var li = document.createElement('li');
-        li.className = 'card-row'; li.dataset.key = card.key;
-        // Fix 2:BR.buildCardInner 直接返回 <a href="/console.html?m=&s=">…</a>(click-to-navigate)
-        li.innerHTML = BR.buildCardInner(card.machine, card.session, {
+        // Task 7:BR.buildCardRow 返回完整 <li class="card-row">…</li>(含 data-key/data-machine/data-session/
+        // data-status + 同级 button.card__select[aria-pressed] + a.card[href=/jump?m=&s= target=_blank])。
+        // 整段 innerHTML 解析为节点返回,不再手设 li.className / dataset.key(buildCardRow 已注入)。
+        var wrap = document.createElement('ul');
+        wrap.innerHTML = BR.buildCardRow(card.machine, card.session, {
             lastTs: card.lastTs, now: Date.now()
         });
-        return li;
+        return wrap.firstElementChild;
     }
     // 三页面:卡片多选(扇出目标)。key = `${m.id}/${s.name}`(card.key)。Map 跨 2s 重建保持。
     var selected = new Map();   // key → {machine,session}
@@ -174,31 +175,34 @@
     loadSelected();   // 初始化:首次 renderBoard 前填充 Map(reapplySelected 自动重标 DOM)
     // Task 4:重建后重标选中卡片。renderBoard 末尾无条件调用。
     function reapplySelected() {
-        // 全量重建后 selected(Map)存活,重标 DOM 的 card--selected + aria-checked
-        var cards = boardBody.querySelectorAll('.card');
-        Array.prototype.forEach.call(cards, function (a) {
-            var key = keyOf(a.getAttribute('data-machine'), a.getAttribute('data-session'));
+        // 全量重建后 selected(Map)存活,重标 DOM 的 card--selected + aria-pressed。
+        // Task 7:button 与 a 同级,都在 .card-row 内 → 从 li 取 data-key,向下找 .card / .card__select。
+        var rows = boardBody.querySelectorAll('.card-row');
+        Array.prototype.forEach.call(rows, function (row) {
+            var key = row.getAttribute('data-key');
             if (selected.has(key)) {
-                a.classList.add('card--selected');
-                var tog = a.querySelector('.card__select');
-                if (tog) { tog.setAttribute('aria-checked', 'true'); tog.textContent = '☑'; }
+                var card = row.querySelector('.card');
+                var tog = row.querySelector('.card__select');
+                if (card) card.classList.add('card--selected');
+                if (tog) { tog.setAttribute('aria-pressed', 'true'); tog.textContent = '☑'; }
             }
         });
         updateFanoutBar();
     }
-    // click 委托:命中 .card__select[data-toggle] → toggle 选中(preventDefault 阻止 <a> 跳转);
-    // 其余区域放行 → <a href> 原生跳单机控制台(console.html?m=&s=)
+    // click 委托:命中 button[data-toggle="select"] → toggle 选中(preventDefault 阻止 <a> 跳转);
+    // 其余区域放行 → <a href="/jump?m=&s=" target="_blank"> 原生新标签开控制台(无需 JS)。
     boardBody.addEventListener('click', function (e) {
         var tog = e.target.closest('[data-toggle="select"]');
-        if (!tog) return;
+        if (!tog) return;   // 命中 <a> 或其内部 span → 放行,浏览器原生开新标签跳 /jump?m=&s=
         e.preventDefault();
-        var card = tog.closest('.card');
-        if (!card) return;
-        var key = keyOf(card.getAttribute('data-machine'), card.getAttribute('data-session'));
+        var row = tog.closest('.card-row');
+        if (!row) return;
+        var key = row.getAttribute('data-key');
+        var card = row.querySelector('.card');
         if (selected.has(key)) {
             selected.delete(key);
-            card.classList.remove('card--selected');
-            tog.setAttribute('aria-checked', 'false'); tog.textContent = '☐';
+            if (card) card.classList.remove('card--selected');
+            tog.setAttribute('aria-pressed', 'false'); tog.textContent = '☐';
         } else {
             if (selected.size >= 50) {
                 // P4:选满 50 上限不再静默吞 —— preventDefault 已拦 <a> 跳转,此处必须给可见 + 读屏可听反馈,
@@ -207,20 +211,14 @@
                 if (fanoutBcResult) { fanoutBcResult.textContent = '最多选 50 个'; fanoutBcResult.style.color = 'var(--errored)'; }
                 return;
             }
-            selected.set(key, { machine: card.getAttribute('data-machine'), session: card.getAttribute('data-session') });
-            card.classList.add('card--selected');
-            tog.setAttribute('aria-checked', 'true'); tog.textContent = '☑';
+            selected.set(key, { machine: row.getAttribute('data-machine'), session: row.getAttribute('data-session') });
+            if (card) card.classList.add('card--selected');
+            tog.setAttribute('aria-pressed', 'true'); tog.textContent = '☑';
         }
         updateFanoutBar();   // Q3:集中持久化(内部调 persistSelected),click 委托无需再显式 persist
     });
-    // keydown 委托:键盘可达性(WCAG 2.1.1)—— role=checkbox 上 Enter/Space 不自动派发 click,
-    // 显式拦截并复用同一 toggle 逻辑(触发 .click() 走上面的 click 委托)。
-    boardBody.addEventListener('keydown', function (e) {
-        if ((e.key === 'Enter' || e.key === ' ') && e.target.closest('[data-toggle="select"]')) {
-            e.preventDefault();
-            e.target.click();
-        }
-    });
+    // Task 7:键盘可达性由 <button type="button"> 原生处理(Enter/Space 自动派发 click),
+    // 不再需要 JS keydown 委托模拟(WCAG 2.1.1 合规由原生 button 语义保证)。
     // ---- 三页面:扇出 bar(broadcast + broadcast_result reduce)----
     var fanoutBar = document.getElementById('fanout-bar');
     var selCount = document.getElementById('sel-count');
@@ -269,10 +267,12 @@
         });
         document.getElementById('sel-clear').addEventListener('click', function () {
             selected.clear();
-            Array.prototype.forEach.call(boardBody.querySelectorAll('.card--selected'), function (a) {
-                a.classList.remove('card--selected');
-                var tog = a.querySelector('.card__select');
-                if (tog) { tog.setAttribute('aria-checked', 'false'); tog.textContent = '☐'; }
+            // Task 7:button 与 a 同级,都在 .card-row 内 → 遍历 li,向下找 .card / .card__select 复位。
+            Array.prototype.forEach.call(boardBody.querySelectorAll('.card-row'), function (row) {
+                var card = row.querySelector('.card');
+                var tog = row.querySelector('.card__select');
+                if (card) card.classList.remove('card--selected');
+                if (tog) { tog.setAttribute('aria-pressed', 'false'); tog.textContent = '☐'; }
             });
             updateFanoutBar();
         });
@@ -291,7 +291,7 @@
         }
         if (!sorted.length) {
             // 有机器但无会话:区分于「无机器」,引导启动会话而非查 hub 注册
-            boardBody.innerHTML = '<li class="board-empty"><span class="eyebrow">NO SESSIONS</span> 暂无运行中的会话,在控制台启动一个。</li>';
+            boardBody.innerHTML = '<li class="board-empty"><span class="eyebrow">NO SESSIONS</span> 暂无运行中的会话。请在某台被控机上启动 cc-web-control 进程。</li>';
             renderFleetSummary(machines);
             return;
         }
@@ -352,7 +352,7 @@
         boardBody.innerHTML = '<li class="board-empty"><span class="eyebrow">ERROR</span> ' + msg + '</li>';
         // ERROR <li> 由 renderBoard 下次轮询的无条件 innerHTML='' 清除,无需额外状态重置。
     }
-    // 卡片 click-to-navigate 由 <a href="/console.html?m=&s="> 原生处理(无需 JS 拦截);中键/书签均可用
+    // 卡片 click-to-navigate 由 <a href="/jump?m=&s=" target="_blank"> 原生处理(无需 JS 拦截);中键/书签/Cmd+点击 均可用
     async function pollHub() {
         var ok = false;
         try {

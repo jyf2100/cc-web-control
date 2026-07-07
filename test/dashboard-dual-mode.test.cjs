@@ -24,8 +24,10 @@ test('dashboard.js 探测 global-dashboard 分发 hub/单机', () => {
   assert.match(js, /\/api\/global-dashboard/);
   assert.match(js, /404|status\s*===\s*404/);  // 404 → 单机 fallback
 });
-test('dashboard.js hub 卡片跳控制台(click-to-navigate)', () => {
-  assert.match(js, /\/console\.html\?m=/);
+test('dashboard.js hub 卡片跳控制台(click-to-navigate → /jump,新标签)', () => {
+  // Task 8:卡片导航由 buildCardRow 注入的 <a href="/jump?m=&s=" target="_blank"> 原生处理;
+  // 旧 /console.html?m= 已废弃。锁源码引用 /jump(防回退)。
+  assert.match(js, /\/jump\?m=/);
 });
 test('dashboard.js hub title 带 fleet 数', () => {
   assert.match(js, /多机|fleet|online/);
