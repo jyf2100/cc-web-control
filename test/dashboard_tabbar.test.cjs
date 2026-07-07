@@ -18,10 +18,9 @@ test('dashboard.html: 无 nav / 登录 nav-link', () => {
     assert.ok(!/nav-link/.test(h), '不应再有 nav-link');
 });
 
-test('dashboard.css: tab 样式 + 指示条 + visually-hidden + #app flex 容纳 tab', () => {
+test('dashboard.css: visually-hidden 保留(tab 样式已随 tabbar 删除,Task 10 删 HTML)', () => {
     const css = readCss();
-    assert.ok(/\.bottom-tabbar\s*\{/.test(css), 'dashboard.css 应有 .bottom-tabbar');
-    assert.ok(/\.tab\s*\{[^}]*min-height:\s*44px/.test(css), '.tab min-height 44px');
-    assert.ok(/\.tab--active::before\s*\{[^}]*background:\s*var\(--accent-2\)/.test(css), '指示条 --accent-2');
+    assert.ok(!/\.bottom-tabbar/.test(css), 'Task 9 删除:.bottom-tabbar 死 CSS');
+    assert.ok(!/\.tab--active/.test(css), 'Task 9 删除:.tab--active 死 CSS');
     assert.ok(/\.visually-hidden\s*\{/.test(css), '应有 .visually-hidden');
 });
