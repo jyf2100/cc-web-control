@@ -291,7 +291,7 @@ test('未授权 GET / → 302 重定向到 /login?next=', async () => {
   }
 });
 
-test('已授权 GET / → 302 重定向到 /console.html(避免落入单机 index.html)', async () => {
+test('已授权 GET / → 302 重定向到 /dashboard.html(避免落入单机 index.html)', async () => {
   const s1 = await new StubMachine({ token: 't1' }).start();
   try {
     await withHub([s1], 'hubtok', async (hub) => {
@@ -300,14 +300,14 @@ test('已授权 GET / → 302 重定向到 /console.html(避免落入单机 inde
         headers: { Cookie: 'cc_web_hub_auth=hubtok' },
       });
       assert.equal(res.status, 302);
-      assert.equal(res.headers.get('location'), '/console.html');
+      assert.equal(res.headers.get('location'), '/dashboard.html');
     });
   } finally {
     await s1.stop();
   }
 });
 
-test('已授权 GET /dashboard.html 直服 HTML(不再重定向到 /console.html,bug 3 根治)', async () => {
+test('已授权 GET /dashboard.html 直服 HTML(不走重定向,bug 3 根治)', async () => {
   const s1 = await new StubMachine({ token: 't1' }).start();
   try {
     await withHub([s1], 'hubtok', async (hub) => {
