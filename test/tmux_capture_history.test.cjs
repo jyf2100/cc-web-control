@@ -65,8 +65,8 @@ test('parseCaptureHistory: 非法/负数 → 0(回退原行为)', () => {
 // ── server.cjs 接入校验(源码正则,与 console_scroll_sticky.test.cjs 同风格)──
 const serverJs = fs.readFileSync(path.join(__dirname, '..', 'server.cjs'), 'utf8');
 
-test('server.cjs: 用 parseCaptureHistory 解析 CC_WEB_CAPTURE_HISTORY', () => {
-  assert.match(serverJs, /parseCaptureHistory\s*\(\s*process\.env\.CC_WEB_CAPTURE_HISTORY\s*\)/);
+test('server.cjs: 用 parseCaptureHistory 解析 CFG.captureHistory(env CC_WEB_CAPTURE_HISTORY 经 loadConfig 路由)', () => {
+  assert.match(serverJs, /parseCaptureHistory\s*\(\s*CFG\.captureHistory\s*\)/);
 });
 
 test('server.cjs: capturePane 调用传入 CAPTURE_HISTORY(scrollback)', () => {

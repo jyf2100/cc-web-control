@@ -30,6 +30,10 @@ function startHub(opts) {
     port = Number(process.env.CC_WEB_HUB_PORT) || 7685,
     intervalMs = Number(process.env.CC_WEB_HUB_DASHBOARD_INTERVAL_MS) || 2000,
     mainAgent = {},
+    loginMax = Number.parseInt(process.env.CC_WEB_LOGIN_MAX || '', 10) || 5,
+    loginWindowMs = Number.parseInt(process.env.CC_WEB_LOGIN_WINDOW_MS || '', 10) || 15 * 60 * 1000,
+    mainAgentMax = Number.parseInt(process.env.CC_WEB_MAIN_AGENT_MAX || '', 10) || 6,
+    mainAgentWindowMs = Number.parseInt(process.env.CC_WEB_MAIN_AGENT_WINDOW_MS || '', 10) || 60 * 1000,
   } = opts;
 
   if (!hubToken) throw new Error('CC_WEB_HUB_TOKEN 必设(裸奔危险)');
@@ -59,15 +63,15 @@ function startHub(opts) {
 
   // 注:req.ip 取 socket 对端地址(未设 trust proxy)。反代部署时所有请求 IP 相同,
   // 限流计数会共享——内网单用户可接受;多用户/公网部署应按需设 app.set('trust proxy', N)。
-  // 登录速率限制:对齐单机 server.cjs 配置(默认 5 次/15 分钟,可经环境变量调整)
+  // 登录速率限制:对齐单机 server.cjs 配置(默认 5 次/15 分钟;opts 优先,未传回退 env/默认)
   const loginRateLimiter = createRateLimiter({
-    max: Number.parseInt(process.env.CC_WEB_LOGIN_MAX || '', 10) || 5,
-    windowMs: Number.parseInt(process.env.CC_WEB_LOGIN_WINDOW_MS || '', 10) || 15 * 60 * 1000,
+    max: loginMax,
+    windowMs: loginWindowMs,
   });
-  // ★ M1:主控 agent 起停端点限流(默认 6/min,起停低频操作)
+  // ★ M1:主控 agent 起停端点限流(默认 6/min,起停低频操作;opts 优先,未传回退 env/默认)
   const mainAgentRateLimiter = createRateLimiter({
-    max: Number.parseInt(process.env.CC_WEB_MAIN_AGENT_MAX || '', 10) || 6,
-    windowMs: Number.parseInt(process.env.CC_WEB_MAIN_AGENT_WINDOW_MS || '', 10) || 60 * 1000,
+    max: mainAgentMax,
+    windowMs: mainAgentWindowMs,
   });
 
   const expectedOriginForHttp = (req) => ({

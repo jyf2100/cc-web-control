@@ -27,7 +27,6 @@
   const termFullscreenBtn = document.getElementById('term-fullscreen-btn');
   const fleetSummary = document.getElementById('fleet-summary');
   const heroCallout = document.getElementById('hero-callout');
-  const maToggleBtn = document.getElementById('ma-toggle-btn');
   const maPanel = document.getElementById('main-agent-panel');
   const maDot = document.getElementById('ma-status-dot');
   const maText = document.getElementById('ma-status-text');
@@ -222,15 +221,6 @@
   }
   maStartBtn.addEventListener('click', () => maAction('/api/main-agent/start', maStartBtn));
   maStopBtn.addEventListener('click', () => maAction('/api/main-agent/stop', maStopBtn));
-  maToggleBtn.addEventListener('click', () => {
-    // data-ma-open 浮层显隐(CSS [data-ma-open="true"] 控 main-agent-panel 内 ma-screen 浮层)
-    const open = maPanel.getAttribute('data-ma-open') === 'true';
-    maPanel.setAttribute('data-ma-open', String(!open));
-    maToggleBtn.setAttribute('aria-expanded', String(!open));
-    // a11y:抽屉折叠时把 #ma-screen 从可访问树隐藏(展开 → aria-hidden=false;折叠 → true)
-    // open 为切前状态:String(open) 恰为切后状态对应的 aria-hidden 值
-    maScreen.setAttribute('aria-hidden', String(open));
-  });
   termCollapseBtn.addEventListener('click', () => {
     // 终端可折叠(P1 §4.2 A6):收起时仅留 .term-header 单行,腾空间给主控区
     const collapsed = termSection.getAttribute('data-collapsed') === 'true';
@@ -386,6 +376,11 @@
       if (maScreen) { maScreen.hidden = true; maScreen.setAttribute('aria-hidden', 'true'); }
       if (termSection) termSection.hidden = false;
       if (switchTab) switchTab.hidden = false;
+      // P7b:单机模式改 document.title + h1 为「单机控制台」(WCAG 2.4.2/2.4.6);
+      //     多机分支保持默认「多机控制台」,故只在此处覆盖。
+      document.title = '单机控制台 · ' + urlM + '/' + urlS;
+      const h1 = document.querySelector('.console-topbar h1');
+      if (h1) h1.textContent = '单机控制台';
       tryAttachFromUrl();
     } else {
       if (maPanel) maPanel.hidden = false;

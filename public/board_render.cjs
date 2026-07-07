@@ -74,7 +74,7 @@
     const sessRaw = s.name == null ? '' : s.name;
     const href = `/console.html?m=${encodeURIComponent(midRaw)}&s=${encodeURIComponent(sessRaw)}`;
     return `<a class="${classes.join(' ')}" href="${escapeHtml(href)}" data-machine="${mid}" data-session="${sess}" data-status="${escapeHtml(s.status || 'unknown')}" aria-label="${label}">` +
-      `<span class="card__select" data-toggle="select" role="checkbox" aria-checked="false" tabindex="0">☐</span>` +
+      `<span class="card__select" data-toggle="select" role="checkbox" aria-checked="false" aria-label="选择 ${name} / ${sess}" tabindex="0">☐</span>` +
       `<span class="s-dot ${meta.dot}" aria-hidden="true"></span>` +
       `<span class="s-icon" aria-hidden="true">${meta.icon}</span>` +
       `<span class="card__name">${primaryName}</span>` +

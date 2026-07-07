@@ -164,6 +164,65 @@ Claude Code 有些交互会在输入 `/` 后弹出命令面板（不一定需要
 - `CC_WEB_NO_OPEN=1` 或 `--no-open`：不自动打开浏览器
 - `CC_WEB_NO_ATTACH=1` 或 `--no-attach`：不在当前终端 attach 到 tmux 会话
 
+## 配置文件（可选）
+
+除了环境变量，也可以用 JSON 配置文件管理启动参数。适合多参数 / 固定配置 / 不想污染 shell 环境的场景。
+
+### 文件路径与 flag
+
+- 单机（7684）：`~/.cc-web-control/config.json`
+- hub 多机（7685）：`~/.cc-web-control/hub-config.json`
+
+用 `--config <path>` flag 覆盖默认路径（两个入口都支持）：
+
+```bash
+cc-web-control --config /path/to/my-config.json
+cc-web-control hub --config /path/to/my-hub-config.json
+```
+
+### 优先级与向后兼容
+
+每个字段按 **环境变量 > 文件值 > 代码默认** 解析：
+
+- 环境变量是逃生口，适合 CI / 临时调试；
+- 文件值是日常固定配置；
+- 两者都没有则用代码默认 —— **不写配置文件 = 现状行为完全不变**，纯 env / 默认仍照旧。
+
+### 字段清单
+
+字段名、类型、默认值的权威清单见仓库根的两份模板（避免本节与 schema 漂移）：
+
+- 单机 15 字段：[`config.example.json`](./config.example.json)
+- hub 11 顶层字段（含 `mainAgent` 子对象）：[`hub-config.example.json`](./hub-config.example.json)
+
+复制模板作起点：
+
+```bash
+cp config.example.json ~/.cc-web-control/config.json            # 单机
+cp hub-config.example.json ~/.cc-web-control/hub-config.json    # hub
+```
+
+然后按需改字段值即可。
+
+### 字段约定
+
+- **bool**：文件里写字面 `true` / `false`（勿加引号）；环境变量里 `'1'` = true。
+- **number**：文件里写裸数字（如 `100`，勿加引号）。
+- **projectRoots**：文件里是 JSON 数组（环境变量则逗号分隔）。
+- **路径字段写绝对路径**：`projectRoots`、`mainAgent.dataDir` 等路径字段在 JSON 里写**绝对路径**，不要写 `~/`。JSON 中 `~` 是字面字符串，loader 不展开 homedir。
+- **mainAgent 数值非法**：`mainAgent.settleMs` 等数值字段若 ≤0 或非数字，hub 启动逻辑会自动 clamp 回默认值，不阻断启动。
+
+### token 安全
+
+`authToken` / `hubToken` 在配置文件里是明文，建议收紧文件权限：
+
+```bash
+chmod 600 ~/.cc-web-control/config.json
+chmod 600 ~/.cc-web-control/hub-config.json
+```
+
+loader 检测到文件权限过松（group/other 可读）且含非空 token 时，启动会打印 warning（不阻断）。
+
 ## hub 多机模式
 
 `cc-web-control hub` 启动一个中央服务，聚合多台机器上各自运行的 cc-web-control 实例：一个全局看板轮询所有机器、点行切换任一会话终端、多选会话批量广播同一条输入。浏览器只连 hub，单一入口、单一 token。

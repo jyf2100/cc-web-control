@@ -338,3 +338,31 @@ test('GET /healthz 公开健康检查(无需 cookie)', async () => {
     await s1.stop();
   }
 });
+
+// ===== T7: startHub 限流 opts(loginMax/loginWindowMs/mainAgentMax/mainAgentWindowMs)=====
+// 向后兼容:未传 → 回退 env/默认(既有 POST /login 单测 + M1 "6/min" 测试已覆盖默认行为);
+// 此处验证 opts 显式传入时优先生效。loginMax 走通即证明 opts→createRateLimiter 通路,
+// mainAgent*/loginWindowMs 与之同构(同样从解构变量读入 createRateLimiter)。
+
+test('loginMax opt:传 1 → 第 2 次 POST /login 429(opts 优先于默认 5/15min)', async () => {
+  const { file, cleanup } = tmpMachinesFile([]);
+  const hub = await startHub({
+    machinesFile: file, hubToken: 'hubtok', host: '127.0.0.1', port: 0, intervalMs: 100,
+    loginMax: 1, loginWindowMs: 15 * 60 * 1000,
+  });
+  try {
+    const origin = `http://127.0.0.1:${hub.port}`;
+    const post = () => fetch(`${origin}/login`, {
+      method: 'POST', redirect: 'manual',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: origin },
+      body: 'token=wrong&next=/',
+    });
+    const r1 = await post();
+    const r2 = await post();
+    assert.notEqual(r1.status, 429, '首次不应被限流(应 401 错 token)');
+    assert.equal(r2.status, 429, '第 2 次应被限流(loginMax:1 已用尽)');
+  } finally {
+    await hub.stop();
+    cleanup();
+  }
+});

@@ -200,7 +200,13 @@
             card.classList.remove('card--selected');
             tog.setAttribute('aria-checked', 'false'); tog.textContent = '☐';
         } else {
-            if (selected.size >= 50) { return; }   // 后端 BROADCAST_MAX_TARGETS=50 上限,阻止继续选
+            if (selected.size >= 50) {
+                // P4:选满 50 上限不再静默吞 —— preventDefault 已拦 <a> 跳转,此处必须给可见 + 读屏可听反馈,
+                // 否则 DOM 无变化、用户以为界面卡死。#bc-result 为 aria-live 区(dashboard.html),写文案自动播报;
+                // 颜色用 --errored 提示异常;下次成功 toggle / 扇出 / WS 推送会覆盖,自然清除。
+                if (fanoutBcResult) { fanoutBcResult.textContent = '最多选 50 个'; fanoutBcResult.style.color = 'var(--errored)'; }
+                return;
+            }
             selected.set(key, { machine: card.getAttribute('data-machine'), session: card.getAttribute('data-session') });
             card.classList.add('card--selected');
             tog.setAttribute('aria-checked', 'true'); tog.textContent = '☑';
