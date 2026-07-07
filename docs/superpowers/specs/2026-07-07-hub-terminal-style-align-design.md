@@ -91,9 +91,9 @@ cc-web-control 两个前端:
 | 组合 | 对比度 | 达标 |
 |---|---|---|
 | `--fg #26251e` on `--surface #ebeae5` | ≈12:1 | AA ✅ |
-| `--accent-2 #b54e0e` on `--surface-2 #e3e2dc` | 4.58:1+ | AA ✅ |
-| `--fg-2` 次文字 on `--surface` | ~5.4:1 | AA ✅ |
-| 输入框 placeholder(`--fg-3`,仅装饰) | — | 不承载需阅读文字(符合 `tokens.css` 注释约定) |
+| `--accent-2 #b54e0e` on `--surface-2 #e3e2dc`(❯ 提示符) | ~4.0:1 | 装饰豁免(`aria-hidden`,WCAG 1.4.3);7684 `style.css:226` 同底同值,无回归 |
+| `--fg-2` 次文字 on `--surface` | ~5.2:1 | AA ✅ |
+| 输入框 placeholder | — | 未显式着色(依赖 UA 默认);属装饰提示,不承载需阅读文字 |
 
 `❯` 提示符 `aria-hidden="true"`(装饰性,不读屏);输入框 `aria-label` 已存(`console.html:53`)。
 
