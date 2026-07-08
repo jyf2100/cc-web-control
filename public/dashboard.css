@@ -361,3 +361,36 @@ html, body {
 }
 .topbar-logout-btn:hover { color: var(--accent-2); border-color: var(--accent-2); }
 .topbar-logout-btn:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }   /* WCAG 2.4.7 */
+
+/* ===== session 生命周期管理:删除按钮 / 当前标记 / 确认态 / toast ===== */
+.session { position: relative; }
+.session__del {
+    position: absolute; top: 6px; right: 6px;
+    background: transparent; border: 0; cursor: pointer;
+    padding: 4px 6px; font-size: 14px; line-height: 1;
+    color: inherit; opacity: 0.45; border-radius: 4px;
+}
+.session__del:hover { opacity: 1; background: var(--errored, #e5484d); color: #fff; }
+.session__del:disabled { opacity: 0.22; cursor: not-allowed; }
+.session__del:disabled:hover { background: transparent; color: inherit; opacity: 0.22; }
+
+.session--current { border-left: 3px solid var(--accent, #6E56CF); }
+.session--current .s-name::after {
+    content: ' · 当前'; color: var(--accent, #6E56CF); font-size: 11px; font-weight: 400;
+}
+
+.session--confirming { outline: 2px solid var(--errored, #e5484d); outline-offset: -2px; }
+.s-confirm { display: inline-flex; gap: 6px; align-items: center; }
+.s-cancel, .s-confirm-del {
+    border: 0; border-radius: 4px; padding: 4px 8px; font-size: 12px; cursor: pointer;
+}
+.s-cancel { background: transparent; color: inherit; opacity: 0.7; }
+.s-confirm-del { background: var(--errored, #e5484d); color: #fff; }
+
+.toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.82); color: #fff;
+    padding: 8px 14px; border-radius: 6px; font-size: 13px;
+    opacity: 0; pointer-events: none; transition: opacity .18s; z-index: 50;
+}
+.toast--show { opacity: 1; }
