@@ -33,12 +33,12 @@
             var name = row.getAttribute('data-session');
             var act = actBtn.getAttribute('data-act');
             e.stopPropagation(); e.preventDefault();
-            if (act === 'del') {              // data-act="del" — 进入确认态
+            if (act === 'del') {
                 if (confirming.has(name) || actBtn.disabled) return;
                 confirming.add(name); rerender();
-            } else if (act === 'cancel') {    // data-act="cancel" — 取消确认
+            } else if (act === 'cancel') {
                 confirming.delete(name); rerender();
-            } else if (act === 'confirm') {   // data-act="confirm" — 真删
+            } else if (act === 'confirm') {
                 confirming.delete(name); deleteSession(name);
             }
             return;

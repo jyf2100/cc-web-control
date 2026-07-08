@@ -18,9 +18,10 @@ test('dashboard.js: render 透传 currentName + confirming 给 renderSessionList
 });
 
 test('dashboard.js: click 委托三分支 + stopPropagation(不触发导航)', () => {
-  assert.match(SRC, /data-act="del"/);
-  assert.match(SRC, /data-act="cancel"/);
-  assert.match(SRC, /data-act="confirm"/);
+  assert.match(SRC, /getAttribute\(['"]data-act['"]\)/);
+  assert.match(SRC, /===\s*['"]del['"]/);
+  assert.match(SRC, /===\s*['"]cancel['"]/);
+  assert.match(SRC, /===\s*['"]confirm['"]/);
   assert.match(SRC, /stopPropagation/);
 });
 
