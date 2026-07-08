@@ -80,9 +80,6 @@ test('.s-dot--idle 加内描边满足非文本 3:1(迁自 console_style)', () =>
   // 旧值 1px var(--border-2) 仅 ~1.6:1 不达标;此处锁新契约。
   assert.match(DASHBOARD_SECTION, /\.s-dot--idle\s*\{[^}]*box-shadow:\s*0 0 0 1\.5px var\(--fg-2\)/);
 });
-test('卡片网格 auto-fill minmax(迁自 console_style)', () => {
-  assert.match(DASHBOARD_SECTION, /grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(220px,\s*1fr\)\)/);
-});
 test('waiting 卡底用独立 --waiting-bg(迁自 console_style)', () => {
   assert.match(DASHBOARD_SECTION, /--waiting-bg:\s*rgba\(192,\s*133,\s*50,\s*0\.08\)/);
 });
@@ -263,4 +260,22 @@ test('T4: .card__off 离线标签样式(demo L86)', () => {
   const rule = css.match(/\.card__off\s*\{[^}]*\}/);
   assert.ok(rule);
   assert.match(rule[0], /var\(--offline\)/);
+});
+
+// ============================================================
+// Task 5:几何一致性(spec §4/§7,demo L64/L67/L75)
+// ============================================================
+test('T5: .board-grid 固定列宽 244px(demo L64)', () => {
+  assert.match(css, /\.board-grid\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill,\s*244px\)/);
+});
+test('T5: .board-grid 等高 grid-auto-rows:104px', () => {
+  assert.match(css, /\.board-grid\s*\{[^}]*grid-auto-rows:\s*104px/);
+});
+test('T5: .card-row > .card 用 flex:1 1 0%(等宽真根因)', () => {
+  assert.match(css, /\.card-row\s*>\s*\.card\s*\{[^}]*flex:\s*1 1 0%/);
+  assert.match(css, /\.card-row\s*>\s*\.card\s*\{[^}]*min-width:\s*0/);
+});
+test('T5: .card-row align-items:stretch + gap:8px(两级 stretch 传等高,demo L67)', () => {
+  assert.match(css, /\.card-row\s*\{[^}]*align-items:\s*stretch/);
+  assert.match(css, /\.card-row\s*\{[^}]*gap:\s*8px/);
 });
