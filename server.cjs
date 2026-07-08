@@ -19,6 +19,7 @@ const auth = require('./auth.cjs');
 const { buildClaudeLaunchCommand, shellEscapeForDoubleQuotes } = require('./claude_launch.cjs');
 const { getDashboardCache, buildDashboardPayload } = require('./dashboard_cache.cjs');
 const { cwdToSlug } = require('./dashboard_slug.cjs');
+const { resolveDefaultSessionForCwd } = require('./session_default.cjs');
 const { readBinding, deleteBinding, migrateStaleBindings } = require('./dashboard_binding.cjs');
 const { shouldContinue } = require('./claude_session.cjs');
 const crypto = require('node:crypto');
@@ -75,6 +76,8 @@ const CLAUDE_WRAPPER = path.join(__dirname, 'claude-wrapper.sh');
 const AUTH_TOKEN = CFG.authToken;
 const CLAUDE_CONTINUE = CFG.claudeContinue;
 const PROJECT_ROOTS = CFG.projectRoots;
+// 启动 cwd 命中某项目根 → 'claude-<项目名>'(与项目启动区 client.js:845 同名,避免双会话);否则回退 CFG.session。
+const RESOLVED_DEFAULT_SESSION = resolveDefaultSessionForCwd(process.cwd(), PROJECT_ROOTS, DEFAULT_SESSION);
 
 // 创建 Express 应用
 const app = express();
@@ -226,12 +229,13 @@ async function initAndAttachSession() {
     const cwd = process.cwd();
     console.log(`[Init] 当前工作目录: ${cwd}`);
 
-    const exists = await tmux.checkSession(DEFAULT_SESSION);
+    console.log(`[Init] 默认会话: ${RESOLVED_DEFAULT_SESSION}`);
+    const exists = await tmux.checkSession(RESOLVED_DEFAULT_SESSION);
 
     if (!exists) {
-      console.log(`[Init] 创建 tmux 会话: ${DEFAULT_SESSION}`);
+      console.log(`[Init] 创建 tmux 会话: ${RESOLVED_DEFAULT_SESSION}`);
       // 创建会话并启动 shell，在 shell 中切换到当前目录再启动 claude
-      await tmux.createSession(DEFAULT_SESSION);
+      await tmux.createSession(RESOLVED_DEFAULT_SESSION);
 
       const hasClaude = await isCommandAvailable('claude', ['--version']);
       if (!hasClaude) {
@@ -239,11 +243,11 @@ async function initAndAttachSession() {
         return true;
       }
 
-      await startClaudeInSession(DEFAULT_SESSION, cwd, { useClaudeContinue: true });
+      await startClaudeInSession(RESOLVED_DEFAULT_SESSION, cwd, { useClaudeContinue: true });
 
       console.log(`[Init] Claude Code 已在 ${cwd} 启动`);
     } else {
-      console.log(`[Init] 使用现有会话: ${DEFAULT_SESSION}`);
+      console.log(`[Init] 使用现有会话: ${RESOLVED_DEFAULT_SESSION}`);
     }
 
     // 等待一小段时间让 Web 服务启动
@@ -258,7 +262,7 @@ async function initAndAttachSession() {
     console.log('[Init] 正在附加到 tmux 会话...');
     console.log('[Init] 提示: 按 Ctrl+B 然后 D 可分离会话，Web 端仍可访问');
 
-    const tmuxAttach = spawn('tmux', ['attach-session', '-t', DEFAULT_SESSION], {
+    const tmuxAttach = spawn('tmux', ['attach-session', '-t', RESOLVED_DEFAULT_SESSION], {
       stdio: 'inherit'
     });
 
@@ -425,7 +429,7 @@ function startWebServer() {
   // API 路由
   app.get('/api/config', (req, res) => {
     res.json({
-      defaultSession: DEFAULT_SESSION,
+      defaultSession: RESOLVED_DEFAULT_SESSION,
       authEnabled: !!AUTH_TOKEN,
       projectRoots: PROJECT_ROOTS,
     });
@@ -610,7 +614,7 @@ function startWebServer() {
     });
 
     const url = new URL(req.url, `http://localhost:${PORT}`);
-    const sessionName = url.searchParams.get('session') || DEFAULT_SESSION;
+    const sessionName = url.searchParams.get('session') || RESOLVED_DEFAULT_SESSION;
     if (!isValidSessionName(sessionName)) {
       try {
         ws.close(1008, 'Invalid session name');
