@@ -79,7 +79,7 @@
 
 ### D. `server.cjs`(单机入口,**仅 DELETE 加 WS 活跃保护**)
 
-- `DELETE /api/sessions/:name` handler(server.cjs:547)**前置检查**:该 session 名若有**活跃 WS 连接** → 返回 `409 { error:'session_in_use' }`,不 kill。
+- `DELETE /api/sessions/:name` handler(server.cjs:547)**前置检查**:该 session 名若有**活跃 WS 连接** → 返回 `409 { success:false, error:'session_in_use' }`,不 kill。
 - **活跃 WS 来源**:WS upgrade(server.cjs:594)按 `?session=<name>` 绑定连接。需维护 `session 名 → 活跃连接计数` 的 Map(若 server.cjs 现无此结构则新增;**writing-plans 阶段核实 server.cjs WS 连接管理的现有数据结构**,优先复用)。
 - 其余(kill + 清绑定、保留历史、isValidSessionName 校验)**零改**。
 

@@ -16,6 +16,6 @@ test('server.cjs: DELETE handler 在 killSession 之前调 isSessionInUse → 40
   const killIdx = h.indexOf('killSession');
   assert.notEqual(checkIdx, -1, 'DELETE 未调用 isSessionInUse');
   assert.ok(killIdx > checkIdx, 'isSessionInUse 检查须在 killSession 之前');
-  assert.match(h, /status\(409\)/);
+  assert.match(h, /return\s+res\.status\(409\)/);
   assert.match(h, /session_in_use/);
 });
