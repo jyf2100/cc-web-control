@@ -14,6 +14,9 @@
     var titleEl = document.getElementById('title');
     var titleCountEl = document.getElementById('titleCount'); // 可选 header meta 锚点
     var prevSessions = [];
+    var CURRENT_KEY = 'cc_web_last_session';
+    var confirming = new Set();       // 确认态 session 名集合:作 renderSessionList 第三参,跨 2s 全量重建存活
+    var lastPayload = null;           // 缓存最近 payload,供 rerender() 即时重画(不等下次轮询)
 
     function goToSession(name) {
         if (!name) return;
@@ -23,6 +26,23 @@
         return e.target.closest ? e.target.closest('.session') : null; // §7.2:210 .session-row → .session
     }
     list.addEventListener('click', function (e) {
+        var actBtn = e.target.closest ? e.target.closest('[data-act]') : null;
+        if (actBtn) {
+            var row = actBtn.closest('.session');
+            if (!row) return;
+            var name = row.getAttribute('data-session');
+            var act = actBtn.getAttribute('data-act');
+            e.stopPropagation(); e.preventDefault();
+            if (act === 'del') {              // data-act="del" — 进入确认态
+                if (confirming.has(name) || actBtn.disabled) return;
+                confirming.add(name); rerender();
+            } else if (act === 'cancel') {    // data-act="cancel" — 取消确认
+                confirming.delete(name); rerender();
+            } else if (act === 'confirm') {   // data-act="confirm" — 真删
+                confirming.delete(name); deleteSession(name);
+            }
+            return;
+        }
         var row = rowFromEvent(e); if (!row) return;
         goToSession(row.getAttribute('data-session'));
     });
@@ -58,12 +78,48 @@
         }
         stateMsg.hidden = true;
         var changed = R.diffChangedStatus(prevSessions, sessions);
-        list.innerHTML = R.renderSessionList(sessions);
+        lastPayload = payload;
+        var currentName = localStorage.getItem(CURRENT_KEY) || '';
+        list.innerHTML = R.renderSessionList(sessions, currentName, confirming);
         var items = list.querySelectorAll('.session');
         Array.prototype.forEach.call(items, function (li) {
             if (changed.has(li.getAttribute('data-session'))) li.classList.add('session--flash');
         });
         prevSessions = sessions;
+    }
+    function rerender() {
+        if (!lastPayload) return;
+        var sessions = (lastPayload && lastPayload.sessions) || [];
+        var currentName = localStorage.getItem(CURRENT_KEY) || '';
+        list.innerHTML = R.renderSessionList(sessions, currentName, confirming);
+    }
+    function removeCard(name) {
+        var li = list.querySelector('li[data-session="' + name + '"]');
+        if (li && li.parentNode) li.parentNode.removeChild(li);
+    }
+    function toast(msg) {
+        var t = document.getElementById('toast');
+        if (!t) return;
+        t.textContent = msg;
+        t.classList.add('toast--show');
+        clearTimeout(t._timer);
+        t._timer = setTimeout(function () { t.classList.remove('toast--show'); }, 2200);
+    }
+    async function deleteSession(name) {
+        try {
+            var res = await fetch('/api/sessions/' + encodeURIComponent(name),
+                { method: 'DELETE', headers: { 'Accept': 'application/json' } });
+            if (res.status === 409) { toast('该会话正被控制台使用,无法删除'); rerender(); return; }
+            if (res.status === 404) { removeCard(name); toast('会话已不存在'); return; }
+            if (!res.ok) {
+                var body = null; try { body = await res.json(); } catch (e) {}
+                toast('删除失败:' + ((body && body.error) || res.status));
+                rerender(); return;
+            }
+            removeCard(name); toast('已删除 ' + name);
+        } catch (e) {
+            toast('删除失败:网络错误'); rerender();
+        }
     }
     async function poll() {
         try {
