@@ -115,18 +115,19 @@
     var hubPolling = false;
 
     function renderFleetSummary(machines) {
-        var s = BR.summarizeFleet(machines);
-        // NEW-H2:showBoardError 把 fleetSummary.hidden=true;恢复时(任意 renderBoard 路径均经此)
-        // 必须复位 hidden=false,否则摘要区在错误恢复后永久隐藏。
-        fleetSummary.hidden = false;
-        // :7685 多机 hub:永远机器维度(▶工作/⏸空闲/✕错误/在线 N/M)。singleMachine 会话维度分支
-        // 已废弃 —— 07-04 spec 错把 :7685 当单机的产物,见 gap-audit §1。
+        var msum = BR.summarizeFleet(machines);            // 机器维度 online/total
+        var cards = BR.flattenFleet(machines);             // 离线机 session.status → 'offline'
+        var c = BR.summarizeMachine(cards);                // 五通道会话计数(点和 = total)
+        fleetSummary.hidden = false;                        // 错误恢复复位(原逻辑保留)
+        var offlineMachines = msum.total - msum.online;
+        var machineText = msum.online + ' 机在线'
+            + (offlineMachines > 0 ? ' · ' + offlineMachines + ' 机离线' : '')
+            + ' · ' + c.total + ' 会话';
+        // demo L114–L121:机器文案在前,色谱圆点在后
         fleetSummary.innerHTML =
-            '<span><span class="s-icon" aria-hidden="true">▶</span> ' + s.working + '</span>' +
-            '<span><span class="s-icon" aria-hidden="true">⏸</span> ' + s.idle + '</span>' +
-            '<span><span class="s-icon" aria-hidden="true">✕</span> ' + s.errored + '</span>' +
-            '<span>在线 ' + s.online + '/' + s.total + '</span>';
-        var t = '(' + s.online + ') CC 看板 · 多机';
+            '<span class="fleet-machine-text">' + machineText + '</span>' +
+            '<span class="fleet-counts">' + BR.renderStatusCounts(c) + '</span>';
+        var t = '(' + msum.online + ') CC 看板 · 多机';
         document.title = t;
         var titleEl2 = document.getElementById('title'); if (titleEl2) titleEl2.textContent = t;
     }
@@ -136,7 +137,7 @@
         // 整段 innerHTML 解析为节点返回,不再手设 li.className / dataset.key(buildCardRow 已注入)。
         var wrap = document.createElement('ul');
         wrap.innerHTML = BR.buildCardRow(card.machine, card.session, {
-            lastTs: card.lastTs, now: Date.now()
+            mode: 'hub', lastTs: card.lastTs, now: Date.now()
         });
         return wrap.firstElementChild;
     }
@@ -295,35 +296,32 @@
             renderFleetSummary(machines);
             return;
         }
-        // 展开状态继承:全量重建前记录每个 machine-group 与 stale 区的 open,重建后恢复(免轮询重折叠)
-        var prevOpen = {}; // mid → true / '__stale__' → true
-        var prevDetails = boardBody.querySelectorAll('details[data-mid]');
-        Array.prototype.forEach.call(prevDetails, function (d) { if (d.open) prevOpen[d.dataset.mid] = true; });
         // 全量重建:每次轮询无条件清空 boardBody.innerHTML。
         boardBody.innerHTML = '';
-        // 按机分节:每机 <li class="machine-group"><details><summary>{name} · {n}</summary><ul.board-grid>…
+        // 按机分节:每机 <li class="machine-group"><div.machine-group__title>…</div><ul.board-grid>…
+        // spec §3 / demo L130–L140:组标题不折叠(去 details/summary/caret),机器名现为唯一锚点。
         var groups = BR.groupByMachine(partition.active);
         for (var gi = 0; gi < groups.length; gi++) {
             var g = groups[gi];
             var online = g.machine.online !== false;
             var groupLi = document.createElement('li');
             groupLi.className = 'machine-group' + (online ? '' : ' machine-group--offline');
-            var details = document.createElement('details');
-            details.dataset.mid = g.machine.id;
-            // 在线机默认展开、离线机默认折叠;用户 toggle 过则按记忆(prevOpen)恢复
-            details.open = (g.machine.id in prevOpen) ? !!prevOpen[g.machine.id] : online;
-            var sum = document.createElement('summary');
-            sum.innerHTML = '<span class="machine-group__caret">' + (details.open ? '▼' : '▸') + '</span>' +
-                '<span class="machine-group__name">' + (g.machine.name || g.machine.id) + (online ? '' : ' · offline') + '</span>' +
-                '<span class="machine-group__count">' + g.cards.length + '</span>';
+            var title = document.createElement('div');
+            title.className = 'machine-group__title';
+            var counts = BR.summarizeMachine(g.cards);
+            title.innerHTML =
+                '<span class="machine-group__name">' + (g.machine.name || g.machine.id) + '</span>' +
+                '<span class="machine-group__status machine-group__status--' + (online ? 'online' : 'offline') + '">' +
+                (online ? '· 在线' : '· 离线') + '</span>' +
+                '<span class="machine-group__counts">' + BR.renderStatusCounts(counts) + '</span>' +
+                '<span class="machine-group__total">' + g.cards.length + ' 会话</span>';
             var grid = document.createElement('ul');
             grid.className = 'board-grid';
             for (var ci = 0; ci < g.cards.length; ci++) {
                 grid.appendChild(buildCardLi(g.cards[ci]));
             }
-            details.appendChild(sum);
-            details.appendChild(grid);
-            groupLi.appendChild(details);
+            groupLi.appendChild(title);
+            groupLi.appendChild(grid);
             boardBody.appendChild(groupLi);
         }
         if (partition.stale.length) {
@@ -331,7 +329,7 @@
             groupLi2.className = 'board-stale-group';
             var details2 = document.createElement('details');
             details2.dataset.mid = '__stale__';
-            if (prevOpen['__stale__']) details2.open = true;
+            details2.open = false;   // 陈旧区默认折叠(spec §5:折叠到底部)
             var sum2 = document.createElement('summary');
             sum2.textContent = partition.stale.length + ' 个陈旧会话(>24h)';
             var grid2 = document.createElement('ul');

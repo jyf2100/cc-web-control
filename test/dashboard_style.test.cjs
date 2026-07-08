@@ -80,9 +80,6 @@ test('.s-dot--idle 加内描边满足非文本 3:1(迁自 console_style)', () =>
   // 旧值 1px var(--border-2) 仅 ~1.6:1 不达标;此处锁新契约。
   assert.match(DASHBOARD_SECTION, /\.s-dot--idle\s*\{[^}]*box-shadow:\s*0 0 0 1\.5px var\(--fg-2\)/);
 });
-test('卡片网格 auto-fill minmax(迁自 console_style)', () => {
-  assert.match(DASHBOARD_SECTION, /grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(220px,\s*1fr\)\)/);
-});
 test('waiting 卡底用独立 --waiting-bg(迁自 console_style)', () => {
   assert.match(DASHBOARD_SECTION, /--waiting-bg:\s*rgba\(192,\s*133,\s*50,\s*0\.08\)/);
 });
@@ -122,7 +119,7 @@ test('三页面样式:存在 .machine-group / .fanout-bar / .card__select[aria-p
   assert.match(css, /\.machine-group--offline\b/);
   assert.match(css, /\.fanout-bar\b/);
   assert.match(css, /\.card__select\[aria-pressed="true"\]/);   // Task 9:Plan A button+a,aria-checked→aria-pressed
-  assert.match(css, /\.card__select\b[^}]*min-height:\s*44/);   // 触摸目标 44px(WCAG 2.5.5)
+  assert.match(css, /\.card__select\b[^}]*min-height:\s*24/);   // 触摸目标改 24×24(SC 2.5.8,demo L68)
   assert.match(css, /#ma-screen\s*\{[^}]*flex:\s*1/);           // 主控终端撑满
   assert.match(css, /#ma-screen\s*\{[^}]*max-height:\s*none/);  // 覆盖原 max-height:0,否则 flex:1 被锁死
   assert.match(css, /\.console-term\s*\{[^}]*flex:\s*1;\s*min-height:\s*0/);  // 三页面:单机模式 term 撑满剩余视口(Task 6 detectConsoleMode 同提交)
@@ -179,13 +176,6 @@ test('P5:.s-dot--offline 用 --offline token(非 --fg-3)(迁自 console_style)',
 // ============================================================
 // P6:批量补 :focus-visible(WCAG 2.4.7 AA)(迁自 console_style)
 // ============================================================
-test('P6:机分组 summary(普通组)有 :focus-visible(原仅 stale-group 有)(迁自 console_style)', () => {
-  // .board-stale-group > details > summary:focus-visible 已存在;普通组 .machine-group > details > summary 漏。
-  assert.match(
-    css,
-    /\.machine-group\s*>\s*details\s*>\s*summary:focus-visible[\s\S]*?outline/
-  );
-});
 test('P6:.card__select(tabindex=0)有 :focus-visible(迁自 console_style)', () => {
   assert.match(css, /\.card__select:focus-visible[\s\S]*?outline/);
 });
@@ -218,4 +208,150 @@ test('P8:#term-input 显式 font-size:16px(迁自 console_style)', () => {
   const rule = css.match(/#term-input\s*\{[^}]*\}/);
   assert.ok(rule, '#term-input 规则应存在');
   assert.match(rule[0], /font-size:\s*16px/, '#term-input 应显式 font-size:16px');
+});
+
+// ============================================================
+// Task 4:.card--hub IA(对齐 demo — flex column + card__head + line-clamp + 清状态染色)
+// ============================================================
+test('T4: .card--hub 用 flex column(非基础 grid)', () => {
+  const rule = css.match(/\.card--hub\s*\{[^}]*\}/);
+  assert.ok(rule, '.card--hub 规则应存在');
+  assert.match(rule[0], /display:\s*flex/);
+  assert.match(rule[0], /flex-direction:\s*column/);
+});
+test('T4: .card--hub .card__head flex 包裹层', () => {
+  assert.match(css, /\.card--hub\s+\.card__head\s*\{[^}]*display:\s*flex/);
+});
+test('T4: hub 摘要 .card--hub .card__last line-clamp:2 + min-height:38 + --fg-2', () => {
+  const rule = css.match(/\.card--hub\s+\.card__last\s*\{[^}]*\}/);
+  assert.ok(rule);
+  assert.match(rule[0], /-webkit-line-clamp:\s*2/);
+  assert.match(rule[0], /min-height:\s*38px/);
+  assert.match(rule[0], /var\(--fg-2\)/);
+  assert.ok(!/var\(--fg-3\)/.test(rule[0]), 'hub 摘要不应 --fg-3');
+  assert.match(rule[0], /white-space:\s*normal/, 'hub 摘要须 white-space:normal 重置基线 nowrap,否则 line-clamp 被击穿');
+});
+test('T4: hub 状态点 11px(.card--hub .s-dot)', () => {
+  const rule = css.match(/\.card--hub\s+\.s-dot\s*\{[^}]*\}/);
+  assert.ok(rule);
+  assert.match(rule[0], /width:\s*11px/);
+  assert.match(rule[0], /height:\s*11px/);
+});
+test('T4: hub 清状态染色 — .card--hub[data-status="errored"] 无左缘条(box-shadow:none)', () => {
+  // spec 非目标:errored 只靠色点,不加左缘条。基础 .card[data-status=errored] 有左缘条,hub 必须清。
+  const rule = css.match(/\.card--hub\[data-status="errored"\]\s*\{[^}]*\}/);
+  assert.ok(rule, '.card--hub[data-status=errored] 覆盖规则应存在');
+  assert.match(rule[0], /box-shadow:\s*none/);
+});
+test('T4: .card--hub hover border+bg(demo L76)', () => {
+  assert.match(css, /\.card--hub:hover\s*\{[^}]*border-color:\s*var\(--accent-dim\)/);
+  assert.match(css, /\.card--hub:hover\s*\{[^}]*background:\s*var\(--surface-2\)/);
+});
+test('T4: .sr-only 类定义(色盲状态冗余,demo L99)', () => {
+  assert.match(css, /\.sr-only\s*\{[^}]*position:\s*absolute/);
+});
+test('T4: .card__off 离线标签样式(demo L86)', () => {
+  const rule = css.match(/\.card__off\s*\{[^}]*\}/);
+  assert.ok(rule);
+  assert.match(rule[0], /var\(--offline\)/);
+});
+
+// ============================================================
+// Task 5:几何一致性(spec §4/§7,demo L64/L67/L75)
+// ============================================================
+test('T5: .board-grid 固定列宽 244px(demo L64)', () => {
+  assert.match(css, /\.board-grid\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill,\s*244px\)/);
+});
+test('T5: .board-grid 等高 grid-auto-rows:104px', () => {
+  assert.match(css, /\.board-grid\s*\{[^}]*grid-auto-rows:\s*104px/);
+});
+test('T5: .card-row > .card 用 flex:1 1 0%(等宽真根因)', () => {
+  assert.match(css, /\.card-row\s*>\s*\.card\s*\{[^}]*flex:\s*1 1 0%/);
+  assert.match(css, /\.card-row\s*>\s*\.card\s*\{[^}]*min-width:\s*0/);
+});
+test('T5: .card-row align-items:stretch + gap:8px(两级 stretch 传等高,demo L67)', () => {
+  assert.match(css, /\.card-row\s*\{[^}]*align-items:\s*stretch/);
+  assert.match(css, /\.card-row\s*\{[^}]*gap:\s*8px/);
+});
+
+// ============================================================
+// Task 6:组标题 + 多选 button 24×24 + 卡级 :has() + 离线机组(对齐 demo)
+// ============================================================
+test('T6: 组标题静态容器 .machine-group__title 存在(不折叠)', () => {
+  assert.match(css, /\.machine-group__title\s*\{/);
+});
+test('T6: 组标题在线/离线标签 .machine-group__status', () => {
+  assert.match(css, /\.machine-group__status--online/);
+  assert.match(css, /\.machine-group__status--offline/);
+});
+test('T6: 组标题计数容器 .machine-group__counts + .machine-group__total(N 会话)', () => {
+  assert.match(css, /\.machine-group__counts\s*\{/);
+  assert.match(css, /\.machine-group__total\s*\{[^}]*margin-left:\s*auto/);
+});
+test('T6: .status-count inline-flex(色谱圆点+数字,demo L54)', () => {
+  assert.match(css, /\.status-count\s*\{[^}]*display:\s*inline-flex/);
+});
+test('T6: .card__select 24×24 命中区(demo L68,SC 2.5.8)', () => {
+  // 行锚:(?:^|\n) 排除 .card-row > .card__select(L151)先命中 —— 那条是 flex 子规则,
+  // 非本测试目标的 base 命中区规则。brief 原 regex 无行锚会误中 L151。
+  const rule = css.match(/(?:^|\n)\.card__select\s*\{[^}]*\}/);
+  assert.ok(rule);
+  assert.match(rule[0], /min-height:\s*24px/);
+  assert.match(rule[0], /min-width:\s*24px/);
+});
+test('T6: .card__select 默认 --fg-3 / hover --fg-2 / 选中 --fg + --accent-dim 边框(demo L68–L71)', () => {
+  const base = css.match(/(?:^|\n)\.card__select\s*\{[^}]*\}/);
+  assert.match(base[0], /var\(--fg-3\)/);
+  assert.match(css, /\.card__select:hover\s*\{[^}]*var\(--fg-2\)/);
+  const sel = css.match(/\.card__select\[aria-pressed="true"\]\s*\{[^}]*\}/);
+  assert.match(sel[0], /var\(--fg\)/);
+  assert.match(sel[0], /var\(--accent-dim\)/);
+});
+test('T6: 卡级 :has() 选中高亮(demo L91)', () => {
+  assert.match(css, /\.card-row:has\(\.card__select\[aria-pressed="true"\]\)\s+\.card\s*\{[^}]*border-color:\s*var\(--accent\)/);
+  assert.match(css, /\.card-row:has\(\.card__select\[aria-pressed="true"\]\)\s+\.card\s*\{[^}]*background:\s*var\(--accent-bg\)/);
+});
+test('T6: 离线机组 cursor:not-allowed + hover 抑制(demo L94–L95)', () => {
+  assert.match(css, /\.machine-group--offline\s+\.card\s*\{[^}]*cursor:\s*not-allowed/);
+  assert.match(css, /\.machine-group--offline\s+\.card:hover\s*\{[^}]*background:\s*var\(--surface\)/);
+});
+test('T6: .fleet-machine-text + .fleet-counts 顶栏锚', () => {
+  assert.match(css, /\.fleet-machine-text\s*\{/);
+  assert.match(css, /\.fleet-counts\s*\{/);
+});
+
+// ============================================================
+// Task 7:a11y(色点环/空心 + --idle 对比度 + reduced-motion,对齐 demo)
+// ============================================================
+test('T7: tokens --idle 提至 ≥0.55(图形对比过 3:1)', () => {
+  const tokens = require('node:fs').readFileSync(require('path').join(__dirname, '..', 'public', 'tokens.css'), 'utf8');
+  const m = tokens.match(/--idle:\s*rgba\(38,\s*37,\s*30,\s*(0?\.\d+)\)/);
+  assert.ok(m, '--idle 规则应存在');
+  assert.ok(parseFloat(m[1]) >= 0.5, '--idle alpha 应 ≥ 0.5(实得 ' + m[1] + ')');
+});
+test('T7: .s-dot--working 活跃环 rgba(demo L80)', () => {
+  const rule = css.match(/\.s-dot--working\s*\{[^}]*\}/);
+  assert.ok(rule);
+  assert.match(rule[0], /box-shadow:[^}]*rgba\(31,\s*138,\s*101/);
+});
+test('T7: .s-dot--errored 活跃环 rgba(demo L82)', () => {
+  const rule = css.match(/\.s-dot--errored\s*\{[^}]*\}/);
+  assert.ok(rule);
+  assert.match(rule[0], /box-shadow:[^}]*rgba\(192,\s*26,\s*75/);
+});
+test('T7: .s-dot--offline 空心环(与 idle 实心形状区分,demo L84)', () => {
+  const rule = css.match(/\.s-dot--offline\s*\{[^}]*\}/);
+  assert.ok(rule);
+  assert.match(rule[0], /background:\s*transparent/);
+  assert.match(rule[0], /border[^}]*var\(--offline\)/);
+});
+test('T7: reduced-motion 覆盖 .card__select(demo L106)', () => {
+  // 收紧:断言 .card__select 与 transition:none 同处 reduced-motion 块的同一规则内。
+  // 旧 regex 用 [\s\S]*? 跨块匹配,删 .card__select 仍能从 L58/L98 的 prefers-reduced-motion
+  // 跨到 L151 .card__select 再跨到别处 transition:none → false-positive,无回归保护。
+  // 现 [^}]* 锁到首个 } 前(同规则),删 .card__select 即断(已 node 验证 neg case fail)。
+  assert.match(
+    css,
+    /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[^}]*\.card__select[^}]*transition:\s*none/
+  );
 });

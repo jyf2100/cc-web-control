@@ -142,15 +142,15 @@ html, body {
 .ma-btn { padding:2px 10px; min-height:44px; }
 
 .console-board { flex:1; min-height:0; overflow:auto; padding:12px 16px; }
-.board-grid { list-style:none; margin:0; padding:0; display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:10px; }
+.board-grid { list-style:none; margin:0; padding:0; display:grid; grid-template-columns:repeat(auto-fill, 244px); grid-auto-rows:104px; gap:10px; align-items:stretch; }
 .board-body { list-style:none; margin:0; padding:0; } /* #board-body 分组容器:非 grid,让 machine-group 撑满整行(组内 .board-grid 才是卡片网格;若外层 grid 会把分组压成单格 → 卡片一列)*/
 .board-empty { grid-column:1/-1; padding:32px; text-align:center; color:var(--fg-2); }
 /* Plan A:<li.card-row> 同级 <button.card__select aria-pressed> + <a.card>;
    card-row flex 让 button+a 同行,grid 减为 4 列(select 移出)。 */
-.card-row { list-style:none; display:flex; align-items:stretch; }
+.card-row { list-style:none; display:flex; align-items:stretch; gap:8px; }
 .card-row > .card__select { flex:0 0 auto; }
-.card-row > .card { flex:1 1 auto; min-width:0; }
-.card { position:relative; display:grid; grid-template-columns:auto auto 1fr auto; grid-template-rows:auto auto auto; align-items:center; gap:2px 8px; width:100%; min-height:72px; padding:8px 10px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r); cursor:pointer; text-align:left; font:inherit; color:var(--fg); box-shadow:inset 3px 0 0 transparent; transition:transform .15s ease, border-color .15s ease, box-shadow .15s ease; }
+.card-row > .card { flex:1 1 0%; min-width:0; }
+.card { position:relative; display:grid; grid-template-columns:auto auto 1fr auto; grid-template-rows:auto auto auto; align-items:stretch; gap:2px 8px; width:100%; min-height:72px; padding:8px 10px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r); cursor:pointer; text-align:left; font:inherit; color:var(--fg); box-shadow:inset 3px 0 0 transparent; transition:transform .15s ease, border-color .15s ease, box-shadow .15s ease; }
 @media (hover:hover){ .card:hover { transform:translateY(-1px); } }
 .card:focus-visible { outline:2px solid var(--accent-2); outline-offset:2px; }
 .card.active { box-shadow:inset 3px 0 0 var(--accent-2); }
@@ -167,6 +167,34 @@ html, body {
 .card__time { grid-column:4; grid-row:1; color:var(--fg-2); font-size:.7em; }
 .card__session { grid-column:3; grid-row:2; color:var(--fg-2); font-size:.75em; }
 .card__last { grid-column:1 / -1; grid-row:3; color:var(--fg-2); font-size:.75em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* === hub 单卡 IA(摘要为中心,对齐 demo /tmp/dashboard-redesign-demo.html L75–L88)===
+   board_render hub 模式输出 .card--hub(无 s-icon,card__head 包裹层,会话名主锚)。
+   覆盖基础 .card 的 grid 为 flex column;清除状态染色/左缘条(spec:只靠色点)。
+   几何(等高/等宽/列宽)见 Task 5;色点环/空心见 Task 7。*/
+.card--hub {
+  display: flex; flex-direction: column; gap: 7px; padding: 12px 14px;
+  background: var(--surface); box-shadow: none; border-style: solid;
+}
+.card--hub .card__head { display: flex; align-items: center; gap: 8px; }
+.card--hub .s-dot { width: 11px; height: 11px; flex-shrink: 0; }
+.card--hub .card__name { font-weight: 600; font-size: 13.5px; color: var(--fg); }
+.card--hub .card__off { font-family: var(--mono); font-size: 10px; color: var(--offline); margin-left: 6px; }
+.card--hub .card__time { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--fg-2); flex-shrink: 0; }
+.card--hub .card__last {
+  white-space: normal; color: var(--fg-2); font-size: 13px; line-height: 1.45; min-height: 38px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+/* hub 清状态染色:waiting 无底色 / errored 无左缘条 / unknown 实线(spec 非目标:只靠色点)*/
+.card--hub[data-status="waiting"] { background: var(--surface); }
+.card--hub[data-status="errored"] { box-shadow: none; }
+.card--hub[data-status="unknown"] { border-style: solid; }
+.card--hub:hover { border-color: var(--accent-dim); background: var(--surface-2); }
+/* sr-only:色盲/低视力状态冗余(状态不唯一靠色,demo L99) */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
 
 /* card--single 已移除(:7685 多机 hub 永远机器维度,singleMachine 废弃,见 gap-audit §1) */
 
@@ -189,13 +217,15 @@ html, body {
   outline: 2px solid var(--accent-2); outline-offset: 2px;   /* WCAG 2.4.7,与 .tab/.card 一致 */
 }
 .board-stale-group > details[open] > summary { margin-bottom: 8px; }
-.board-stale-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; list-style: none; padding: 0; margin: 0; }
+.board-stale-grid { display: grid; grid-template-columns: repeat(auto-fill, 244px); grid-auto-rows: 104px; gap: 10px; list-style: none; padding: 0; margin: 0; }
 
-/* 状态点:几何 + working/idle/errored/waiting/unknown 色统一在 tokens.css;此处仅 console 局部增强(idle 描边达 WCAG 3:1)+ 补 offline */
-.s-dot--idle { box-shadow:0 0 0 1.5px var(--fg-2); }
-.s-dot--offline { background:var(--offline); }
-.s-icon[aria-hidden="true"] { color:var(--fg-2); }
-.s-icon { font-variant-emoji:text; }
+/* 状态点增强(demo L80–L84):working/errored 同色环(活跃更跳但克制);idle 实心;offline 空心环(形状区分,不靠 alpha)*/
+.s-dot--working { box-shadow: 0 0 0 3px rgba(31,138,101,0.18); }
+.s-dot--errored { box-shadow: 0 0 0 3px rgba(192,26,75,0.20); }
+.s-dot--idle { box-shadow: 0 0 0 1.5px var(--fg-2); }   /* idle 描边达非文本 3:1(保留原 P5 修正)*/
+.s-dot--offline { background: transparent; border: 1.5px solid var(--offline); box-sizing: border-box; }
+.s-icon[aria-hidden="true"] { color: var(--fg-2); }
+.s-icon { font-variant-emoji: text; }
 
 .console-term { display:flex; flex-direction:column; border-top:1px solid var(--border); flex:1; min-height:0; }
 .term-header { display:flex; align-items:center; gap:6px; padding:4px 16px; border-bottom:1px solid var(--border); background:var(--surface-2); }
@@ -237,32 +267,58 @@ html, body {
 }
 @media (hover: none) { .card:active { background:var(--surface-2); } }
 @media (prefers-reduced-motion: reduce) {
-  .card, #ma-screen { transition:none; }
-  .card:hover { transform:none; }
+  .card, .card__select, #ma-screen { transition: none; }
+  .card:hover { transform: none; }
 }
 
-/* === 三页面:看板按机分节 === */
-.machine-group{margin-bottom:14px}
-.machine-group > details > summary,
-.machine-group__title{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;
-  font-size:.8em;color:var(--fg-2);padding:6px 4px;min-height:44px}
-.machine-group > details > summary::-webkit-details-marker{display:none}
-.machine-group > details > summary:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px}   /* P6:WCAG 2.4.7,普通组(原仅 stale-group 有) */
-.machine-group__caret{display:inline-block;width:1em;color:var(--fg-3);text-align:center}
-.machine-group__name{font-weight:600;color:var(--fg)}
-.machine-group__count{font-family:var(--mono);font-size:.85em;background:var(--surface-2);
-  padding:1px 8px;border-radius:var(--r-pill);color:var(--fg-2)}
-/* P5:离线机名 + caret 原 --fg-3(~2:1)不达 WCAG AA 4.5:1;改 --fg-2(~5.4:1)。font-weight:400 保留弱化语义 */
-.machine-group--offline .machine-group__name{color:var(--fg-2);font-weight:400}
-.machine-group--offline .machine-group__caret{color:var(--fg-2)}
-.machine-group--offline .machine-group__count{background:var(--surface-3)}
-.machine-group .board-grid{margin-top:4px}
+/* === 三页面:看板按机分节(spec §3 / demo L46–L61 — 组标题增强,不折叠)=== */
+.machine-group { margin-bottom: 26px; }
+.machine-group__title {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  padding: 6px 2px 10px; border-bottom: 1px solid var(--border); margin-bottom: 14px;
+}
+.machine-group__name { font-weight: 600; font-size: 14px; color: var(--fg); }
+.machine-group__status { font-family: var(--mono); font-size: 11px; }
+.machine-group__status--online { color: var(--working); }
+.machine-group__status--offline { color: var(--offline); }
+.machine-group__counts { display: inline-flex; align-items: center; gap: 11px; margin-left: 4px; }
+.machine-group__total { margin-left: auto; font-size: 12px; color: var(--fg-2); font-family: var(--mono); }
+/* 状态计数:色谱圆点 + 数字(无 emoji 无 ×,demo L54)*/
+.status-count { display: inline-flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 11px; color: var(--fg-2); }
+.status-count .s-dot { width: 7px; height: 7px; }
+.status-count .s-dot--offline { border-width: 1.2px; }   /* 8→7px 小点用细边 */
+/* P5:离线机组弱化(机名 --fg-2 已达 AA) */
+.machine-group--offline .machine-group__name { color: var(--fg-2); font-weight: 400; }
+.machine-group .board-grid { margin-top: 4px; }
 
-/* 卡片多选交互态(选中由 JS 加 card--selected + .card__select aria-pressed=true) */
-.card__select{cursor:pointer;min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
-.card__select:hover{background:var(--accent-bg);border-radius:var(--r-xs)}
-.card__select[aria-pressed="true"]{color:var(--accent-2)}
-.card__select:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px}   /* P6:WCAG 2.4.7,原生 button 键盘可达 */
+/* 卡片多选交互态(demo L68–L72 — 24×24 命中区,默认 --fg-3,hover --fg-2,选中 --fg + --accent-dim 边框)。
+   选中由 JS 加 aria-pressed=true;卡级 :has() 高亮防漏看(demo L91)。*/
+.card__select {
+  border: 1px solid transparent; background: transparent; color: var(--fg-3);
+  cursor: pointer; font-size: 13px; line-height: 1; padding: 0 5px; border-radius: var(--r-sm);
+  align-self: flex-start; margin-top: 10px; min-height: 24px; min-width: 24px;
+  transition: color .12s ease, background .12s ease, border-color .12s ease;
+}
+.card-row:hover .card__select { color: var(--fg-2); }
+.card__select:hover { color: var(--fg-2); background: var(--accent-bg); }
+.card__select[aria-pressed="true"] { color: var(--fg); background: var(--accent-bg); border-color: var(--accent-dim); }
+.card__select:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+/* 卡级选中高亮(demo L91 — 只写小按钮会被漏看,曾误判卡片消失)*/
+.card-row:has(.card__select[aria-pressed="true"]) .card { border-color: var(--accent); background: var(--accent-bg); }
+/* 离线机组弱化:抑制可点击感,hover 压回默认(demo L94–L96)*/
+.machine-group--offline .card { cursor: not-allowed; }
+.machine-group--offline .card:hover { border-color: var(--border); background: var(--surface); }
+.machine-group--offline .card__last { color: var(--fg-2); }
+/* T4 级联补强:hub 卡不染色 —— JS 仍给选中卡加 .card--selected(见 dashboard.js reapplySelected/click 委托),
+   基础规则 .card.card--selected[data-status="errored"](0,3,0)会重应用 errored 左缘条,盖过 T4 的
+   .card--hub[data-status="errored"]{box-shadow:none}(0,2,0)。此处等特异性(0,3,0)+ 源序在后,保 binding 不破。*/
+.card--hub.card--selected[data-status="errored"] { box-shadow: none; }
+/* 顶栏 fleet 计数 + 机器文案锚(demo L28–L32)。.fleet-summary 基础几何(font-size:.95em /
+   display:flex / gap:10px / color:--fg-2)已在 console 段定义,且被测试锁定(font-size:\.9 正则匹配 .95em)。
+   此处**不重定义** .fleet-summary —— 只补子元素锚,避免破锁。*/
+.fleet-machine-text { color: var(--fg-2); font-family: var(--mono); }
+.fleet-counts { display: inline-flex; align-items: center; gap: 12px; }
+.fleet-counts .status-count .s-dot { width: 8px; height: 8px; }
 
 /* === 三页面:看板扇出 bar(shell 内 flex 子元素,非 fixed)=== */
 .fanout-bar{flex-shrink:0;display:flex;align-items:center;gap:10px;padding:10px 16px;

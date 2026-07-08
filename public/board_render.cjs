@@ -13,13 +13,13 @@
   'use strict';
 
   const STATUS_META = {
-    working: { dot: 's-dot--working', icon: '▶', label: 'working' },
-    idle:    { dot: 's-dot--idle',    icon: '⏸', label: 'idle' },
-    errored: { dot: 's-dot--errored', icon: '✕', label: 'errored' },
-    waiting: { dot: 's-dot--waiting', icon: '⏳', label: 'waiting' },
-    offline: { dot: 's-dot--offline', icon: '⌽', label: 'offline' },
+    working: { dot: 's-dot--working', icon: '▶', label: 'working', cn: '运行中' },
+    idle:    { dot: 's-dot--idle',    icon: '⏸', label: 'idle',    cn: '空闲' },
+    errored: { dot: 's-dot--errored', icon: '✕', label: 'errored', cn: '出错' },
+    waiting: { dot: 's-dot--waiting', icon: '⏳', label: 'waiting', cn: '等待中' },
+    offline: { dot: 's-dot--offline', icon: '⌽', label: 'offline', cn: '离线' },
   };
-  const DEFAULT_META = { dot: 's-dot--unknown', icon: '?', label: 'unknown' };
+  const DEFAULT_META = { dot: 's-dot--unknown', icon: '?', label: 'unknown', cn: '未知' };
 
   function statusMeta(status) { return STATUS_META[status] || DEFAULT_META; }
 
@@ -46,26 +46,21 @@
   }
 
   // 看板卡片内层:click-to-navigate 的 <a>(跳 hub /jump?m=&s=,新标签打开目标单机控制台)。
-  // Plan A(2026-07-07 spec §6.2):a 只含展示 spans(s-dot/s-icon/card__name/card__session/card__last/card__time),
-  // 不再嵌 .card__select(改由 buildCardRow 在 a 之前放同级 <button>),不再带 data-machine/session/key
-  // (上移到 <li>,供 dashboard.js 事件委托读取);data-status 留在 a(供 CSS 按状态上色)。
+  // opts.mode:'hub'(摘要为中心 IA,对齐 demo /tmp/dashboard-redesign-demo.html — card__head 包裹层,
+  //   会话名主锚,无 s-icon,摘要 div 2 行 line-clamp,sr-only 状态冗余,离线补 card__off + aria-disabled
+  //   + "Nh 前在线" + 占位摘要)
+  //   |'single'(默认,旧行为 — 机器名主锚 + 会话名副行 + s-icon,向后兼容)。board_render 仅 hub 调用,
+  //   single 防御性保留。data-status 留 a(供 CSS 按状态上色)。
   // aria-label 用 机器名/会话名/statusLabel/「在新标签打开控制台」,不含 lastLine(避免 2s 轮询刷新干扰读屏)。
   function buildCardInner(machine, session, opts) {
     const m = machine || {};
     const s = session || {};
     const o = opts || {};
+    const mode = o.mode === 'hub' ? 'hub' : 'single';
     const meta = statusMeta(s.status);
     const classes = ['card'];
+    if (mode === 'hub') classes.push('card--hub');
     if (o.active) classes.push('active');
-    const name = escapeHtml(m.name || m.id);
-    const sess = escapeHtml(s.name);
-    // :7685 多机 hub:永远机器名主标题 + 会话名副行(singleMachine 分支已废弃 —— 它是
-    // 07-04 spec 错把 :7685 当单机的产物,见 docs/superpowers/specs/2026-07-04-7685-hub-gap-audit.md §1)。
-    const primaryName = name;
-    const secondary = sess;
-    const lastRaw = s.lastLine || (m.online === false ? '(离线)' : '');
-    const last = escapeHtml(TC.cleanSummary ? TC.cleanSummary(lastRaw, 60) : lastRaw);
-    const time = escapeHtml(relativeTime(o.lastTs, o.now));
     // href:query 值先 encodeURIComponent(< → %3C,& → %26 防参数边界混淆),
     // 再整体 escapeHtml 放入属性(& 分隔符 → &amp;,防 " breakout)。
     // 浏览器解析:HTML 解码(&amp;→&)→ URL 解码(%3C→<),最终 m/s 参数值还原。
@@ -75,11 +70,53 @@
     // aria-label 不含 lastLine(2s 轮询刷新会打断读屏);显式告知「在新标签打开控制台」。
     const label = `${m.name || m.id} / ${s.name}, ${meta.label}, 在新标签打开控制台`;
     const st = escapeHtml(String(s.status || 'unknown'));
+
+    if (mode === 'hub') {
+      const name = escapeHtml(s.name || m.name || m.id);
+      const offline = m.online === false;
+      let lastText;
+      if (offline) {
+        const prev = s.lastLine
+          ? '上次摘要:' + (TC.cleanSummary ? TC.cleanSummary(s.lastLine, 60) : s.lastLine)
+          : '';
+        lastText = '主机离线,暂无实时状态。' + prev;
+      } else {
+        const raw = s.lastLine || '';
+        lastText = TC.cleanSummary ? TC.cleanSummary(raw, 60) : raw;
+      }
+      const last = escapeHtml(lastText);
+      // 离线时间:有 lastTs → relativeTime + "在线"(如 "2h 前在线");无 lastTs → "长期离线"
+      const timeRaw = offline
+        ? (o.lastTs ? relativeTime(o.lastTs, o.now) + '在线' : '长期离线')
+        : relativeTime(o.lastTs, o.now);
+      const time = escapeHtml(timeRaw);
+      const offTag = offline ? '<span class="card__off">离线</span>' : '';
+      const ariaDis = offline ? ' aria-disabled="true"' : '';
+      return `<a class="${classes.join(' ')}" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" data-status="${st}" aria-label="${escapeHtml(label)}"${ariaDis}>` +
+        `<div class="card__head">` +
+        `<span class="s-dot ${meta.dot}" aria-hidden="true"></span>` +
+        `<span class="card__name">${name}</span>` +
+        `<span class="sr-only">${meta.cn}</span>` +
+        `${offTag}` +
+        `<span class="card__time">${time}</span>` +
+        `</div>` +
+        `<div class="card__last">${last || '—'}</div>` +
+        `</a>`;
+    }
+
+    // single(默认,旧行为):机器名主标题 + 会话名副行 + s-icon + 单行 span.card__last。
+    // :7685 多机 hub:永远机器名主标题 + 会话名副行(singleMachine 分支已废弃 —— 它是
+    // 07-04 spec 错把 :7685 当单机的产物,见 docs/superpowers/specs/2026-07-04-7685-hub-gap-audit.md §1)。
+    const name = escapeHtml(m.name || m.id);
+    const sess = escapeHtml(s.name);
+    const lastRaw = s.lastLine || (m.online === false ? '(离线)' : '');
+    const last = escapeHtml(TC.cleanSummary ? TC.cleanSummary(lastRaw, 60) : lastRaw);
+    const time = escapeHtml(relativeTime(o.lastTs, o.now));
     return `<a class="${classes.join(' ')}" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" data-status="${st}" aria-label="${escapeHtml(label)}">` +
       `<span class="s-dot ${meta.dot}" aria-hidden="true"></span>` +
       `<span class="s-icon" aria-hidden="true">${meta.icon}</span>` +
-      `<span class="card__name">${primaryName}</span>` +
-      `<span class="card__session">${secondary}</span>` +
+      `<span class="card__name">${name}</span>` +
+      `<span class="card__session">${sess}</span>` +
       `<span class="card__last">${last || '—'}</span>` +
       `<span class="card__time">${time}</span>` +
       `</a>`;
@@ -196,6 +233,38 @@
     return online.concat(offline);
   }
 
+  // 单机维度状态计数:cards(每项 .status)→ 五通道 + total。点和 = total(供顶栏自洽校验)。
+  function summarizeMachine(cards) {
+    const c = { working: 0, waiting: 0, errored: 0, idle: 0, offline: 0, unknown: 0, total: 0 };
+    for (const card of cards || []) {
+      c.total++;
+      const st = (card && card.status) || 'unknown';
+      if (c[st] != null) c[st]++;
+    }
+    return c;
+  }
 
-  return { statusMeta, escapeHtml, relativeTime, buildCardHTML, buildCardRow, buildCardInner, flattenFleet, sortCardsByRelevance, summarizeFleet, isStale, partitionStale, groupByMachine };
+  // 色谱圆点 + 数字计数 HTML(组标题 + 顶栏共用,对齐 demo title 中文语义)。
+  // 无 emoji、无 ×。顺序 working/waiting/errored/idle/offline。非零才渲染;全 0 → ''。
+  const COUNT_ORDER = [
+    { key: 'working', cn: '工作中' },
+    { key: 'waiting', cn: '等待用户' },
+    { key: 'errored', cn: '出错' },
+    { key: 'idle', cn: '空闲' },
+    { key: 'offline', cn: '离线' },
+  ];
+  function renderStatusCounts(counts) {
+    const c = counts || {};
+    const parts = [];
+    for (const item of COUNT_ORDER) {
+      const n = c[item.key] || 0;
+      if (n > 0) {
+        parts.push('<span class="status-count" title="' + item.cn + '">' +
+          '<span class="s-dot s-dot--' + item.key + '" aria-hidden="true"></span>' + n + '</span>');
+      }
+    }
+    return parts.join('');
+  }
+
+  return { statusMeta, escapeHtml, relativeTime, buildCardHTML, buildCardRow, buildCardInner, flattenFleet, sortCardsByRelevance, summarizeFleet, summarizeMachine, renderStatusCounts, isStale, partitionStale, groupByMachine };
 });

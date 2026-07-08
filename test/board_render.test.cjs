@@ -350,3 +350,100 @@ test('groupByMachine null/空 → []', () => {
   assert.deepEqual(B.groupByMachine(null), []);
   assert.deepEqual(B.groupByMachine([]), []);
 });
+
+// ---- buildCardInner hub 模式(摘要为中心 IA,对齐 demo /tmp/dashboard-redesign-demo.html)----
+test('buildCardInner hub:card--hub class + card__head 包裹层 + 会话名主锚 + 无 s-icon', () => {
+  const html = B.buildCardInner(
+    { id: 'm1', name: 'mac-pro', online: true },
+    { name: 'sess-1', status: 'working', lastLine: 'building…' },
+    { mode: 'hub', lastTs: 980000, now: 1000000 }
+  );
+  assert.match(html, /class="card card--hub"/);
+  assert.match(html, /<div class="card__head">/);                       // head 包裹层(demo 结构)
+  assert.match(html, /<span class="card__name">sess-1<\/span>/);        // 会话名主锚(非机器名)
+  assert.doesNotMatch(html, /s-icon/);                                   // hub 删 s-icon
+  assert.match(html, /<div class="card__last">building…<\/div>/);       // 摘要 div(非 span)
+});
+
+test('buildCardInner hub:加 sr-only 中文状态(色盲冗余,状态不唯一靠色)', () => {
+  const cases = [
+    ['working', '运行中'], ['waiting', '等待中'], ['errored', '出错'],
+    ['idle', '空闲'], ['offline', '离线'],
+  ];
+  for (const [st, cn] of cases) {
+    const html = B.buildCardInner({ id: 'm', name: 'a', online: true }, { name: 's', status: st }, { mode: 'hub' });
+    assert.match(html, new RegExp('<span class="sr-only">' + cn + '</span>'), `status=${st} 应有 sr-only「${cn}」`);
+  }
+});
+
+test('buildCardInner hub 离线卡:card__off + aria-disabled + "前在线" 时间 + 占位摘要', () => {
+  const html = B.buildCardInner(
+    { id: 'm2', name: 'off-machine', online: false },
+    { name: 'sess-1', status: 'offline', lastLine: 'last output' },
+    { mode: 'hub', lastTs: 720000, now: 10000000 }
+  );
+  assert.match(html, /aria-disabled="true"/);                            // 离线不可激活语义
+  assert.match(html, /<span class="card__off">离线<\/span>/);
+  assert.match(html, /主机离线,暂无实时状态/);
+  assert.match(html, /上次摘要:last output/);
+  // lastTs=720000,now=10000000 → diff=9280000ms ≈ 2.58h → "2h 前" + "在线" = "2h 前在线"
+  assert.match(html, /<span class="card__time">2h 前在线<\/span>/);
+});
+
+test('buildCardInner hub 离线卡无 lastLine:固定占位文案,不残「上次摘要:」', () => {
+  const html = B.buildCardInner(
+    { id: 'm2', name: 'off', online: false },
+    { name: 's', status: 'offline', lastLine: '' },
+    { mode: 'hub' }
+  );
+  assert.match(html, /主机离线,暂无实时状态。/);
+  assert.doesNotMatch(html, /上次摘要/);
+});
+
+test('buildCardInner 默认 single 模式仍机器名主锚 + 保留 s-icon(向后兼容,无 card--hub/card__head)', () => {
+  const html = B.buildCardInner(
+    { id: 'm1', name: 'mac-pro', online: true },
+    { name: 'sess', status: 'working' },
+    {} // 不传 mode → 默认 single(旧行为)
+  );
+  assert.doesNotMatch(html, /card--hub/);
+  assert.doesNotMatch(html, /card__head/);
+  assert.match(html, /<span class="card__name">mac-pro<\/span>/);        // 仍机器名
+  assert.match(html, /s-icon/);                                          // single 保留 s-icon
+  assert.doesNotMatch(html, /sr-only/);
+});
+
+// ---- summarizeMachine / renderStatusCounts(组标题 + 顶栏共用的色谱圆点+数字计数)----
+test('summarizeMachine: 五通道计数 + total = 点和', () => {
+  const c = B.summarizeMachine([
+    { status: 'working' }, { status: 'working' },
+    { status: 'waiting' }, { status: 'errored' },
+    { status: 'idle' }, { status: 'offline' }, { status: 'offline' },
+  ]);
+  assert.equal(c.working, 2);
+  assert.equal(c.waiting, 1);
+  assert.equal(c.errored, 1);
+  assert.equal(c.idle, 1);
+  assert.equal(c.offline, 2);
+  assert.equal(c.total, 7);
+  assert.equal(c.working + c.waiting + c.errored + c.idle + c.offline + (c.unknown || 0), 7);
+});
+
+test('summarizeMachine: null/空 → 全 0', () => {
+  assert.equal(B.summarizeMachine(null).total, 0);
+  assert.equal(B.summarizeMachine([]).working, 0);
+});
+
+test('renderStatusCounts: 嵌套 s-dot + 数字,非零项带中文 title,无 emoji 无 ×', () => {
+  const html = B.renderStatusCounts({ working: 2, waiting: 1, errored: 0, idle: 1, offline: 2, unknown: 0, total: 6 });
+  assert.match(html, /class="status-count"[^>]*title="工作中"[^>]*>[\s\S]*?s-dot--working[\s\S]*?<\/span>2/);
+  assert.match(html, /title="等待用户"[\s\S]*?<\/span>1/);
+  assert.match(html, /title="空闲"[\s\S]*?<\/span>1/);
+  assert.match(html, /title="离线"[\s\S]*?<\/span>2/);
+  assert.ok(!/errored/.test(html), 'errored=0 不渲染');
+  assert.ok(!/✕|▶|⏸|⏳|⌽|×/.test(html), '无 emoji 无 ×');
+});
+
+test('renderStatusCounts: 全 0 → 空串', () => {
+  assert.equal(B.renderStatusCounts({ working: 0, waiting: 0, errored: 0, idle: 0, offline: 0, unknown: 0, total: 0 }), '');
+});
