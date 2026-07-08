@@ -75,25 +75,20 @@ test('P5:tokens.css 存在 --offline token(与 --idle 拉开,用于离线状态)
   const css = fs.readFileSync(`${P}/tokens.css`, 'utf8');
   assert.match(css, /--offline:/);
 });
-test('P5:--offline 与 --idle 拉开(≥2 倍 alpha 差或色相差)', () => {
-  // --idle: rgba(38,37,30,0.3) alpha 0.3
-  // --offline 须与 --idle 在 alpha 或色相上明显区分,否则两个状态点视觉不可分。
+test('P5:--idle 对比度 ≥0.5(图形 3:1);offline/idle 区分改为形状(见 dashboard_style)', () => {
+  // spec §8 决策11:idle/offline 区分机制从 alpha-ratio 改为 SHAPE
+  //   idle   = 实心点(bg --idle)+ 1.5px --fg-2 描边环
+  //   offline = 空心环(bg transparent + 1.5px --offline border,demo L84)
+  // 故此处不再锁 offline≥2×idle alpha(旧 P5 alpha-invariant 已被 spec 显式 supersede);
+  // 形状区分(实心 vs 空心)由 dashboard_style.test.cjs 的 .s-dot--offline 空心环断言锁定。
+  // 此锁改为断言 token 级对比目标:--idle alpha ≥ 0.5(图形对比过 WCAG 3:1)+ --offline 存在。
   const css = fs.readFileSync(`${P}/tokens.css`, 'utf8');
   const idleMatch = css.match(/--idle:\s*rgba\(38,\s*37,\s*30,\s*(0\.\d+)\)/);
   assert.ok(idleMatch, '--idle 应为 rgba(38,37,30,0.x)');
   const idleAlpha = parseFloat(idleMatch[1]);
-  // 提取 --offline 值
-  const offlineMatch = css.match(/--offline:\s*([^;]+);/);
-  assert.ok(offlineMatch, '--offline 应有值');
-  const offlineVal = offlineMatch[1];
-  // 若 --offline 也是 rgba(38,37,30,a),则 alpha 须 >= 2*idle 或 <= 0.5*idle,拉开层次
-  const offlineAlphaMatch = offlineVal.match(/rgba\(38,\s*37,\s*30,\s*(0\.\d+)\)/);
-  if (offlineAlphaMatch) {
-    const offlineAlpha = parseFloat(offlineAlphaMatch[1]);
-    assert.ok(
-      offlineAlpha >= idleAlpha * 2 || offlineAlpha <= idleAlpha * 0.5,
-      `--offline alpha ${offlineAlpha} 须与 --idle alpha ${idleAlpha} 拉开 ≥2 倍`
-    );
-  }
-  // 若 --offline 用不同色相(如偏紫灰/偏蓝灰)也算通过(色相差路径),此处不强制。
+  assert.ok(
+    idleAlpha >= 0.5,
+    `--idle alpha ${idleAlpha} 应 ≥ 0.5(spec §8 决策11,图形对比过 WCAG 3:1)`
+  );
+  assert.match(css, /--offline:/, '--offline token 应存在(offline 空心环 border 用)');
 });

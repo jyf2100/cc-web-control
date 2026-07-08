@@ -318,3 +318,39 @@ test('T6: .fleet-machine-text + .fleet-counts 顶栏锚', () => {
   assert.match(css, /\.fleet-machine-text\s*\{/);
   assert.match(css, /\.fleet-counts\s*\{/);
 });
+
+// ============================================================
+// Task 7:a11y(色点环/空心 + --idle 对比度 + reduced-motion,对齐 demo)
+// ============================================================
+test('T7: tokens --idle 提至 ≥0.55(图形对比过 3:1)', () => {
+  const tokens = require('node:fs').readFileSync(require('path').join(__dirname, '..', 'public', 'tokens.css'), 'utf8');
+  const m = tokens.match(/--idle:\s*rgba\(38,\s*37,\s*30,\s*(0?\.\d+)\)/);
+  assert.ok(m, '--idle 规则应存在');
+  assert.ok(parseFloat(m[1]) >= 0.5, '--idle alpha 应 ≥ 0.5(实得 ' + m[1] + ')');
+});
+test('T7: .s-dot--working 活跃环 rgba(demo L80)', () => {
+  const rule = css.match(/\.s-dot--working\s*\{[^}]*\}/);
+  assert.ok(rule);
+  assert.match(rule[0], /box-shadow:[^}]*rgba\(31,\s*138,\s*101/);
+});
+test('T7: .s-dot--errored 活跃环 rgba(demo L82)', () => {
+  const rule = css.match(/\.s-dot--errored\s*\{[^}]*\}/);
+  assert.ok(rule);
+  assert.match(rule[0], /box-shadow:[^}]*rgba\(192,\s*26,\s*75/);
+});
+test('T7: .s-dot--offline 空心环(与 idle 实心形状区分,demo L84)', () => {
+  const rule = css.match(/\.s-dot--offline\s*\{[^}]*\}/);
+  assert.ok(rule);
+  assert.match(rule[0], /background:\s*transparent/);
+  assert.match(rule[0], /border[^}]*var\(--offline\)/);
+});
+test('T7: reduced-motion 覆盖 .card__select(demo L106)', () => {
+  // 收紧:断言 .card__select 与 transition:none 同处 reduced-motion 块的同一规则内。
+  // 旧 regex 用 [\s\S]*? 跨块匹配,删 .card__select 仍能从 L58/L98 的 prefers-reduced-motion
+  // 跨到 L151 .card__select 再跨到别处 transition:none → false-positive,无回归保护。
+  // 现 [^}]* 锁到首个 } 前(同规则),删 .card__select 即断(已 node 验证 neg case fail)。
+  assert.match(
+    css,
+    /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[^}]*\.card__select[^}]*transition:\s*none/
+  );
+});

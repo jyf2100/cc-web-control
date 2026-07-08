@@ -219,11 +219,13 @@ html, body {
 .board-stale-group > details[open] > summary { margin-bottom: 8px; }
 .board-stale-grid { display: grid; grid-template-columns: repeat(auto-fill, 244px); grid-auto-rows: 104px; gap: 10px; list-style: none; padding: 0; margin: 0; }
 
-/* 状态点:几何 + working/idle/errored/waiting/unknown 色统一在 tokens.css;此处仅 console 局部增强(idle 描边达 WCAG 3:1)+ 补 offline */
-.s-dot--idle { box-shadow:0 0 0 1.5px var(--fg-2); }
-.s-dot--offline { background:var(--offline); }
-.s-icon[aria-hidden="true"] { color:var(--fg-2); }
-.s-icon { font-variant-emoji:text; }
+/* 状态点增强(demo L80–L84):working/errored 同色环(活跃更跳但克制);idle 实心;offline 空心环(形状区分,不靠 alpha)*/
+.s-dot--working { box-shadow: 0 0 0 3px rgba(31,138,101,0.18); }
+.s-dot--errored { box-shadow: 0 0 0 3px rgba(192,26,75,0.20); }
+.s-dot--idle { box-shadow: 0 0 0 1.5px var(--fg-2); }   /* idle 描边达非文本 3:1(保留原 P5 修正)*/
+.s-dot--offline { background: transparent; border: 1.5px solid var(--offline); box-sizing: border-box; }
+.s-icon[aria-hidden="true"] { color: var(--fg-2); }
+.s-icon { font-variant-emoji: text; }
 
 .console-term { display:flex; flex-direction:column; border-top:1px solid var(--border); flex:1; min-height:0; }
 .term-header { display:flex; align-items:center; gap:6px; padding:4px 16px; border-bottom:1px solid var(--border); background:var(--surface-2); }
@@ -265,8 +267,8 @@ html, body {
 }
 @media (hover: none) { .card:active { background:var(--surface-2); } }
 @media (prefers-reduced-motion: reduce) {
-  .card, #ma-screen { transition:none; }
-  .card:hover { transform:none; }
+  .card, .card__select, #ma-screen { transition: none; }
+  .card:hover { transform: none; }
 }
 
 /* === 三页面:看板按机分节(spec §3 / demo L46–L61 — 组标题增强,不折叠)=== */
