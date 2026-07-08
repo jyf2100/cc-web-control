@@ -233,6 +233,38 @@
     return online.concat(offline);
   }
 
+  // 单机维度状态计数:cards(每项 .status)→ 五通道 + total。点和 = total(供顶栏自洽校验)。
+  function summarizeMachine(cards) {
+    const c = { working: 0, waiting: 0, errored: 0, idle: 0, offline: 0, unknown: 0, total: 0 };
+    for (const card of cards || []) {
+      c.total++;
+      const st = (card && card.status) || 'unknown';
+      if (c[st] != null) c[st]++;
+    }
+    return c;
+  }
 
-  return { statusMeta, escapeHtml, relativeTime, buildCardHTML, buildCardRow, buildCardInner, flattenFleet, sortCardsByRelevance, summarizeFleet, isStale, partitionStale, groupByMachine };
+  // 色谱圆点 + 数字计数 HTML(组标题 + 顶栏共用,对齐 demo title 中文语义)。
+  // 无 emoji、无 ×。顺序 working/waiting/errored/idle/offline。非零才渲染;全 0 → ''。
+  const COUNT_ORDER = [
+    { key: 'working', cn: '工作中' },
+    { key: 'waiting', cn: '等待用户' },
+    { key: 'errored', cn: '出错' },
+    { key: 'idle', cn: '空闲' },
+    { key: 'offline', cn: '离线' },
+  ];
+  function renderStatusCounts(counts) {
+    const c = counts || {};
+    const parts = [];
+    for (const item of COUNT_ORDER) {
+      const n = c[item.key] || 0;
+      if (n > 0) {
+        parts.push('<span class="status-count" title="' + item.cn + '">' +
+          '<span class="s-dot s-dot--' + item.key + '" aria-hidden="true"></span>' + n + '</span>');
+      }
+    }
+    return parts.join('');
+  }
+
+  return { statusMeta, escapeHtml, relativeTime, buildCardHTML, buildCardRow, buildCardInner, flattenFleet, sortCardsByRelevance, summarizeFleet, summarizeMachine, renderStatusCounts, isStale, partitionStale, groupByMachine };
 });

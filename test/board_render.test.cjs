@@ -412,3 +412,38 @@ test('buildCardInner 默认 single 模式仍机器名主锚 + 保留 s-icon(向�
   assert.match(html, /s-icon/);                                          // single 保留 s-icon
   assert.doesNotMatch(html, /sr-only/);
 });
+
+// ---- summarizeMachine / renderStatusCounts(组标题 + 顶栏共用的色谱圆点+数字计数)----
+test('summarizeMachine: 五通道计数 + total = 点和', () => {
+  const c = B.summarizeMachine([
+    { status: 'working' }, { status: 'working' },
+    { status: 'waiting' }, { status: 'errored' },
+    { status: 'idle' }, { status: 'offline' }, { status: 'offline' },
+  ]);
+  assert.equal(c.working, 2);
+  assert.equal(c.waiting, 1);
+  assert.equal(c.errored, 1);
+  assert.equal(c.idle, 1);
+  assert.equal(c.offline, 2);
+  assert.equal(c.total, 7);
+  assert.equal(c.working + c.waiting + c.errored + c.idle + c.offline + (c.unknown || 0), 7);
+});
+
+test('summarizeMachine: null/空 → 全 0', () => {
+  assert.equal(B.summarizeMachine(null).total, 0);
+  assert.equal(B.summarizeMachine([]).working, 0);
+});
+
+test('renderStatusCounts: 嵌套 s-dot + 数字,非零项带中文 title,无 emoji 无 ×', () => {
+  const html = B.renderStatusCounts({ working: 2, waiting: 1, errored: 0, idle: 1, offline: 2, unknown: 0, total: 6 });
+  assert.match(html, /class="status-count"[^>]*title="工作中"[^>]*>[\s\S]*?s-dot--working[\s\S]*?<\/span>2/);
+  assert.match(html, /title="等待用户"[\s\S]*?<\/span>1/);
+  assert.match(html, /title="空闲"[\s\S]*?<\/span>1/);
+  assert.match(html, /title="离线"[\s\S]*?<\/span>2/);
+  assert.ok(!/errored/.test(html), 'errored=0 不渲染');
+  assert.ok(!/✕|▶|⏸|⏳|⌽|×/.test(html), '无 emoji 无 ×');
+});
+
+test('renderStatusCounts: 全 0 → 空串', () => {
+  assert.equal(B.renderStatusCounts({ working: 0, waiting: 0, errored: 0, idle: 0, offline: 0, unknown: 0, total: 0 }), '');
+});
