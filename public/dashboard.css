@@ -182,7 +182,7 @@ html, body {
 .card--hub .card__off { font-family: var(--mono); font-size: 10px; color: var(--offline); margin-left: 6px; }
 .card--hub .card__time { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--fg-2); flex-shrink: 0; }
 .card--hub .card__last {
-  color: var(--fg-2); font-size: 13px; line-height: 1.45; min-height: 38px;
+  white-space: normal; color: var(--fg-2); font-size: 13px; line-height: 1.45; min-height: 38px;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 /* hub 清状态染色:waiting 无底色 / errored 无左缘条 / unknown 实线(spec 非目标:只靠色点)*/

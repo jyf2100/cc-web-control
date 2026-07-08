@@ -229,6 +229,7 @@ test('T4: hub 摘要 .card--hub .card__last line-clamp:2 + min-height:38 + --fg-
   assert.match(rule[0], /min-height:\s*38px/);
   assert.match(rule[0], /var\(--fg-2\)/);
   assert.ok(!/var\(--fg-3\)/.test(rule[0]), 'hub 摘要不应 --fg-3');
+  assert.match(rule[0], /white-space:\s*normal/, 'hub 摘要须 white-space:normal 重置基线 nowrap,否则 line-clamp 被击穿');
 });
 test('T4: hub 状态点 11px(.card--hub .s-dot)', () => {
   const rule = css.match(/\.card--hub\s+\.s-dot\s*\{[^}]*\}/);
