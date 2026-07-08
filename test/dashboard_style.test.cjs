@@ -119,7 +119,7 @@ test('三页面样式:存在 .machine-group / .fanout-bar / .card__select[aria-p
   assert.match(css, /\.machine-group--offline\b/);
   assert.match(css, /\.fanout-bar\b/);
   assert.match(css, /\.card__select\[aria-pressed="true"\]/);   // Task 9:Plan A button+a,aria-checked→aria-pressed
-  assert.match(css, /\.card__select\b[^}]*min-height:\s*44/);   // 触摸目标 44px(WCAG 2.5.5)
+  assert.match(css, /\.card__select\b[^}]*min-height:\s*24/);   // 触摸目标改 24×24(SC 2.5.8,demo L68)
   assert.match(css, /#ma-screen\s*\{[^}]*flex:\s*1/);           // 主控终端撑满
   assert.match(css, /#ma-screen\s*\{[^}]*max-height:\s*none/);  // 覆盖原 max-height:0,否则 flex:1 被锁死
   assert.match(css, /\.console-term\s*\{[^}]*flex:\s*1;\s*min-height:\s*0/);  // 三页面:单机模式 term 撑满剩余视口(Task 6 detectConsoleMode 同提交)
@@ -176,13 +176,6 @@ test('P5:.s-dot--offline 用 --offline token(非 --fg-3)(迁自 console_style)',
 // ============================================================
 // P6:批量补 :focus-visible(WCAG 2.4.7 AA)(迁自 console_style)
 // ============================================================
-test('P6:机分组 summary(普通组)有 :focus-visible(原仅 stale-group 有)(迁自 console_style)', () => {
-  // .board-stale-group > details > summary:focus-visible 已存在;普通组 .machine-group > details > summary 漏。
-  assert.match(
-    css,
-    /\.machine-group\s*>\s*details\s*>\s*summary:focus-visible[\s\S]*?outline/
-  );
-});
 test('P6:.card__select(tabindex=0)有 :focus-visible(迁自 console_style)', () => {
   assert.match(css, /\.card__select:focus-visible[\s\S]*?outline/);
 });
@@ -278,4 +271,50 @@ test('T5: .card-row > .card 用 flex:1 1 0%(等宽真根因)', () => {
 test('T5: .card-row align-items:stretch + gap:8px(两级 stretch 传等高,demo L67)', () => {
   assert.match(css, /\.card-row\s*\{[^}]*align-items:\s*stretch/);
   assert.match(css, /\.card-row\s*\{[^}]*gap:\s*8px/);
+});
+
+// ============================================================
+// Task 6:组标题 + 多选 button 24×24 + 卡级 :has() + 离线机组(对齐 demo)
+// ============================================================
+test('T6: 组标题静态容器 .machine-group__title 存在(不折叠)', () => {
+  assert.match(css, /\.machine-group__title\s*\{/);
+});
+test('T6: 组标题在线/离线标签 .machine-group__status', () => {
+  assert.match(css, /\.machine-group__status--online/);
+  assert.match(css, /\.machine-group__status--offline/);
+});
+test('T6: 组标题计数容器 .machine-group__counts + .machine-group__total(N 会话)', () => {
+  assert.match(css, /\.machine-group__counts\s*\{/);
+  assert.match(css, /\.machine-group__total\s*\{[^}]*margin-left:\s*auto/);
+});
+test('T6: .status-count inline-flex(色谱圆点+数字,demo L54)', () => {
+  assert.match(css, /\.status-count\s*\{[^}]*display:\s*inline-flex/);
+});
+test('T6: .card__select 24×24 命中区(demo L68,SC 2.5.8)', () => {
+  // 行锚:(?:^|\n) 排除 .card-row > .card__select(L151)先命中 —— 那条是 flex 子规则,
+  // 非本测试目标的 base 命中区规则。brief 原 regex 无行锚会误中 L151。
+  const rule = css.match(/(?:^|\n)\.card__select\s*\{[^}]*\}/);
+  assert.ok(rule);
+  assert.match(rule[0], /min-height:\s*24px/);
+  assert.match(rule[0], /min-width:\s*24px/);
+});
+test('T6: .card__select 默认 --fg-3 / hover --fg-2 / 选中 --fg + --accent-dim 边框(demo L68–L71)', () => {
+  const base = css.match(/(?:^|\n)\.card__select\s*\{[^}]*\}/);
+  assert.match(base[0], /var\(--fg-3\)/);
+  assert.match(css, /\.card__select:hover\s*\{[^}]*var\(--fg-2\)/);
+  const sel = css.match(/\.card__select\[aria-pressed="true"\]\s*\{[^}]*\}/);
+  assert.match(sel[0], /var\(--fg\)/);
+  assert.match(sel[0], /var\(--accent-dim\)/);
+});
+test('T6: 卡级 :has() 选中高亮(demo L91)', () => {
+  assert.match(css, /\.card-row:has\(\.card__select\[aria-pressed="true"\]\)\s+\.card\s*\{[^}]*border-color:\s*var\(--accent\)/);
+  assert.match(css, /\.card-row:has\(\.card__select\[aria-pressed="true"\]\)\s+\.card\s*\{[^}]*background:\s*var\(--accent-bg\)/);
+});
+test('T6: 离线机组 cursor:not-allowed + hover 抑制(demo L94–L95)', () => {
+  assert.match(css, /\.machine-group--offline\s+\.card\s*\{[^}]*cursor:\s*not-allowed/);
+  assert.match(css, /\.machine-group--offline\s+\.card:hover\s*\{[^}]*background:\s*var\(--surface\)/);
+});
+test('T6: .fleet-machine-text + .fleet-counts 顶栏锚', () => {
+  assert.match(css, /\.fleet-machine-text\s*\{/);
+  assert.match(css, /\.fleet-counts\s*\{/);
 });
