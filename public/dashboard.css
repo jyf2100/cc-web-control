@@ -362,8 +362,8 @@ html, body {
 .topbar-logout-btn:hover { color: var(--accent-2); border-color: var(--accent-2); }
 .topbar-logout-btn:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }   /* WCAG 2.4.7 */
 
-/* ===== session 生命周期管理:删除按钮 / 当前标记 / 确认态 / toast ===== */
-.session { position: relative; }
+/* ===== session 生命周期管理:删除按钮 / 当前标记 / 确认态 / toast
+   注:现有 .session(L37-41)已含 position:relative,此处不再重复声明。===== */
 .session__del {
     position: absolute; top: 6px; right: 6px;
     background: transparent; border: 0; cursor: pointer;
@@ -374,9 +374,9 @@ html, body {
 .session__del:disabled { opacity: 0.22; cursor: not-allowed; }
 .session__del:disabled:hover { background: transparent; color: inherit; opacity: 0.22; }
 
-.session--current { border-left: 3px solid var(--accent, #6E56CF); }
+.session--current { border-left: 3px solid var(--accent, #d9651a); }
 .session--current .s-name::after {
-    content: ' · 当前'; color: var(--accent, #6E56CF); font-size: 11px; font-weight: 400;
+    content: ' · 当前'; color: var(--accent-2, #b54e0e); font-size: 11px; font-weight: 400;
 }
 
 .session--confirming { outline: 2px solid var(--errored, #e5484d); outline-offset: -2px; }
