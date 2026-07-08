@@ -57,7 +57,8 @@
         });
         return changed;
     }
-    function renderSession(s, index) {
+    function renderSession(s, index, opts) {
+        var o = opts || {};
         var statusKey = STATUS_LABEL[s.status] ? s.status : FALLBACK_STATUS_KEY;
         var status = STATUS_LABEL[statusKey];
         var sid = 's:' + String(index + 1).padStart(2, '0');
@@ -67,7 +68,23 @@
         else { var t = relativeTime(s.lastTs); if (t) metaParts.push(t); }
         var meta = metaParts.join(' · ');
         var waitingCls = statusKey === 'waiting' ? ' waiting' : '';
-        return '<li class="session' + waitingCls + '" data-session="' + escapeHtml(s.name)
+        var cls = 'session' + waitingCls;
+        if (o.isCurrent) cls += ' session--current';
+        if (o.confirming) cls += ' session--confirming';
+
+        // 操作区:confirming → [取消][删除?];否则 → 删除按钮(isCurrent 时 disabled)
+        var actions;
+        if (o.confirming) {
+            actions = '<span class="s-confirm">'
+                + '<button type="button" class="s-cancel" data-act="cancel">取消</button>'
+                + '<button type="button" class="s-confirm-del" data-act="confirm">删除?</button>'
+                + '</span>';
+        } else {
+            var dis = o.isCurrent ? ' disabled title="当前会话,先切换再删"' : '';
+            actions = '<button type="button" class="session__del" data-act="del" aria-label="删除会话"' + dis + '>🗑</button>';
+        }
+
+        return '<li class="' + cls + '" data-session="' + escapeHtml(s.name)
             + '" tabindex="0" role="button" aria-label="' + escapeHtml(s.name) + ' · ' + escapeHtml(status) + '">'
             + '<span class="s-dot s-dot--' + escapeHtml(statusKey) + '" aria-hidden="true"></span>'
             + '<div class="s-main">'
@@ -75,12 +92,19 @@
             + '<span class="s-meta">' + meta + '</span>'
             + '</div>'
             + '<span class="s-status">' + escapeHtml(status) + '</span>'
+            + actions
             + '<span class="s-id">' + sid + '</span>'
             + '</li>';
     }
-    function renderSessionList(sessions) {
+    function renderSessionList(sessions, currentName, confirmingSet) {
         var sorted = sortSessions(sessions);
-        return sorted.map(function (s, i) { return renderSession(s, i); }).join('');
+        return sorted.map(function (s, i) {
+            var opts = {
+                isCurrent: typeof currentName === 'string' && s.name === currentName,
+                confirming: !!(confirmingSet && confirmingSet.has(s.name))
+            };
+            return renderSession(s, i, opts);
+        }).join('');
     }
     function renderState(eyebrow, lede) {
         return '<p class="eyebrow">[' + escapeHtml(eyebrow) + ']</p>'
