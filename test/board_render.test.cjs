@@ -33,21 +33,21 @@ test('relativeTime <5s → now / 秒分时天周月档 / 无 ts 空串', () => {
   assert.equal(B.relativeTime(0, Date.now()), '');
 });
 
-// ---- buildCardHTML(改:click-to-navigate 的 <a>,无 select/无 ☐☑)----
-test('buildCardHTML 输出 <a class="card"> 带 href + data-* + aria-label', () => {
+// ---- buildCardHTML(Plan A:<li.card-row> 同级 <button.card__select> + <a.card>;跳 /jump)----
+test('buildCardHTML 输出 <li.card-row> + <a class="card"> 带 /jump href + data-* + aria-label', () => {
   const html = B.buildCardHTML(
     { id: 'm1', name: 'machine-a', online: true },
     { name: 'ses-1', status: 'working', lastLine: 'building…' },
     { active: true, now: 1000000, lastTs: 980000 }
   );
-  assert.match(html, /<li class="card-row" data-key="m1\/ses-1">/); // <li> wrapper + data-key
+  // li 把 data-machine/session/key + role=group 上移到外层(Plan A:a 上不再有 data-machine/session/key)
+  assert.match(html, /<li class="card-row"[^>]* data-machine="m1"[^>]* data-session="ses-1"[^>]* data-key="m1\/ses-1"[^>]* role="group"/);
   assert.match(html, /<a[^>]*class="card[^"]* active"/);            // 卡片是 <a>(click-to-navigate)
-  assert.match(html, /href="\/console\.html\?m=m1&amp;s=ses-1"/);   // 跳控制台 URL
+  assert.match(html, /href="\/jump\?m=m1&amp;s=ses-1"/);            // 跳 hub /jump 端点(Task 6)
   assert.match(html, /class="s-dot s-dot--working"/);
-  assert.match(html, /data-machine="m1"/);
-  assert.match(html, /data-session="ses-1"/);
   assert.match(html, /data-status="working"/);
-  assert.match(html, /aria-label="machine-a \/ ses-1,working,/);
+  // a 的 aria-label 用机器名/会话名/statusLabel/「在新标签打开控制台」,不含 lastLine
+  assert.match(html, /aria-label="machine-a \/ ses-1, working, 在新标签打开控制台"/);
   assert.match(html, /<span class="card__time">20s 前<\/span>/);    // lastTs=980000,now=1000000 → 20s 前
 });
 test('buildCardHTML data-status 随 status 变化,缺省 unknown', () => {
@@ -55,16 +55,19 @@ test('buildCardHTML data-status 随 status 变化,缺省 unknown', () => {
   assert.match(B.buildCardHTML(m, { name: 's1', status: 'errored' }, {}), /data-status="errored"/);
   assert.match(B.buildCardHTML(m, { name: 's1' }, {}), /data-status="unknown"/);
 });
-test('buildCardHTML card__select 带多选 checkbox 语义(data-toggle/role/aria-checked),初始 ☐ 未选', () => {
+test('buildCardHTML card__select 是 <button>(非嵌套 checkbox),带 aria-pressed,初始 ☐ 未选', () => {
   const html = B.buildCardHTML({ id: 'm1', name: 'a', online: true }, { name: 's', status: 'idle' }, {});
-  assert.match(html, /<span class="card__select" data-toggle="select" role="checkbox" aria-checked="false"[^>]*>☐<\/span>/);
-  assert.doesNotMatch(html, /☑/);            // 初始未选(JS toggle 才变 ☑)
-  assert.doesNotMatch(html, /card--selected/); // selected 由 JS 重建时加,非 buildCardInner
+  // Plan A:button + a 同级(button 在前),button 用原生 aria-pressed 替代嵌套 checkbox(ARIA 合规)
+  assert.match(html, /<button class="card__select" type="button"[^>]* data-toggle="select"[^>]* aria-pressed="false"[^>]*>☐<\/button>/);
+  assert.doesNotMatch(html, /role="checkbox"/);   // Plan A:不再嵌 checkbox
+  assert.doesNotMatch(html, /aria-checked/);
+  assert.doesNotMatch(html, /☑/);                 // 初始未选(JS toggle 才变 ☑)
+  assert.doesNotMatch(html, /card--selected/);    // selected 由 JS 重建时加,非 buildCardInner
 });
-test('buildCardHTML card__select 带可访问名 aria-label(读屏知所选机/会话)— P1 WCAG 4.1.2', () => {
-  // checkbox 嵌在 <a> 内须有独立可访问名,否则读屏聚焦 checkbox 只报「复选框 未选中」不知选哪台机。
+test('buildCardHTML card__select button 带可访问名 aria-label(读屏知所选机/会话)— P1 WCAG 4.1.2', () => {
+  // button 与 a 同级,须有独立可访问名,否则读屏聚焦 button 只报「按钮」不知选哪台机。
   const html = B.buildCardHTML({ id: 'm1', name: 'machine-a', online: true }, { name: 'ses-1', status: 'idle' }, {});
-  assert.match(html, /<span class="card__select"[^>]*aria-label="选择 machine-a \/ ses-1"/);
+  assert.match(html, /<button class="card__select"[^>]*aria-label="选择 machine-a \/ ses-1"/);
 });
 test('buildCardHTML 离线机器 lastLine 回退 (离线)', () => {
   const html = B.buildCardHTML({ id: 'm2', name: 'b', online: false }, { name: 's', status: 'idle', lastLine: '' });
@@ -74,7 +77,7 @@ test('buildCardHTML XSS: data-* HTML 转义 + href URL 编码(< → %3C)', () =>
   const html = B.buildCardHTML({ id: '<x>', name: '<x>', online: true }, { name: '<s>', status: 'idle' });
   assert.match(html, /data-machine="&lt;x&gt;"/);            // data-* 属性:HTML 转义
   assert.match(html, /data-session="&lt;s&gt;"/);            // data-session 同样转义
-  assert.match(html, /href="\/console\.html\?m=%3Cx%3E/);    // href query:URL 编码(encodeURIComponent)
+  assert.match(html, /href="\/jump\?m=%3Cx%3E/);             // href query:URL 编码(encodeURIComponent),跳 /jump
 });
 test('buildCardHTML: machine 缺 name → 回退到 id', () => {
   const html = B.buildCardHTML({ id: 'm1' }, { name: 's1', status: 'idle' }, {});
@@ -179,8 +182,42 @@ test('INTEGRATION: flattenFleet → sortCardsByRelevance 把 errored 冒到首�
   assert.equal(sorted[0].key, 'm1/s2');
 });
 
-// ---- buildCardInner(仅 <a>…</a>,无 <li> 包裹)----
-test('buildCardInner: 返回 <a>…</a>,不含 <li>', () => {
+// ---- buildCardRow(Plan A:<li.card-row> 同级 button + a;button 在 a 之前)----
+test('buildCardRow emits li.card-row with sibling button + a', () => {
+  const html = B.buildCardRow(
+    { id: 'm1', name: 'mac-pro' },
+    { name: 'ses-1', status: 'working' },
+    {}
+  );
+  assert.match(html, /<li class="card-row"[^>]* data-machine="m1"[^>]* data-session="ses-1"[^>]* data-key="m1\/ses-1"[^>]* role="group"/);
+  assert.match(html, /<button class="card__select" type="button"[^>]* aria-pressed="false"/);
+  assert.match(html, /<a class="card"[^>]* href="\/jump\?m=m1&amp;s=ses-1"[^>]* target="_blank"[^>]* rel="noopener noreferrer"/);
+  // button 在 a 之前(同级,DOM 顺序)— Plan A 的核心结构契约
+  const btnIdx = html.indexOf('class="card__select"');
+  const aIdx = html.indexOf('class="card"');
+  assert.ok(btnIdx > -1 && aIdx > btnIdx, 'button 应在 a 之前');
+});
+
+test('buildCardRow aria-label uses machine name, not port 7684', () => {
+  const html = B.buildCardRow({ id: 'm1', name: 'mac-pro' }, { name: 'ses-1', status: 'idle' }, {});
+  assert.ok(!/7684/.test(html));
+  assert.match(html, /mac-pro/);
+});
+
+test('buildCardRow a aria-label excludes lastLine', () => {
+  const html = B.buildCardRow(
+    { id: 'm1', name: 'mac-pro' },
+    { name: 'ses-1', status: 'working', lastLine: 'some output' },
+    {}
+  );
+  // a 的 aria-label 不含 lastLine(避免 2s 轮询刷新干扰读屏)
+  const aMatch = html.match(/<a class="card"[^>]*aria-label="([^"]*)"/);
+  assert.ok(aMatch);
+  assert.ok(!/some output/.test(aMatch[1]));
+});
+
+// ---- buildCardInner(Plan A:仅 <a>…</a>,无 <li> 包裹,无 .card__select,无 data-machine/session/key)----
+test('buildCardInner: 返回 <a>…</a>,不含 <li> 不含 .card__select', () => {
   const html = B.buildCardInner(
     { id: 'm1', name: 'machine-a', online: true },
     { name: 'ses-1', status: 'working', lastLine: 'building…' },
@@ -190,7 +227,13 @@ test('buildCardInner: 返回 <a>…</a>,不含 <li>', () => {
   assert.ok(html.lastIndexOf('</a>') === html.length - 4, '应以 </a> 结尾');
   assert.doesNotMatch(html, /<li/);
   assert.match(html, /class="card"/);
-  assert.match(html, /data-machine="m1"/);
+  // Plan A:data-machine/session/key 上移到 <li>;data-status 仍留在 <a>
+  assert.doesNotMatch(html, /data-machine=/);
+  assert.doesNotMatch(html, /data-session=/);
+  assert.doesNotMatch(html, /data-key=/);
+  assert.match(html, /data-status="working"/);
+  // buildCardInner 不再嵌 .card__select(已上移为 <button> 同级)
+  assert.doesNotMatch(html, /card__select/);
 });
 test('buildCardHTML = <li data-key> + buildCardInner 组合', () => {
   const full = B.buildCardHTML({ id: 'm1', name: 'a', online: true }, { name: 's1', status: 'idle' }, {});
@@ -210,13 +253,16 @@ test('buildCardInner lastLine 经 cleanSummary:markdown 标记剥离', () => {
   assert.doesNotMatch(html, /card__last[^<]*##/); // 不残留 ## 标记
 });
 
-test('buildCardInner: aria-label 用 cleanSummary 净化后文本(不含 markdown 残留)', () => {
+test('buildCardInner: aria-label 不含 lastLine(避免 2s 轮询刷新干扰读屏)', () => {
+  // Plan A:a 的 aria-label 只含 机器名/会话名/statusLabel/「在新标签打开控制台」,
+  // lastLine 由 2s 轮询不断刷新,放 aria-label 会让读屏频繁打断用户。
   const html = B.buildCardInner(
     { id: 'm1', name: 'mac' },
-    { name: 'ses', status: 'waiting', lastLine: '## 收尾 `mem`' },
+    { name: 'ses', status: 'waiting', lastLine: '## 收尾 `mem` some-output' },
     {}
   );
   const label = (html.match(/aria-label="([^"]*)"/) || [])[1];
+  assert.ok(!label.includes('some-output'), 'aria-label 不应含 lastLine');
   assert.ok(!label.includes('##'), 'aria-label 不应含标题标记');
   assert.ok(!label.includes('`'), 'aria-label 不应含反引号');
 });
@@ -269,16 +315,8 @@ test('buildCardInner 废弃 singleMachine 参数被忽略 → 仍机器名(防�
   assert.match(html, /<span class="card__name">mac-pro<\/span>/); // 仍机器名,非会话名
   assert.match(html, /<span class="card__session">cc-web-control<\/span>/); // 会话名副行,非 cwd
   assert.doesNotMatch(html, /card--single/);
-  assert.match(html, /data-machine="m1"/); // 导航属性保留
-});
-
-test('buildCardInner → 含 card__select ☐(对齐 mockup 视觉,激活 dashboard.css:178)', () => {
-  const html = B.buildCardInner(
-    { id: 'm1', name: 'mac-pro', online: true },
-    { name: 'cc-web-control', status: 'working' },
-    {}
-  );
-  assert.match(html, /<span class="card__select"[^>]*>☐<\/span>/); // [^>]* 容纳 aria-hidden(a11y,与 s-dot/s-icon 一致)
+  // Plan A:buildCardInner 的 <a> 不再带 data-machine/session/key(上移到 <li>)
+  assert.doesNotMatch(html, /data-machine=/);
 });
 
 test('flattenFleet 透传 session.cwd', () => {

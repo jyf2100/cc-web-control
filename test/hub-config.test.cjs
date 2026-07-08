@@ -32,6 +32,25 @@ test('validateMachine 缺 url/token → 抛错', () => {
   assert.throws(() => validateMachine({ id: 'mc1', name: 'x', url: 'http://h' }), /token/);
 });
 
+test('validateMachine accepts http/https (SSRF)', () => {
+  assert.doesNotThrow(() => validateMachine({ id: 'm1', name: 'm1', url: 'http://127.0.0.1:7684', token: 't' }));
+  assert.doesNotThrow(() => validateMachine({ id: 'm2', name: 'm2', url: 'https://host.example', token: 't' }));
+});
+
+test('validateMachine rejects non-http protocols (SSRF)', () => {
+  assert.throws(() => validateMachine({ id: 'f1', name: 'x', url: 'file:///etc/passwd', token: 't' }), /url/i);
+  assert.throws(() => validateMachine({ id: 'f2', name: 'x', url: 'gopher://x', token: 't' }), /url/i);
+  assert.throws(() => validateMachine({ id: 'f3', name: 'x', url: 'javascript:alert(1)', token: 't' }), /url/i);
+});
+
+test('validateMachine rejects malformed url (SSRF)', () => {
+  assert.throws(() => validateMachine({ id: 'f4', name: 'x', url: 'not a url', token: 't' }), /url/i);
+});
+
+test('validateMachine rejects cloud metadata IP (SSRF)', () => {
+  assert.throws(() => validateMachine({ id: 'f5', name: 'x', url: 'http://169.254.169.254/latest/meta-data', token: 't' }), /url/i);
+});
+
 test('loadMachines 合法清单', () => {
   const f = writeTmp(JSON.stringify({ machines: [
     { id: 'mc1', name: 'A', url: 'http://1:7684', token: 't1' },

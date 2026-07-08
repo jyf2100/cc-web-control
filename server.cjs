@@ -21,6 +21,7 @@ const { getDashboardCache, buildDashboardPayload } = require('./dashboard_cache.
 const { cwdToSlug } = require('./dashboard_slug.cjs');
 const { readBinding, deleteBinding, migrateStaleBindings } = require('./dashboard_binding.cjs');
 const { shouldContinue } = require('./claude_session.cjs');
+const crypto = require('node:crypto');
 const { createRateLimiter } = require('./rate_limit.cjs');
 const { loadConfig, SINGLE_SCHEMA, SINGLE_CONFIG_PATH } = require('./config_loader.cjs');
 
@@ -40,6 +41,21 @@ const loginRateLimiter = createRateLimiter({
   max: CFG.loginMax,
   windowMs: CFG.loginWindowMs,
 });
+
+// 一次性 ticket 存储:mint 时写入,GET /login?ticket= 消费时立即删除(Task 4)。
+// hub→单机自动登录流:hub 持 Bearer 调此端点拿 15s ticket,再引导浏览器 GET /login?ticket=
+// 完成登录(浏览器无 Bearer)。DoS 双闸:TICKET_MAX 防内存爆,rate limiter 防滥mint。
+const tickets = new Map();
+const TICKET_TTL_MS = 15_000;
+const TICKET_MAX = 1024;
+// 定时清扫过期 ticket(30s);unref 让测试进程 / CLI 能自然退出,不被 interval 挂住。
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of tickets) {
+    if (v.expires <= now) tickets.delete(k);
+  }
+}, 30_000).unref();
+const ticketRateLimiter = createRateLimiter({ max: 30, windowMs: 60_000 });
 
 function hasFlag(flag) {
   return process.argv.includes(flag);
@@ -68,6 +84,9 @@ let webServerStarted = false;
 app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// Referrer-Policy:同源——单机 ticket 登录跳转链不漏 Referer(spec §3.4)
+app.use((req, res, next) => { res.setHeader('Referrer-Policy', 'same-origin'); next(); });
 
 // WebSocket 客户端
 const clients = new Map();
@@ -285,8 +304,33 @@ function startWebServer() {
   };
 
   app.get('/login', (req, res) => {
+    const nextRaw = typeof req.query.next === 'string' ? req.query.next : '';
+    const nextPath = auth.normalizeNextPath(nextRaw) || '/';
+
+    // ticket 消费(hub /jump 跳来):get → delete → check,三步无 await,锁死一次性。
+    // 任何失败分支都中性回登录页(保留 next、不设 cookie),防止重放与信息泄漏。
+    const ticketRaw = typeof req.query.ticket === 'string' ? req.query.ticket : '';
+    if (ticketRaw) {
+      const entry = tickets.get(ticketRaw);
+      if (entry) tickets.delete(ticketRaw);           // 先删,保证一次性
+      if (!entry || entry.expires <= Date.now()) {
+        return res.redirect(`/login?next=${encodeURIComponent(nextPath)}`);
+      }
+      // 消费成功 → 设 cookie(选项与 POST /login 完全一致)
+      const secure = req.secure || String(req.get('x-forwarded-proto') || '').toLowerCase().startsWith('https');
+      res.cookie('cc_web_auth', AUTH_TOKEN, {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure,
+        path: '/',
+      });
+      return res.redirect(nextPath);
+    }
+
+    // AUTH_TOKEN 未设时不再丢 next(bug fix):auth disabled = 用户已通过,
+    // 直接跳到 next,而不是把 next 扔掉只回 /。
     if (!AUTH_TOKEN) {
-      res.redirect('/');
+      res.redirect(nextPath);
       return;
     }
     res.sendFile(path.join(__dirname, 'public', 'login.html'));
@@ -363,6 +407,20 @@ function startWebServer() {
   };
 
   app.use(requireAuth);
+
+  // 一次性 ticket mint:hub 持 Bearer 调此端点 → 返回 15s 内有效的 ticket。
+  // requireAuth 已校验 Bearer(经 auth.isAuthorized);rate limit 防滥 mint;
+  // TICKET_MAX 防内存 DoS。Task 4 在 GET /login?ticket= 立即删除消费。
+  app.post('/api/auth/ticket', (req, res) => {
+    const { limited } = ticketRateLimiter.check(req.ip);
+    if (limited) return res.status(429).type('text/plain').send('rate limited');
+    if (tickets.size >= TICKET_MAX) {
+      return res.status(503).type('json').send(JSON.stringify({ error: 'ticket capacity' }));
+    }
+    const ticket = crypto.randomBytes(32).toString('base64url');
+    tickets.set(ticket, { expires: Date.now() + TICKET_TTL_MS });
+    res.type('json').send(JSON.stringify({ ticket }));
+  });
 
   // API 路由
   app.get('/api/config', (req, res) => {

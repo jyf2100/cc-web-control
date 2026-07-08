@@ -41,7 +41,7 @@ test('GET /api/global-dashboard 聚合多机(带 hub token cookie)', async () =>
       // 等首轮聚合(intervalMs=100,start() 即刻跑一次,留余量)
       await new Promise((r) => setTimeout(r, 250));
       const res = await fetch(`http://127.0.0.1:${hub.port}/api/global-dashboard`, {
-        headers: { Cookie: 'cc_web_auth=hubtok' },
+        headers: { Cookie: 'cc_web_hub_auth=hubtok' },
       });
       assert.equal(res.status, 200);
       const body = await res.json();
@@ -97,7 +97,7 @@ test('POST /api/sessions 代理到目标机', async () => {
     await withHub([s1], 'hubtok', async (hub) => {
       const res = await fetch(`http://127.0.0.1:${hub.port}/api/sessions`, {
         method: 'POST',
-        headers: { Cookie: 'cc_web_auth=hubtok', 'Content-Type': 'application/json' },
+        headers: { Cookie: 'cc_web_hub_auth=hubtok', 'Content-Type': 'application/json' },
         body: JSON.stringify({ machine: 'mc1', name: 'newS', cwd: '/p' }),
       });
       assert.equal(res.status, 201);
@@ -162,7 +162,7 @@ test('单机离线降级:该机 online:false,其余机正常', async () => {
       await s1.stop();
       await new Promise((r) => setTimeout(r, 350)); // 等下一轮轮询(intervalMs:100)
       const res = await fetch(`http://127.0.0.1:${hub.port}/api/global-dashboard`, {
-        headers: { Cookie: 'cc_web_auth=hubtok' },
+        headers: { Cookie: 'cc_web_hub_auth=hubtok' },
       });
       const body = await res.json();
       assert.equal(body.machines.length, 2); // 整体不崩,s1 仍在列表
@@ -185,7 +185,7 @@ test('DELETE /api/sessions/:machine/:name 代理到目标机', async () => {
     await withHub([s1], 'hubtok', async (hub) => {
       const res = await fetch(`http://127.0.0.1:${hub.port}/api/sessions/mc1/theSess`, {
         method: 'DELETE',
-        headers: { Cookie: 'cc_web_auth=hubtok' },
+        headers: { Cookie: 'cc_web_hub_auth=hubtok' },
       });
       assert.equal(res.status, 200);
       assert.equal(deleted, 'theSess');
@@ -227,7 +227,7 @@ test('POST /login 正确 token → 302 + 设置 httpOnly cookie', async () => {
       });
       assert.equal(res.status, 302);
       const setCookie = res.headers.get('set-cookie') || '';
-      assert.match(setCookie, /cc_web_auth=hubtok/, '应设置 cc_web_auth cookie');
+      assert.match(setCookie, /cc_web_hub_auth=hubtok/, '应设置 cc_web_hub_auth cookie');
       assert.match(setCookie, /HttpOnly/i, 'cookie 必须 httpOnly');
     });
   } finally {
@@ -291,29 +291,29 @@ test('未授权 GET / → 302 重定向到 /login?next=', async () => {
   }
 });
 
-test('已授权 GET / → 302 重定向到 /console.html(避免落入单机 index.html)', async () => {
+test('已授权 GET / → 302 重定向到 /dashboard.html(避免落入单机 index.html)', async () => {
   const s1 = await new StubMachine({ token: 't1' }).start();
   try {
     await withHub([s1], 'hubtok', async (hub) => {
       const res = await fetch(`http://127.0.0.1:${hub.port}/`, {
         redirect: 'manual',
-        headers: { Cookie: 'cc_web_auth=hubtok' },
+        headers: { Cookie: 'cc_web_hub_auth=hubtok' },
       });
       assert.equal(res.status, 302);
-      assert.equal(res.headers.get('location'), '/console.html');
+      assert.equal(res.headers.get('location'), '/dashboard.html');
     });
   } finally {
     await s1.stop();
   }
 });
 
-test('已授权 GET /dashboard.html 直服 HTML(不再重定向到 /console.html,bug 3 根治)', async () => {
+test('已授权 GET /dashboard.html 直服 HTML(不走重定向,bug 3 根治)', async () => {
   const s1 = await new StubMachine({ token: 't1' }).start();
   try {
     await withHub([s1], 'hubtok', async (hub) => {
       const res = await fetch(`http://127.0.0.1:${hub.port}/dashboard.html`, {
         redirect: 'manual',
-        headers: { Cookie: 'cc_web_auth=hubtok' },
+        headers: { Cookie: 'cc_web_hub_auth=hubtok' },
       });
       assert.equal(res.status, 200);
       const body = await res.text();

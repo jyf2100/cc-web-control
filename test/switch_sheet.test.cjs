@@ -128,3 +128,21 @@ test('createSwitchSheet 源码契约:hideProjects 可跳过项目段 + ariaLabel
   assert.match(src, /opts\.ariaLabel/);
   assert.match(src, /'启动项目'/);   // 默认值保留(向后兼容)
 });
+
+// ============================================================
+// 迁自 console_style.test.cjs(Task 13 拆分):switch-sheet a11y 源码契约段
+// 读 switch_sheet.cjs 源码,锁 ARIA/inert/焦点陷阱/Esc 等模态可达性。
+// ============================================================
+test('switch-sheet a11y:role=dialog + aria-modal + inert 背景(迁自 console_style)', () => {
+  const src = fs.readFileSync('public/switch_sheet.cjs', 'utf8');
+  // switch_sheet.cjs 用 setAttribute('role','dialog') 两参形式,非属性字面量 → 按实际源码匹配
+  assert.match(src, /['"]role['"],\s*['"]dialog['"]/);
+  assert.match(src, /['"]aria-modal['"],\s*['"]true['"]/);
+  assert.match(src, /setAttribute\(['"]inert['"]/);
+});
+test('switch-sheet 焦点陷阱 + Esc/Ctrl-C 关闭 + focus return(迁自 console_style)', () => {
+  const src = fs.readFileSync('public/switch_sheet.cjs', 'utf8');
+  assert.match(src, /handleTabTrap/);
+  assert.match(src, /shouldCloseOnKey/);
+  assert.match(src, /lastFocused\.focus/);
+});

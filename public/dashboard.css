@@ -30,7 +30,7 @@ html, body {
 .nav-link.cur { background: var(--bg); color: var(--fg); font-weight: 600; }
 .nav-link:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
 
-.main { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 20px; }
+.main { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 20px calc(16px + env(safe-area-inset-bottom)); }
 .session-list { list-style: none; display: flex; flex-direction: column; gap: 9px; }
 
 /* 会话卡片:§7.2:210 + §6:172 */
@@ -78,28 +78,7 @@ html, body {
     .session { flex-wrap: wrap; }
 }
 
-/* === 底部 tab bar(看板页独立一份,不引 style.css)=== */
-.bottom-tabbar {
-    display: flex; flex-shrink: 0;
-    background: var(--surface-2); border-top: 1px solid var(--border);
-    padding-bottom: env(safe-area-inset-bottom);
-}
-.tab {
-    flex: 1; min-height: 44px; padding: 8px 0;
-    display: flex; flex-direction: column; align-items: center; gap: 2px;
-    background: none; border: none; color: var(--fg-2);
-    font-family: var(--sans); font-size: 11px; text-decoration: none; cursor: pointer;
-    position: relative;
-}
-.tab-icon { font-size: 16px; line-height: 1; }
-.tab-label { line-height: 1; }
-.tab--active { color: var(--accent-2); font-weight: 600; }
-.tab--active::before {
-    content: ''; position: absolute; top: 0; left: 30%; right: 30%; height: 2px;
-    background: var(--accent-2); border-radius: 0 0 2px 2px;
-}
-.tab:focus-visible { outline: 2px solid var(--accent-2); outline-offset: -2px; }
-
+/* tabbar 已删(Task 10 删 HTML);.visually-hidden 保留 */
 .visually-hidden {
     position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
     overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
@@ -166,8 +145,12 @@ html, body {
 .board-grid { list-style:none; margin:0; padding:0; display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:10px; }
 .board-body { list-style:none; margin:0; padding:0; } /* #board-body 分组容器:非 grid,让 machine-group 撑满整行(组内 .board-grid 才是卡片网格;若外层 grid 会把分组压成单格 → 卡片一列)*/
 .board-empty { grid-column:1/-1; padding:32px; text-align:center; color:var(--fg-2); }
-.card-row { list-style:none; }
-.card { position:relative; display:grid; grid-template-columns:auto auto auto 1fr auto; grid-template-rows:auto auto auto; align-items:center; gap:2px 8px; width:100%; min-height:72px; padding:8px 10px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r); cursor:pointer; text-align:left; font:inherit; color:var(--fg); box-shadow:inset 3px 0 0 transparent; transition:transform .15s ease, border-color .15s ease, box-shadow .15s ease; }
+/* Plan A:<li.card-row> 同级 <button.card__select aria-pressed> + <a.card>;
+   card-row flex 让 button+a 同行,grid 减为 4 列(select 移出)。 */
+.card-row { list-style:none; display:flex; align-items:stretch; }
+.card-row > .card__select { flex:0 0 auto; }
+.card-row > .card { flex:1 1 auto; min-width:0; }
+.card { position:relative; display:grid; grid-template-columns:auto auto 1fr auto; grid-template-rows:auto auto auto; align-items:center; gap:2px 8px; width:100%; min-height:72px; padding:8px 10px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r); cursor:pointer; text-align:left; font:inherit; color:var(--fg); box-shadow:inset 3px 0 0 transparent; transition:transform .15s ease, border-color .15s ease, box-shadow .15s ease; }
 @media (hover:hover){ .card:hover { transform:translateY(-1px); } }
 .card:focus-visible { outline:2px solid var(--accent-2); outline-offset:2px; }
 .card.active { box-shadow:inset 3px 0 0 var(--accent-2); }
@@ -178,12 +161,11 @@ html, body {
 .card.card--selected[data-status="errored"] { box-shadow:inset 3px 0 0 var(--errored), inset 0 0 0 2px var(--accent-2); }
 .card[data-status="waiting"] { background:var(--waiting-bg); }
 .card[data-status="unknown"] { border-style:dashed; }
-.card__select { grid-column:1; grid-row:1; font-size:.9em; color:var(--fg-2); user-select:none; display:inline-flex; align-items:center; justify-content:center; width:1.4em; }
-.card .s-dot { grid-column:2; grid-row:1; }
-.card .s-icon { grid-column:3; grid-row:1; }
-.card__name { grid-column:4; grid-row:1; font-weight:600; font-size:.9em; }
-.card__time { grid-column:5; grid-row:1; color:var(--fg-2); font-size:.7em; }
-.card__session { grid-column:4; grid-row:2; color:var(--fg-2); font-size:.75em; }
+.card .s-dot { grid-column:1; grid-row:1; }
+.card .s-icon { grid-column:2; grid-row:1; }
+.card__name { grid-column:3; grid-row:1; font-weight:600; font-size:.9em; }
+.card__time { grid-column:4; grid-row:1; color:var(--fg-2); font-size:.7em; }
+.card__session { grid-column:3; grid-row:2; color:var(--fg-2); font-size:.75em; }
 .card__last { grid-column:1 / -1; grid-row:3; color:var(--fg-2); font-size:.75em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
 /* card--single 已移除(:7685 多机 hub 永远机器维度,singleMachine 废弃,见 gap-audit §1) */
@@ -276,11 +258,11 @@ html, body {
 .machine-group--offline .machine-group__count{background:var(--surface-3)}
 .machine-group .board-grid{margin-top:4px}
 
-/* 卡片多选交互态(选中由 JS 加 card--selected + aria-checked=true) */
+/* 卡片多选交互态(选中由 JS 加 card--selected + .card__select aria-pressed=true) */
 .card__select{cursor:pointer;min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
 .card__select:hover{background:var(--accent-bg);border-radius:var(--r-xs)}
-.card__select[aria-checked="true"]{color:var(--accent-2)}
-.card__select:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px}   /* P6:WCAG 2.4.7,tabindex=0 键盘可达 */
+.card__select[aria-pressed="true"]{color:var(--accent-2)}
+.card__select:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px}   /* P6:WCAG 2.4.7,原生 button 键盘可达 */
 
 /* === 三页面:看板扇出 bar(shell 内 flex 子元素,非 fixed)=== */
 .fanout-bar{flex-shrink:0;display:flex;align-items:center;gap:10px;padding:10px 16px;
@@ -305,45 +287,21 @@ html, body {
 /* .console-term base 规则已改 flex:1;min-height:0(单机模式 detectConsoleMode 显示 term 时撑满剩余视口;多机模式 term hidden 不占位)*/
 .console-term[data-collapsed="true"]{flex:0 0 auto} /* 折叠态不撑满 */
 
-/* === T8 §4.1/§4.2:显隐兜底 —— .console-hero/.console-term/.tab 的 display:flex 会盖过
+/* === T8 §4.1/§4.2:显隐兜底 —— .console-hero/.console-term 的 display:flex 会盖过
    UA [hidden]{display:none},detectConsoleMode 切 hidden=true 须显式 display:none,
-   否则单机模式 hero 不隐 / 多机模式 term+⇄ 不隐(违反"扇出归看板,控制台不看被控")=== */
-#main-agent-panel[hidden], .console-term[hidden], .tab[hidden] { display: none; }
+   否则单机模式 hero 不隐 / 多机模式 term+⇄ 不隐(违反"扇出归看板,控制台不看被控")。
+   .tab[hidden] 随 tabbar 删除(Task 9 删 CSS / Task 10 删 HTML)已无规则可盖,这里同步移除。=== */
+#main-agent-panel[hidden], .console-term[hidden] { display: none; }
 
-/* === 切换 sheet 模态(三页面 §4.2:从 style.css 迁入 dashboard.css,控制台页才生效)===
-   原只在 style.css(仅 index.html 引),三页面重构拉了 switch_sheet.cjs 进控制台但漏拉 CSS →
-   抽屉 position:static 流式挂 body 末尾("挂在下面",2026-07-05 运行时坐实 sheetPosition:static / y:606)。
-   迁此块后:backdrop fixed 全屏遮罩 + sheet fixed 底部抽屉 + sheetUp 动画。token 经 @import tokens.css 解析。 */
-.switch-sheet-backdrop { position: fixed; inset: 0; background: rgba(38, 37, 30, 0.35); z-index: 1000; border: none; }
-.switch-sheet {
-    position: fixed; left: 0; right: 0; bottom: 0; z-index: 1001;
-    background: var(--bg-2); border-top: 1px solid var(--border-2); border-radius: var(--r) var(--r) 0 0;
-    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.12);
-    padding: 8px 16px calc(16px + env(safe-area-inset-bottom));
-    max-height: 70vh; overflow-y: auto; animation: sheetUp 0.25s ease both;
+/* switch-sheet 模态 CSS 块已删(switch-sheet 功能随三页面收尾移除;switch_sheet.cjs JS 暂留,T13/T11 处理)。*/
+
+/* === Task 10:header 登出按钮(tabbar 删除后,登出入口下沉到 header 右侧)=== */
+.topbar-logout-form { margin-left: auto; }
+.topbar-logout-btn {
+  min-height: 44px; min-width: 44px; padding: 0 12px;   /* WCAG 2.5.5 44pt 触摸目标 */
+  font: inherit; font-size: 13px; color: var(--fg-2);
+  background: transparent; border: 1px solid var(--border-2); border-radius: var(--r);
+  cursor: pointer; touch-action: manipulation;
 }
-@keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-.switch-sheet-handle { width: 36px; height: 4px; border-radius: var(--r-pill); background: var(--border-2); margin: 0 auto 12px; }
-.switch-sheet-section-title {
-    margin: 0 0 8px; font-family: var(--mono); font-size: 11px; color: var(--fg-2);
-    letter-spacing: 0.04em; text-transform: lowercase;
-}
-.switch-sheet-meta {
-    margin: 0 0 12px; font-family: var(--mono); font-size: 11px; color: var(--fg-2);
-    letter-spacing: 0.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.switch-sheet-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.switch-sheet-btn {
-    width: 100%; min-height: 44px; padding: 0 14px; display: flex; align-items: center; gap: 8px;
-    border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); color: var(--fg);
-    font-family: var(--mono); font-size: 13px; text-align: left; cursor: pointer;
-}
-.switch-sheet-btn--launch::before { content: '↗'; display: inline-block; margin-right: 6px; color: var(--accent-2); }
-.switch-sheet-btn:disabled, .switch-sheet-item--current .switch-sheet-btn {
-    background: var(--accent-bg); border-color: var(--accent-dim); color: var(--accent-2); font-weight: 600;
-}
-.switch-sheet-btn:not(:disabled):active { background: var(--surface-2); }
-.switch-sheet-btn:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
-.switch-sheet-projects { margin-top: 12px; padding-top:12px; border-top: 1px solid var(--border); }
-.switch-sheet-projects-empty { margin: 4px 0 0; font-family: var(--sans); font-size: 12px; color: var(--fg-2); }
-@media (prefers-reduced-motion: reduce) { .switch-sheet { animation: none; } }
+.topbar-logout-btn:hover { color: var(--accent-2); border-color: var(--accent-2); }
+.topbar-logout-btn:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }   /* WCAG 2.4.7 */
