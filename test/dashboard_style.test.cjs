@@ -219,3 +219,48 @@ test('P8:#term-input 显式 font-size:16px(迁自 console_style)', () => {
   assert.ok(rule, '#term-input 规则应存在');
   assert.match(rule[0], /font-size:\s*16px/, '#term-input 应显式 font-size:16px');
 });
+
+// ============================================================
+// Task 4:.card--hub IA(对齐 demo — flex column + card__head + line-clamp + 清状态染色)
+// ============================================================
+test('T4: .card--hub 用 flex column(非基础 grid)', () => {
+  const rule = css.match(/\.card--hub\s*\{[^}]*\}/);
+  assert.ok(rule, '.card--hub 规则应存在');
+  assert.match(rule[0], /display:\s*flex/);
+  assert.match(rule[0], /flex-direction:\s*column/);
+});
+test('T4: .card--hub .card__head flex 包裹层', () => {
+  assert.match(css, /\.card--hub\s+\.card__head\s*\{[^}]*display:\s*flex/);
+});
+test('T4: hub 摘要 .card--hub .card__last line-clamp:2 + min-height:38 + --fg-2', () => {
+  const rule = css.match(/\.card--hub\s+\.card__last\s*\{[^}]*\}/);
+  assert.ok(rule);
+  assert.match(rule[0], /-webkit-line-clamp:\s*2/);
+  assert.match(rule[0], /min-height:\s*38px/);
+  assert.match(rule[0], /var\(--fg-2\)/);
+  assert.ok(!/var\(--fg-3\)/.test(rule[0]), 'hub 摘要不应 --fg-3');
+});
+test('T4: hub 状态点 11px(.card--hub .s-dot)', () => {
+  const rule = css.match(/\.card--hub\s+\.s-dot\s*\{[^}]*\}/);
+  assert.ok(rule);
+  assert.match(rule[0], /width:\s*11px/);
+  assert.match(rule[0], /height:\s*11px/);
+});
+test('T4: hub 清状态染色 — .card--hub[data-status="errored"] 无左缘条(box-shadow:none)', () => {
+  // spec 非目标:errored 只靠色点,不加左缘条。基础 .card[data-status=errored] 有左缘条,hub 必须清。
+  const rule = css.match(/\.card--hub\[data-status="errored"\]\s*\{[^}]*\}/);
+  assert.ok(rule, '.card--hub[data-status=errored] 覆盖规则应存在');
+  assert.match(rule[0], /box-shadow:\s*none/);
+});
+test('T4: .card--hub hover border+bg(demo L76)', () => {
+  assert.match(css, /\.card--hub:hover\s*\{[^}]*border-color:\s*var\(--accent-dim\)/);
+  assert.match(css, /\.card--hub:hover\s*\{[^}]*background:\s*var\(--surface-2\)/);
+});
+test('T4: .sr-only 类定义(色盲状态冗余,demo L99)', () => {
+  assert.match(css, /\.sr-only\s*\{[^}]*position:\s*absolute/);
+});
+test('T4: .card__off 离线标签样式(demo L86)', () => {
+  const rule = css.match(/\.card__off\s*\{[^}]*\}/);
+  assert.ok(rule);
+  assert.match(rule[0], /var\(--offline\)/);
+});

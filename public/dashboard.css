@@ -168,6 +168,34 @@ html, body {
 .card__session { grid-column:3; grid-row:2; color:var(--fg-2); font-size:.75em; }
 .card__last { grid-column:1 / -1; grid-row:3; color:var(--fg-2); font-size:.75em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
+/* === hub 单卡 IA(摘要为中心,对齐 demo /tmp/dashboard-redesign-demo.html L75–L88)===
+   board_render hub 模式输出 .card--hub(无 s-icon,card__head 包裹层,会话名主锚)。
+   覆盖基础 .card 的 grid 为 flex column;清除状态染色/左缘条(spec:只靠色点)。
+   几何(等高/等宽/列宽)见 Task 5;色点环/空心见 Task 7。*/
+.card--hub {
+  display: flex; flex-direction: column; gap: 7px; padding: 12px 14px;
+  background: var(--surface); box-shadow: none; border-style: solid;
+}
+.card--hub .card__head { display: flex; align-items: center; gap: 8px; }
+.card--hub .s-dot { width: 11px; height: 11px; flex-shrink: 0; }
+.card--hub .card__name { font-weight: 600; font-size: 13.5px; color: var(--fg); }
+.card--hub .card__off { font-family: var(--mono); font-size: 10px; color: var(--offline); margin-left: 6px; }
+.card--hub .card__time { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--fg-2); flex-shrink: 0; }
+.card--hub .card__last {
+  color: var(--fg-2); font-size: 13px; line-height: 1.45; min-height: 38px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+/* hub 清状态染色:waiting 无底色 / errored 无左缘条 / unknown 实线(spec 非目标:只靠色点)*/
+.card--hub[data-status="waiting"] { background: var(--surface); }
+.card--hub[data-status="errored"] { box-shadow: none; }
+.card--hub[data-status="unknown"] { border-style: solid; }
+.card--hub:hover { border-color: var(--accent-dim); background: var(--surface-2); }
+/* sr-only:色盲/低视力状态冗余(状态不唯一靠色,demo L99) */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
 /* card--single 已移除(:7685 多机 hub 永远机器维度,singleMachine 废弃,见 gap-audit §1) */
 
 /* 陈旧会话折叠区:<li> 占整行,<details> 默认 closed 收起 */
