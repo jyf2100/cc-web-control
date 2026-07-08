@@ -350,3 +350,65 @@ test('groupByMachine null/空 → []', () => {
   assert.deepEqual(B.groupByMachine(null), []);
   assert.deepEqual(B.groupByMachine([]), []);
 });
+
+// ---- buildCardInner hub 模式(摘要为中心 IA,对齐 demo /tmp/dashboard-redesign-demo.html)----
+test('buildCardInner hub:card--hub class + card__head 包裹层 + 会话名主锚 + 无 s-icon', () => {
+  const html = B.buildCardInner(
+    { id: 'm1', name: 'mac-pro', online: true },
+    { name: 'sess-1', status: 'working', lastLine: 'building…' },
+    { mode: 'hub', lastTs: 980000, now: 1000000 }
+  );
+  assert.match(html, /class="card card--hub"/);
+  assert.match(html, /<div class="card__head">/);                       // head 包裹层(demo 结构)
+  assert.match(html, /<span class="card__name">sess-1<\/span>/);        // 会话名主锚(非机器名)
+  assert.doesNotMatch(html, /s-icon/);                                   // hub 删 s-icon
+  assert.match(html, /<div class="card__last">building…<\/div>/);       // 摘要 div(非 span)
+});
+
+test('buildCardInner hub:加 sr-only 中文状态(色盲冗余,状态不唯一靠色)', () => {
+  const cases = [
+    ['working', '运行中'], ['waiting', '等待中'], ['errored', '出错'],
+    ['idle', '空闲'], ['offline', '离线'],
+  ];
+  for (const [st, cn] of cases) {
+    const html = B.buildCardInner({ id: 'm', name: 'a', online: true }, { name: 's', status: st }, { mode: 'hub' });
+    assert.match(html, new RegExp('<span class="sr-only">' + cn + '</span>'), `status=${st} 应有 sr-only「${cn}」`);
+  }
+});
+
+test('buildCardInner hub 离线卡:card__off + aria-disabled + "前在线" 时间 + 占位摘要', () => {
+  const html = B.buildCardInner(
+    { id: 'm2', name: 'off-machine', online: false },
+    { name: 'sess-1', status: 'offline', lastLine: 'last output' },
+    { mode: 'hub', lastTs: 720000, now: 10000000 }
+  );
+  assert.match(html, /aria-disabled="true"/);                            // 离线不可激活语义
+  assert.match(html, /<span class="card__off">离线<\/span>/);
+  assert.match(html, /主机离线,暂无实时状态/);
+  assert.match(html, /上次摘要:last output/);
+  // lastTs=720000,now=10000000 → diff=9280000ms ≈ 2.58h → "2h 前" + "在线" = "2h 前在线"
+  assert.match(html, /<span class="card__time">2h 前在线<\/span>/);
+});
+
+test('buildCardInner hub 离线卡无 lastLine:固定占位文案,不残「上次摘要:」', () => {
+  const html = B.buildCardInner(
+    { id: 'm2', name: 'off', online: false },
+    { name: 's', status: 'offline', lastLine: '' },
+    { mode: 'hub' }
+  );
+  assert.match(html, /主机离线,暂无实时状态。/);
+  assert.doesNotMatch(html, /上次摘要/);
+});
+
+test('buildCardInner 默认 single 模式仍机器名主锚 + 保留 s-icon(向后兼容,无 card--hub/card__head)', () => {
+  const html = B.buildCardInner(
+    { id: 'm1', name: 'mac-pro', online: true },
+    { name: 'sess', status: 'working' },
+    {} // 不传 mode → 默认 single(旧行为)
+  );
+  assert.doesNotMatch(html, /card--hub/);
+  assert.doesNotMatch(html, /card__head/);
+  assert.match(html, /<span class="card__name">mac-pro<\/span>/);        // 仍机器名
+  assert.match(html, /s-icon/);                                          // single 保留 s-icon
+  assert.doesNotMatch(html, /sr-only/);
+});
