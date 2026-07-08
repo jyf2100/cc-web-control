@@ -47,8 +47,8 @@ test('startClaudeInSession: 续接判断走 shouldContinue', () => {
     '未调用 shouldContinue(cwd)');
 });
 
-test('startClaudeInSession: DEFAULT_SESSION 调用走 useClaudeContinue(范围限定)', () => {
+test('startClaudeInSession: 默认会话(RESOLVED_DEFAULT_SESSION)启动走 useClaudeContinue(范围限定)', () => {
   const initFn = extractFunction(SERVER, 'initAndAttachSession');
-  assert.ok(/startClaudeInSession\(\s*DEFAULT_SESSION\s*,\s*cwd\s*,\s*\{\s*useClaudeContinue:\s*true\s*\}\s*\)/.test(initFn),
-    'DEFAULT_SESSION 启动未传 { useClaudeContinue: true },CLAUDE_CONTINUE 行为被破坏');
+  assert.ok(/startClaudeInSession\(\s*RESOLVED_DEFAULT_SESSION\s*,\s*cwd\s*,\s*\{\s*useClaudeContinue:\s*true\s*\}\s*\)/.test(initFn),
+    'RESOLVED_DEFAULT_SESSION 启动未传 { useClaudeContinue: true },CLAUDE_CONTINUE 行为被破坏');
 });
