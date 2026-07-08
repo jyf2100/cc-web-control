@@ -20,6 +20,7 @@ const { buildClaudeLaunchCommand, shellEscapeForDoubleQuotes } = require('./clau
 const { getDashboardCache, buildDashboardPayload } = require('./dashboard_cache.cjs');
 const { cwdToSlug } = require('./dashboard_slug.cjs');
 const { resolveDefaultSessionForCwd } = require('./session_default.cjs');
+const { isSessionInUse } = require('./session_in_use.cjs');
 const { readBinding, deleteBinding, migrateStaleBindings } = require('./dashboard_binding.cjs');
 const { shouldContinue } = require('./claude_session.cjs');
 const crypto = require('node:crypto');
@@ -548,6 +549,10 @@ function startWebServer() {
     try {
       if (!requireSameOriginForUnsafeMethods(req, res)) return;
       const name = req.params.name;
+      // 防自杀:控制台正连着该会话(WS 活跃)则拒绝删除(多标签/多设备兜底)
+      if (isSessionInUse(name, clients)) {
+        return res.status(409).json({ success: false, error: 'session_in_use' });
+      }
       // kill 前取 cwd → slug,清理绑定文件(否则同名会话复用会读到旧 sid,定位错 jsonl)
       const sessions = await listSessions();
       const target = sessions.find((s) => s.name === name);
