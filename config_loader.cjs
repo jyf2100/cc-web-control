@@ -179,6 +179,12 @@ const SINGLE_SCHEMA = {
   loginWindowMs:       { type: 'number',  env: 'CC_WEB_LOGIN_WINDOW_MS',       default: 900000, min: 1 },
   dashboardIntervalMs: { type: 'number',  env: 'CC_WEB_DASHBOARD_INTERVAL_MS', default: 2000, min: 1 },
   wsPingInterval:      { type: 'number',  env: 'CC_WEB_WS_PING_INTERVAL',      default: 30000, min: 1 },
+  hubUrl:              { type: 'string',  env: 'CC_WEB_HUB_URL',               default: '' },
+  hubToken:            { type: 'string',  env: 'CC_WEB_HUB_TOKEN',             default: '' },
+  hubRegisterToken:    { type: 'string',  env: 'CC_WEB_HUB_REGISTER_TOKEN',    default: '' },
+  machineId:           { type: 'string',  env: 'CC_WEB_MACHINE_ID',            default: '' },
+  machineName:         { type: 'string',  env: 'CC_WEB_MACHINE_NAME',          default: '' },
+  publicUrl:           { type: 'string',  env: 'CC_WEB_PUBLIC_URL',            default: '' },
 };
 
 // 7685(hub)全字段 schema:env / default / type 对齐 spec §5.2(11 字段,mainAgent 为 passthrough 对象)
@@ -190,6 +196,7 @@ const HUB_SCHEMA = {
   intervalMs:        { type: 'number', env: 'CC_WEB_HUB_DASHBOARD_INTERVAL_MS', default: 2000, min: 1 },
   machinesFile:      { type: 'string', env: 'CC_WEB_HUB_MACHINES_FILE',         default: DEFAULT_HUB_MACHINES_FILE, nonEmpty: true },
   hubToken:          { type: 'string', env: 'CC_WEB_HUB_TOKEN',                 default: '' },
+  hubRegisterToken:  { type: 'string', env: 'CC_WEB_HUB_REGISTER_TOKEN',        default: '' },
   noOpen:            { type: 'bool',   env: 'CC_WEB_HUB_NO_OPEN',               default: false },
   loginMax:          { type: 'number', env: 'CC_WEB_LOGIN_MAX',                 default: 5, min: 1 },
   loginWindowMs:     { type: 'number', env: 'CC_WEB_LOGIN_WINDOW_MS',           default: 900000, min: 1 },
