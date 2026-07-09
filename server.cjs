@@ -26,6 +26,7 @@ const { shouldContinue } = require('./claude_session.cjs');
 const crypto = require('node:crypto');
 const { createRateLimiter } = require('./rate_limit.cjs');
 const { loadConfig, SINGLE_SCHEMA, SINGLE_CONFIG_PATH } = require('./config_loader.cjs');
+const { RegisterClient } = require('./register_client.cjs');
 
 // 配置文件(~/.cc-web-control/config.json,--config 覆盖)+ env 覆盖(env > file > default)。
 // 无文件 = 纯 env/默认 = 现状行为(向后兼容)。warnings:未知字段 / token 权限过松。
@@ -75,6 +76,12 @@ const NO_ATTACH = CFG.noAttach || hasFlag('--no-attach');
 const WEB_ONLY = CFG.webOnly || hasFlag('--web-only');
 const CLAUDE_WRAPPER = path.join(__dirname, 'claude-wrapper.sh');
 const AUTH_TOKEN = CFG.authToken;
+const HUB_URL = CFG.hubUrl;
+const HUB_REGISTER_TOKEN = CFG.hubRegisterToken;
+const HUB_TOKEN = CFG.hubToken;
+const MACHINE_ID = CFG.machineId;
+const MACHINE_NAME = CFG.machineName || '';
+const PUBLIC_URL = CFG.publicUrl;
 const CLAUDE_CONTINUE = CFG.claudeContinue;
 const PROJECT_ROOTS = CFG.projectRoots;
 // 启动 cwd 命中某项目根 → 'claude-<项目名>'(与项目启动区 client.js:845 同名,避免双会话);否则回退 CFG.session。
@@ -749,6 +756,9 @@ function startWebServer() {
     });
   });
 
+  // 反向注册:配了 CC_WEB_HUB_URL(+token) 才启用;在 listen 回调里创建,SIGINT 里关闭
+  let registerClient = null;
+
   // 优雅退出
   process.on('SIGINT', () => {
     console.log('\n[Server] 正在关闭...');
@@ -759,6 +769,7 @@ function startWebServer() {
       if (info?.interval) clearInterval(info.interval);
       ws.close();
     }
+    if (registerClient) registerClient.close();
     server.close(() => process.exit(0));
   });
 
@@ -775,6 +786,21 @@ function startWebServer() {
         const cmd = platform === 'darwin' ? 'open' : platform === 'win32' ? 'start' : 'xdg-open';
         exec(`${cmd} http://${HOST}:${PORT}`, () => {});
       }, 1500);
+    }
+
+    // 反向注册到 hub(配了 CC_WEB_HUB_URL + token 才启用)
+    if (HUB_URL && (HUB_REGISTER_TOKEN || HUB_TOKEN)) {
+      registerClient = new RegisterClient({
+        hubUrl: HUB_URL,
+        registerToken: HUB_REGISTER_TOKEN || HUB_TOKEN,
+        authToken: AUTH_TOKEN,
+        machineId: MACHINE_ID,
+        machineName: MACHINE_NAME,
+        publicUrl: PUBLIC_URL,
+        bindHost: HOST,
+        port: PORT,
+      });
+      registerClient.start();
     }
   });
 }
