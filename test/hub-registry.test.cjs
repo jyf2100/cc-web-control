@@ -42,3 +42,27 @@ test('all() 与 getById() 不泄露 token', () => {
   // getSecret 仍能取到 token
   assert.equal(r.getSecret('mc1').token, 't1');
 });
+
+test('MachineRegistry 动态 add/remove + conn 不外泄', () => {
+  const r = new MachineRegistry([]); // 空
+  const fakeConn = { alive: true };
+  r.add({ id: 'dyn1', name: 'D1', url: 'http://h:1', token: 'secret' }, fakeConn);
+
+  assert.equal(r.all().length, 1);
+  const snap = r.all()[0];
+  assert.equal(snap.id, 'dyn1');
+  assert.equal(snap.token, undefined, 'all() 不含 token');
+  assert.equal(snap.conn, undefined, 'all() 不含 conn');
+  assert.equal(snap.online, false, 'add 后 online 初值 false（交 aggregator）');
+
+  assert.deepEqual(r.getSecret('dyn1'), { id: 'dyn1', name: 'D1', url: 'http://h:1', token: 'secret' }, 'getSecret 含 token、不含 conn');
+
+  // 重复 id 覆盖
+  r.add({ id: 'dyn1', name: 'D1-new', url: 'http://h:2', token: 'secret2' }, { alive: true });
+  assert.equal(r.all().length, 1);
+  assert.equal(r.getById('dyn1').name, 'D1-new');
+
+  r.remove('dyn1');
+  assert.equal(r.all().length, 0);
+  assert.equal(r.getSecret('dyn1'), undefined);
+});

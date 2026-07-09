@@ -344,6 +344,46 @@ test('GET /healthz 公开健康检查(无需 cookie)', async () => {
 // 此处验证 opts 显式传入时优先生效。loginMax 走通即证明 opts→createRateLimiter 通路,
 // mainAgent*/loginWindowMs 与之同构(同样从解构变量读入 createRateLimiter)。
 
+// ===== Task 5: 反向注册 + deprecate 种子 =====
+
+test('hub 接受单机反向注册(无 hub-machines.json 也能动态加机)', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'hub-reg-'));
+  const emptyMachines = path.join(tmp, 'none.json'); // 不存在
+  const hub = await startHub({ machinesFile: emptyMachines, hubToken: 'ht', host: '127.0.0.1', port: 0, intervalMs: 100 });
+  try {
+    const ws = new WebSocket(`ws://127.0.0.1:${hub.port}/api/hub/agent`, { headers: { Authorization: 'Bearer ht' } });
+    await new Promise((r) => ws.on('open', r));
+    ws.send(JSON.stringify({ type: 'register', id: 'd1', name: 'D1', url: 'http://127.0.0.1:1', token: 't' }));
+    await new Promise((r) => setTimeout(r, 120));
+    const dash = await fetch(`http://127.0.0.1:${hub.port}/api/machines`, { headers: { Authorization: 'Bearer ht' } }).then((r) => r.json());
+    assert.ok(dash.machines.some((m) => m.id === 'd1'), '动态注册的机器出现在看板');
+    ws.close();
+  } finally {
+    await hub.stop();
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('hub-machines.json 存在 → 作为种子加载 + 打印 deprecate WARN', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hub-seed-'));
+  const file = path.join(dir, 'hub-machines.json');
+  fs.writeFileSync(file, JSON.stringify({ machines: [{ id: 'seed1', name: 'S1', url: 'http://127.0.0.1:1', token: 't' }] }), { mode: 0o600 });
+  const warns = [];
+  const origWarn = console.warn;
+  console.warn = (m) => warns.push(String(m));
+  try {
+    const hub = await startHub({ machinesFile: file, hubToken: 'ht', host: '127.0.0.1', port: 0, intervalMs: 100 });
+    console.warn = origWarn;
+    assert.ok(warns.some((w) => /deprecated/i.test(w)), '应有 deprecate WARN');
+    const dash = await fetch(`http://127.0.0.1:${hub.port}/api/machines`, { headers: { Authorization: 'Bearer ht' } }).then((r) => r.json());
+    assert.ok(dash.machines.some((m) => m.id === 'seed1'), '种子机器在看板');
+    await hub.stop();
+  } finally {
+    console.warn = origWarn;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('loginMax opt:传 1 → 第 2 次 POST /login 429(opts 优先于默认 5/15min)', async () => {
   const { file, cleanup } = tmpMachinesFile([]);
   const hub = await startHub({

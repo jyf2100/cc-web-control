@@ -8,8 +8,10 @@ const http = require('node:http');
 const path = require('node:path');
 const { WebSocketServer } = require('ws');
 const auth = require('../auth.cjs');
+const { existsSync } = require('node:fs');
 const { loadMachines } = require('./config.cjs');
 const { MachineRegistry } = require('./registry.cjs');
+const { AgentRegistrar } = require('./register_server.cjs');
 const { DashboardAggregator } = require('./dashboard_aggregator.cjs');
 const { AgentClient } = require('./agent_client.cjs');
 const { WsBridge } = require('./ws_bridge.cjs');
@@ -30,6 +32,7 @@ function startHub(opts) {
     port = Number(process.env.CC_WEB_HUB_PORT) || 7685,
     intervalMs = Number(process.env.CC_WEB_HUB_DASHBOARD_INTERVAL_MS) || 2000,
     mainAgent = {},
+    registerToken = '',
     loginMax = Number.parseInt(process.env.CC_WEB_LOGIN_MAX || '', 10) || 5,
     loginWindowMs = Number.parseInt(process.env.CC_WEB_LOGIN_WINDOW_MS || '', 10) || 15 * 60 * 1000,
     mainAgentMax = Number.parseInt(process.env.CC_WEB_MAIN_AGENT_MAX || '', 10) || 6,
@@ -38,12 +41,25 @@ function startHub(opts) {
 
   if (!hubToken) throw new Error('CC_WEB_HUB_TOKEN 必设(裸奔危险)');
 
-  const machines = loadMachines(machinesFile);
+  // deprecate 窗口:hub-machines.json 存在则作静态种子 + WARN,不存在则空(靠运行时注册)
+  let machines = [];
+  if (machinesFile && existsSync(machinesFile)) {
+    machines = loadMachines(machinesFile);
+    console.warn(`[hub] hub-machines.json 已 deprecated,将在后续版本移除;请改为在各单机配置 CC_WEB_HUB_URL + CC_WEB_HUB_TOKEN(详见 README 迁移指引)`);
+  }
   const registry = new MachineRegistry(machines);
 
-  // 每机一个 agent_client(持有 token,内部用)
+  // 每机一个 agent_client(持有 token,内部用);静态种子启动即建,运行时注册由 registrar 增建
   const clients = new Map();
   for (const m of machines) clients.set(m.id, new AgentClient({ id: m.id, url: m.url, token: m.token }));
+
+  const registrar = new AgentRegistrar({
+    registry,
+    clients,
+    AgentClientCtor: AgentClient,
+    hubToken,
+    registerToken: opts.registerToken || '',
+  });
 
   const aggregator = new DashboardAggregator({
     registry,
@@ -53,6 +69,7 @@ function startHub(opts) {
       const ac = clients.get(sec.id);
       if (!ac) return { ok: false, error: `unknown machine: ${sec.id}` };
       const r = await ac.fetchDashboard();
+      if (!r.ok) registrar.notifyUnreachable(sec.id, sec.url, r.error);
       return r.ok ? { ok: true, payload: r.payload } : { ok: false, error: r.error };
     },
   });
@@ -470,6 +487,12 @@ function startHub(opts) {
   });
 
   wss.on('connection', (ws, req) => {
+    const reqUrl = new URL(req.url, 'http://x');
+    // 单机反向注册路径:Bearer 鉴权在 registrar 内,分流到此即返回
+    if (reqUrl.pathname === '/api/hub/agent') {
+      registrar.accept(ws, req);
+      return;
+    }
     // 鉴权:cookie 或 ?token= query(浏览器 WS 不能自带 header,走 query)
     const url = new URL(req.url, 'http://x');
     const queryToken = url.searchParams.get('token');
@@ -515,6 +538,7 @@ function startHub(opts) {
             try { await mainAgentHandles.localTmux.kill(mainAgentHandles.sessionName); } catch {}
           });
           aggregator.stop();
+          registrar.cleanup();
           for (const ac of clients.values()) ac.close();
           wss.close();
           await new Promise((r) => server.close(r));

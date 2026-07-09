@@ -43,6 +43,10 @@ test('server_entry.cjs:startHub 透传 4 限流 opts(loginMax/loginWindowMs/main
   assert.match(src, /mainAgentWindowMs:\s*CFG\.mainAgentWindowMs/);
 });
 
+test('server_entry.cjs:startHub 传 registerToken = CFG.hubRegisterToken', () => {
+  assert.match(src, /registerToken:\s*CFG\.hubRegisterToken/);
+});
+
 test('server_entry.cjs:NO_OPEN = CFG.noOpen || process.argv.includes(--no-open)', () => {
   assert.match(src, /NO_OPEN\s*=\s*CFG\.noOpen\s*\|\|\s*process\.argv\.includes\(['"]--no-open['"]\)/);
 });

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const { loadConfig, parseConfigFlag } = require('../config_loader.cjs');
+const { loadConfig, parseConfigFlag, SINGLE_SCHEMA, HUB_SCHEMA } = require('../config_loader.cjs');
 
 // 仅 number/string/bool 的小 schema,用于 Task 1 核心行为(全 schema 见 Task 4/5)
 const MINI = {
@@ -265,12 +265,11 @@ test('权限 warning 的 mode 显示为八进制(防 chmod 420 误用 — chmod 
   );
 });
 
-// ---- Task 4:SINGLE_SCHEMA(7684 全 15 字段)+ object passthrough ----
-const { SINGLE_SCHEMA } = require('../config_loader.cjs');
+// ---- Task 4:SINGLE_SCHEMA(7684 全 21 字段)+ object passthrough ----
 
-test('SINGLE_SCHEMA:15 字段全齐,env/default/type 对齐 spec §5.1', () => {
+test('SINGLE_SCHEMA:21 字段全齐,env/default/type 对齐 spec §5.1', () => {
   const fields = Object.keys(SINGLE_SCHEMA);
-  assert.equal(fields.length, 15, `应有 15 字段,实际 ${fields.length}: ${fields.join(',')}`);
+  assert.equal(fields.length, 21, `应有 21 字段,实际 ${fields.length}: ${fields.join(',')}`);
   assert.equal(SINGLE_SCHEMA.port.env, 'CC_WEB_PORT');
   assert.equal(SINGLE_SCHEMA.port.default, 7684);
   assert.equal(SINGLE_SCHEMA.port.type, 'port');
@@ -356,16 +355,16 @@ test('object 默认值返回新引用(防 schema default 被突变污染 — Tas
   assert.deepEqual(r2.config.ma, {}, '第二次加载的默认 object 应干净');
 });
 
-// ---- Task 5:HUB_SCHEMA(7685 全 11 字段)+ mainAgent passthrough ----
-const { HUB_SCHEMA, HUB_CONFIG_PATH } = require('../config_loader.cjs');
+// ---- Task 5:HUB_SCHEMA(7685 全 12 字段)+ mainAgent passthrough ----
+const { HUB_CONFIG_PATH } = require('../config_loader.cjs');
 
 test('HUB_CONFIG_PATH 默认指向 ~/.cc-web-control/hub-config.json', () => {
   assert.equal(HUB_CONFIG_PATH, path.join(os.homedir(), '.cc-web-control', 'hub-config.json'));
 });
 
-test('HUB_SCHEMA:11 字段全齐', () => {
+test('HUB_SCHEMA:12 字段全齐', () => {
   const fields = Object.keys(HUB_SCHEMA);
-  assert.equal(fields.length, 11, `应有 11 字段,实际 ${fields.length}: ${fields.join(',')}`);
+  assert.equal(fields.length, 12, `应有 12 字段,实际 ${fields.length}: ${fields.join(',')}`);
   assert.equal(HUB_SCHEMA.port.env, 'CC_WEB_HUB_PORT');
   assert.equal(HUB_SCHEMA.port.default, 7685);
   assert.equal(HUB_SCHEMA.hubToken.env, 'CC_WEB_HUB_TOKEN');
@@ -418,4 +417,31 @@ test('HUB_SCHEMA:env 不读 CC_WEB_HUB_MAIN_AGENT_*(mainAgent 不经 loader 合�
     env: { CC_WEB_HUB_MAIN_AGENT_ENABLED: '1' },
   });
   assert.deepEqual(config.mainAgent, {});  // env 不进 mainAgent
+});
+
+// ---- Task 2(本轮):hub 注册字段(env 覆盖 + file 生效)----
+test('SINGLE_SCHEMA 含 hub 注册字段(env 覆盖 + 默认空串)', () => {
+  const f = writeTmp(JSON.stringify({ machineId: 'box-1' }));
+  const { config } = loadConfig({
+    schema: SINGLE_SCHEMA,
+    defaultFilePath: f,
+    argv: [],
+    env: { CC_WEB_HUB_URL: 'http://hub:7685', CC_WEB_HUB_TOKEN: 'tok', CC_WEB_HUB_REGISTER_TOKEN: 'reg', CC_WEB_PUBLIC_URL: 'http://10.0.0.5:7684' },
+  });
+  assert.equal(config.hubUrl, 'http://hub:7685');
+  assert.equal(config.hubToken, 'tok');
+  assert.equal(config.hubRegisterToken, 'reg');
+  assert.equal(config.machineId, 'box-1', 'file 值生效');
+  assert.equal(config.publicUrl, 'http://10.0.0.5:7684');
+});
+
+test('HUB_SCHEMA 含 hubRegisterToken', () => {
+  const { config } = loadConfig({
+    schema: HUB_SCHEMA,
+    defaultFilePath: '/nonexistent.json',
+    argv: [],
+    env: { CC_WEB_HUB_TOKEN: 'ht', CC_WEB_HUB_REGISTER_TOKEN: 'rt' },
+  });
+  assert.equal(config.hubToken, 'ht');
+  assert.equal(config.hubRegisterToken, 'rt');
 });

@@ -192,8 +192,8 @@ cc-web-control hub --config /path/to/my-hub-config.json
 
 字段名、类型、默认值的权威清单见仓库根的两份模板（避免本节与 schema 漂移）：
 
-- 单机 15 字段：[`config.example.json`](./config.example.json)
-- hub 11 顶层字段（含 `mainAgent` 子对象）：[`hub-config.example.json`](./hub-config.example.json)
+- 单机 21 字段（含 6 个 hub 注册字段 `hubUrl` / `hubToken` / `hubRegisterToken` / `machineId` / `machineName` / `publicUrl`）：[`config.example.json`](./config.example.json)
+- hub 12 顶层字段（含 `hubRegisterToken`，及 `mainAgent` 子对象）：[`hub-config.example.json`](./hub-config.example.json)
 
 复制模板作起点：
 
@@ -227,9 +227,11 @@ loader 检测到文件权限过松（group/other 可读）且含非空 token 时
 
 `cc-web-control hub` 启动一个中央服务，聚合多台机器上各自运行的 cc-web-control 实例：一个全局看板轮询所有机器、点行切换任一会话终端、多选会话批量广播同一条输入。浏览器只连 hub，单一入口、单一 token。
 
-### 1) 机器侧准备
+### 1) 机器侧准备（单机反向注册）
 
-每台被聚合的机器照常运行 `cc-web-control`，但需对内网暴露并开启 token 鉴权：
+每台被聚合的机器照常运行 `cc-web-control`，做两件事：
+
+**(a) 对内网暴露 + 设本机 token**（hub 看板轮询要回连单机的 `/api/dashboard`，需要这把 token 鉴权）：
 
 ```bash
 # 在每台机器上
@@ -238,29 +240,43 @@ CC_WEB_HOST=0.0.0.0 CC_WEB_AUTH_TOKEN=<各机 token> cc-web-control
 
 > 也可把 `CC_WEB_HOST` 设为该机的局域网 IP（如 `192.168.1.10`）。`CC_WEB_AUTH_TOKEN` 必设——裸奔危险。
 
-### 2) hub 侧配置
-
-hub 通过一个 JSON 文件得知机器清单，默认路径 `~/.cc-web-control/hub-machines.json`（可用 `CC_WEB_HUB_MACHINES_FILE` 覆盖）。文件内含各机 token，建议权限 **0600**：
-
-```json
-{
-  "machines": [
-    { "id": "mac1", "name": "MBP",  "url": "http://192.168.1.10:7684", "token": "<机器 mac1 的 CC_WEB_AUTH_TOKEN>" },
-    { "id": "srv1", "name": "开发服", "url": "http://192.168.1.20:7684", "token": "<机器 srv1 的 CC_WEB_AUTH_TOKEN>" }
-  ]
-}
-```
-
-字段约束（校验失败 hub 会 fail-fast 退出，不静默）：
-
-- `id`：稳定标识，正则 `^[A-Za-z0-9._-]{1,32}$`，**禁止含 `/`**（全局会话键分隔符），清单内唯一。
-- `name`：显示名（可省略，默认取 `id`）。
-- `url`：该机的内网地址（含端口）。
-- `token`：该机的 `CC_WEB_AUTH_TOKEN`。
+**(b) 配置指向 hub 的注册信息**（单机启动即自动连 hub 注册、断线自愈重连）：
 
 ```bash
-chmod 0600 ~/.cc-web-control/hub-machines.json
+# 在每台机器上
+CC_WEB_HUB_URL=http://<hub 所在机>:7685 \
+CC_WEB_HUB_TOKEN=<hub token> \
+cc-web-control
 ```
+
+相关环境变量（也可写进单机 `config.json`，见下文「配置文件」）：
+
+- `CC_WEB_HUB_URL` — hub 的地址（含端口），如 `http://hub-host:7685`。
+- `CC_WEB_HUB_TOKEN` — 单机用来连 hub 注册的 token。默认与 hub 看板登录 token 同一把（分发到单机后，单机操作者也能登录 hub 看板；多操作者/不可信网络请改用 `CC_WEB_HUB_REGISTER_TOKEN`）。
+- `CC_WEB_HUB_REGISTER_TOKEN` — 可选的**独立注册 token**，与看板登录 token 分离：单机只能注册、不能登录看板。
+- `CC_WEB_MACHINE_ID` — 稳定标识，正则 `^[A-Za-z0-9._-]{1,32}$`，**禁止含 `/`**（全局会话键分隔符）。不设默认取 hostname（多机环境可能冲突，建议显式设置）。
+- `CC_WEB_MACHINE_NAME` — 显示名（可省略，默认取 `id`）。
+- `CC_WEB_PUBLIC_URL` — hub 回连单机用的地址。不设默认 `http://<CC_WEB_HOST>:<CC_WEB_PORT>`；若单机 `CC_WEB_HOST` 是 `127.0.0.1` 但 hub 在远端，务必显式设为 hub 可达的地址（局域网 IP / 隧道地址），否则看板显示该机不可达。
+
+只设了 `CC_WEB_HUB_URL` + `CC_WEB_HUB_TOKEN`（或 `CC_WEB_HUB_REGISTER_TOKEN`）即启用注册；两个都没设则单机独立运行（现状行为不变）。
+
+### 2) hub 侧配置
+
+hub 只需一把看板访问 token（注册机器运行时自动加入看板，无需预登记）：
+
+```bash
+CC_WEB_HUB_TOKEN=<hub 访问 token> cc-web-control hub
+```
+
+> 多操作者/不可信网络建议额外设 `CC_WEB_HUB_REGISTER_TOKEN=<独立注册 token>`，把「单机注册」与「看板登录」权限分离。
+
+#### 迁移指引（hub-machines.json → 单机注册）
+
+旧版 hub 靠 `~/.cc-web-control/hub-machines.json` 静态登记机器清单（字段：`id` / `name` / `url` / `token`）。自本版起该文件 **deprecated**：
+
+- hub 启动若仍检测到该文件，会作静态种子加载并打印 deprecate 警告，机器照常出现在看板；
+- 请逐步迁移到上面的「单机反向注册」——新机器只需在单机侧配 `CC_WEB_HUB_URL` + `CC_WEB_HUB_TOKEN`，hub 侧重启无需改动；
+- 该文件将在后续版本移除。
 
 ### 3) 启动 hub
 
@@ -271,7 +287,8 @@ CC_WEB_HUB_TOKEN=<hub 访问 token> cc-web-control hub
 hub 专用环境变量：
 
 - `CC_WEB_HUB_TOKEN` — 浏览器访问 hub 用的 token（**必设**，否则裸奔退出）。
-- `CC_WEB_HUB_MACHINES_FILE` — 机器清单路径（默认 `~/.cc-web-control/hub-machines.json`）。
+- `CC_WEB_HUB_REGISTER_TOKEN` — 可选的独立注册 token，与看板登录 token 分离（单机只能注册、不能登录看板）。
+- `CC_WEB_HUB_MACHINES_FILE` — 旧版静态机器清单路径（默认 `~/.cc-web-control/hub-machines.json`），**已 deprecated**：若存在仍作种子加载并打印警告，请迁移到单机反向注册（见上方「迁移指引」）。
 - `CC_WEB_HUB_HOST` — hub 监听地址（默认 `127.0.0.1`）。
 - `CC_WEB_HUB_PORT` — hub 端口（默认 `7685`，避开单机默认 7684）。
 - `CC_WEB_HUB_DASHBOARD_INTERVAL_MS` — 看板聚合轮询间隔（默认 `2000` ms）。
@@ -292,8 +309,14 @@ hub 专用环境变量：
 三层 token 各自独立、互不通用：
 
 1. **浏览器 → hub**：`CC_WEB_HUB_TOKEN`，登录后写 httpOnly + sameSite=lax cookie（`cc_web_hub_auth`，与单机 `cc_web_auth` 同 localhost 不互染）。
-2. **hub → 各机**：hub 用清单里每台的 `token`，以 `Authorization: Bearer <token>` 调各机 HTTP 与 WS。
+2. **hub → 各机**：单机注册时把本机 `CC_WEB_AUTH_TOKEN` 作为 `token` 字段上报给 hub；hub 看板轮询与 WS 终端代理都用它以 `Authorization: Bearer <token>` 回连各机 HTTP 与 WS。
 3. **各机对内网暴露**：各机自己的 `CC_WEB_AUTH_TOKEN` 把关。
+
+注册 token 的分发语义：`CC_WEB_HUB_TOKEN` 分发到单机后，单机操作者即可登录 hub 看板；多操作者/不可信网络请用独立的 `CC_WEB_HUB_REGISTER_TOKEN`——它只能注册、不能登录看板。
+
+SSRF 面：单机注册上报的 `url` 会经 hub 主动请求（看板轮询）。hub **不**对注册 `url` 做地址白名单校验（loopback/私网/公网均可达），防护完全依赖 `registerToken` 准入——因此 token 只应发给可信机器；跨不可信网络须启用 `https`/`wss`。
+
+明文风险：hub 走 `http`/`ws` 时，注册帧与回连都明文传输单机 token；跨不可信网络（hub 与单机不在同一可信内网）务必启用 `https`/`wss`。
 
 建议把 hub 部署在内网，如需外网访问请走安全隧道（见下节）并保留 `CC_WEB_HUB_TOKEN` 鉴权。
 

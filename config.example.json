@@ -13,5 +13,12 @@
   "loginMax": 5,
   "loginWindowMs": 900000,
   "dashboardIntervalMs": 2000,
-  "wsPingInterval": 30000
+  "wsPingInterval": 30000,
+
+  "hubUrl": "",
+  "hubToken": "",
+  "hubRegisterToken": "",
+  "machineId": "",
+  "machineName": "",
+  "publicUrl": ""
 }
