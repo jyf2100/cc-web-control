@@ -3,6 +3,7 @@
   "port": 7685,
   "intervalMs": 2000,
   "hubToken": "",
+  "hubRegisterToken": "",
   "noOpen": false,
   "loginMax": 5,
   "loginWindowMs": 900000,
