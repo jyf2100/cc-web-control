@@ -117,8 +117,10 @@ class RegisterClient {
     ws.on('message', (buf) => {
       let m; try { m = JSON.parse(buf.toString()); } catch { return; }
       if (m.type === 'registered' || m.type === 'pong') {
-        // 注册被接受 / 心跳确认 → 退避计数清零
+        // 注册被接受 / 心跳确认 → 退避计数清零(spec §3.5:成功时鉴权退避计数器亦归零,
+        // 防偶发 1008 累积误触停止阈值)
         this._networkAttempt = 0;
+        this._authRejectCount = 0;
       }
       if (m.type === 'unreachable') {
         this._log.warn?.(`[register] hub 回连失败 url=${m.url} err=${m.error},请检查 CC_WEB_PUBLIC_URL`);

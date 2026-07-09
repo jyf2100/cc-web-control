@@ -82,3 +82,27 @@ test('未配 hubUrl 时不启动(start 无副作用)', () => {
   assert.equal(rc._ws, null);
   rc.close();
 });
+
+// ---- Finding 2:registered / pong 帧 → _authRejectCount 归零(spec §3.5 成功清零) ----
+test('registered / pong 帧 → _authRejectCount 归零(防偶发 1008 累积误触停止阈值)', async () => {
+  const hub = await startFakeHub({
+    onRegister: (ws) => ws.send(JSON.stringify({ type: 'registered' })),
+  });
+  // startFakeHub 已内置 ping→pong 响应
+  const rc = new RegisterClient({
+    hubUrl: `http://127.0.0.1:${hub.port}`, registerToken: 't', authToken: 'x',
+    bindHost: '127.0.0.1', port: 1, machineId: 'm', machineName: '', publicUrl: '',
+    pingIntervalMs: 50, // 短 ping 间隔,快速触发一次 pong
+  });
+  rc._authRejectCount = 2; // 模拟之前累积的 1008 拒绝(未达停止阈值 3)
+  rc.start();
+  // registered 帧到达 → 归零
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(rc._authRejectCount, 0, '收到 registered 后 _authRejectCount 应归零');
+  assert.equal(rc._stopped, false, '未达阈值不应停止');
+  // 再次累积,ping→pong 也会归零
+  rc._authRejectCount = 1;
+  await new Promise((r) => setTimeout(r, 80)); // 等 pingIntervalMs=50 触发一次 ping→pong
+  assert.equal(rc._authRejectCount, 0, '收到 pong 后 _authRejectCount 应归零');
+  rc.close(); await hub.stop();
+});

@@ -76,18 +76,20 @@ test('e2e: 单机 RegisterClient 连 hub → 看板可见该机 + 回连 stub �
   rc.start();
 
   // 等注册帧落库 + aggregator 首轮回连探测成功(setOnline true)。轮询比固定 sleep 稳。
-  await waitFor(async () => {
+  try {
+    await waitFor(async () => {
+      const m = await fetchMachine(hub.port, 'e2e-box');
+      return !!m && m.online === true;
+    }, { timeoutMs: 3000 });
+
     const m = await fetchMachine(hub.port, 'e2e-box');
-    return !!m && m.online === true;
-  }, { timeoutMs: 3000 });
-
-  const m = await fetchMachine(hub.port, 'e2e-box');
-  assert.ok(m, '注册机器在看板');
-  assert.equal(m.online, true, '看板可达(aggregator 回连 stub /api/dashboard 成功)');
-
-  rc.close();
-  await stub.stop();
-  await hub.stop();
+    assert.ok(m, '注册机器在看板');
+    assert.equal(m.online, true, '看板可达(aggregator 回连 stub /api/dashboard 成功)');
+  } finally {
+    rc.close();
+    await stub.stop();
+    await hub.stop();
+  }
 });
 
 test('e2e: hub 重启后单机自愈重注册', async () => {
@@ -129,16 +131,19 @@ test('e2e: hub 重启后单机自愈重注册', async () => {
 
   // 等自愈重连:rc 按 reconnectBaseMs=50 退避重连 → 新 hub 接受注册 → aggregator 回连 → online=true。
   // 给略长超时(退避带 ±20% jitter + 一次 80ms 聚合轮询)。
-  await waitFor(async () => {
+  try {
+    await waitFor(async () => {
+      const m = await fetchMachine(port, 'e2e-box2');
+      return !!m && m.online === true;
+    }, { timeoutMs: 5000 });
+
     const m = await fetchMachine(port, 'e2e-box2');
-    return !!m && m.online === true;
-  }, { timeoutMs: 5000 });
-
-  const m = await fetchMachine(port, 'e2e-box2');
-  assert.ok(m, 'hub 重启后单机自愈重注册');
-  assert.equal(m.online, true, '看板可达(回连 stub 成功)');
-
-  rc.close();
-  await stub.stop();
-  await hub.stop();
+    assert.ok(m, 'hub 重启后单机自愈重注册');
+    assert.equal(m.online, true, '看板可达(回连 stub 成功)');
+  } finally {
+    // 注意:hub 已被重新赋值为重启后的实例,finally 关闭的是最终的 hub(旧 hub 已在测试中途 stop)
+    rc.close();
+    await stub.stop();
+    await hub.stop();
+  }
 });

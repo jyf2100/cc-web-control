@@ -265,7 +265,7 @@ test('权限 warning 的 mode 显示为八进制(防 chmod 420 误用 — chmod 
   );
 });
 
-// ---- Task 4:SINGLE_SCHEMA(7684 全 15 字段)+ object passthrough ----
+// ---- Task 4:SINGLE_SCHEMA(7684 全 21 字段)+ object passthrough ----
 
 test('SINGLE_SCHEMA:21 字段全齐,env/default/type 对齐 spec §5.1', () => {
   const fields = Object.keys(SINGLE_SCHEMA);
@@ -355,7 +355,7 @@ test('object 默认值返回新引用(防 schema default 被突变污染 — Tas
   assert.deepEqual(r2.config.ma, {}, '第二次加载的默认 object 应干净');
 });
 
-// ---- Task 5:HUB_SCHEMA(7685 全 11 字段)+ mainAgent passthrough ----
+// ---- Task 5:HUB_SCHEMA(7685 全 12 字段)+ mainAgent passthrough ----
 const { HUB_CONFIG_PATH } = require('../config_loader.cjs');
 
 test('HUB_CONFIG_PATH 默认指向 ~/.cc-web-control/hub-config.json', () => {

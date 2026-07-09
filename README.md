@@ -314,7 +314,7 @@ hub 专用环境变量：
 
 注册 token 的分发语义：`CC_WEB_HUB_TOKEN` 分发到单机后，单机操作者即可登录 hub 看板；多操作者/不可信网络请用独立的 `CC_WEB_HUB_REGISTER_TOKEN`——它只能注册、不能登录看板。
 
-SSRF 面：单机注册上报的 `url` 会经 hub 主动请求（看板轮询），只应发给可信机器。hub 不接受任意外网 URL 的注册。
+SSRF 面：单机注册上报的 `url` 会经 hub 主动请求（看板轮询）。hub **不**对注册 `url` 做地址白名单校验（loopback/私网/公网均可达），防护完全依赖 `registerToken` 准入——因此 token 只应发给可信机器；跨不可信网络须启用 `https`/`wss`。
 
 明文风险：hub 走 `http`/`ws` 时，注册帧与回连都明文传输单机 token；跨不可信网络（hub 与单机不在同一可信内网）务必启用 `https`/`wss`。
 

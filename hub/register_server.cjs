@@ -15,11 +15,12 @@ function bearerFromReq(req) {
 }
 
 class AgentRegistrar {
-  constructor({ registry, clients, AgentClientCtor, hubToken, registerToken = '', log = console }) {
+  constructor({ registry, clients, AgentClientCtor, hubToken, registerToken = '', idleTimeoutMs = IDLE_TIMEOUT_MS, log = console }) {
     this._registry = registry;
     this._clients = clients;
     this._AgentClientCtor = AgentClientCtor;
     this._expectedToken = registerToken || hubToken;
+    this._idleTimeoutMs = idleTimeoutMs;
     this._log = log;
     this._connsById = new Map();   // id -> ws(活跃注册连接)
     this._idleTimers = new Map();  // ws -> timer
@@ -36,8 +37,15 @@ class AgentRegistrar {
 
     const onMessage = (buf) => {
       let m; try { m = JSON.parse(buf.toString()); } catch { return; }
-      if (!m || m.type !== 'register') return;
-      this._handleRegister(ws, m);
+      if (!m) return;
+      // spec §3.4/§4.4:客户端心跳 ping → 回 pong + 重置 idle 计时器
+      // (否则注册后 ping 被忽略,idle 不重置 → 60s 超时断连 → 终端每分钟死一次)
+      if (m.type === 'ping') {
+        this._resetIdle(ws);
+        try { ws.send(JSON.stringify({ type: 'pong' })); } catch {}
+        return;
+      }
+      if (m.type === 'register') this._handleRegister(ws, m);
     };
     const onClose = () => {
       ws.removeListener('message', onMessage);
@@ -106,7 +114,7 @@ class AgentRegistrar {
 
   _armIdle(ws) {
     this._disarmIdle(ws);
-    const t = setTimeout(() => { try { ws.close(1000, 'idle timeout'); } catch {} }, IDLE_TIMEOUT_MS);
+    const t = setTimeout(() => { try { ws.close(1000, 'idle timeout'); } catch {} }, this._idleTimeoutMs);
     t.unref?.();
     this._idleTimers.set(ws, t);
   }
