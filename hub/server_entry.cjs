@@ -24,6 +24,7 @@ const NO_OPEN = CFG.noOpen || process.argv.includes('--no-open');
 startHub({
   machinesFile: CFG.machinesFile,
   hubToken: CFG.hubToken,
+  registerToken: CFG.hubRegisterToken,
   host: CFG.host,
   port: CFG.port,
   intervalMs: CFG.intervalMs,
