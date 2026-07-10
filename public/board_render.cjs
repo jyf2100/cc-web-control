@@ -30,6 +30,14 @@
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
+  // 卡片 target 窗口名(浏览器 browsing-context 名):同 machine+session → 同名 → 点同卡复用已开标签页,
+  // 不同卡各自独立标签页(不再每次新开)。cc- 前缀避 _blank/_self/_parent/_top 等保留名;sanitize 只留
+  // [A-Za-z0-9._-](空格/引号/尖括号等 → -),HTML target 属性 + 窗口名双重安全(防属性 breakout)。
+  function windowNameFor(midRaw, sessRaw) {
+    const sanitize = (s) => String(s == null ? '' : s).replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 64);
+    return 'cc-' + sanitize(midRaw) + '-' + sanitize(sessRaw);
+  }
+
   // 注:relativeTime 与 console_render.cjs 的同名函数重复(UMD 模块独立性 —— board_render 不依赖
   // console_render,各自独立加载)。改一处需同步另一处,避免行为漂移。
   function relativeTime(ts, now) {
@@ -67,6 +75,8 @@
     const midRaw = m.id == null ? '' : m.id;
     const sessRaw = s.name == null ? '' : s.name;
     const href = `/jump?m=${encodeURIComponent(midRaw)}&s=${encodeURIComponent(sessRaw)}`;
+    // target 用 session 唯一窗口名(非 _blank):点同卡复用已开标签页,不同卡各自独立标签页。
+    const targetName = windowNameFor(midRaw, sessRaw);
     // aria-label 不含 lastLine(2s 轮询刷新会打断读屏);显式告知「在新标签打开控制台」。
     const label = `${m.name || m.id} / ${s.name}, ${meta.label}, 在新标签打开控制台`;
     const st = escapeHtml(String(s.status || 'unknown'));
@@ -92,7 +102,7 @@
       const time = escapeHtml(timeRaw);
       const offTag = offline ? '<span class="card__off">离线</span>' : '';
       const ariaDis = offline ? ' aria-disabled="true"' : '';
-      return `<a class="${classes.join(' ')}" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" data-status="${st}" aria-label="${escapeHtml(label)}"${ariaDis}>` +
+      return `<a class="${classes.join(' ')}" href="${escapeHtml(href)}" target="${escapeHtml(targetName)}" rel="noopener noreferrer" data-status="${st}" aria-label="${escapeHtml(label)}"${ariaDis}>` +
         `<div class="card__head">` +
         `<span class="s-dot ${meta.dot}" aria-hidden="true"></span>` +
         `<span class="card__name">${name}</span>` +
@@ -112,7 +122,7 @@
     const lastRaw = s.lastLine || (m.online === false ? '(离线)' : '');
     const last = escapeHtml(TC.cleanSummary ? TC.cleanSummary(lastRaw, 60) : lastRaw);
     const time = escapeHtml(relativeTime(o.lastTs, o.now));
-    return `<a class="${classes.join(' ')}" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" data-status="${st}" aria-label="${escapeHtml(label)}">` +
+    return `<a class="${classes.join(' ')}" href="${escapeHtml(href)}" target="${escapeHtml(targetName)}" rel="noopener noreferrer" data-status="${st}" aria-label="${escapeHtml(label)}">` +
       `<span class="s-dot ${meta.dot}" aria-hidden="true"></span>` +
       `<span class="s-icon" aria-hidden="true">${meta.icon}</span>` +
       `<span class="card__name">${name}</span>` +
@@ -266,5 +276,5 @@
     return parts.join('');
   }
 
-  return { statusMeta, escapeHtml, relativeTime, buildCardHTML, buildCardRow, buildCardInner, flattenFleet, sortCardsByRelevance, summarizeFleet, summarizeMachine, renderStatusCounts, isStale, partitionStale, groupByMachine };
+  return { statusMeta, escapeHtml, relativeTime, windowNameFor, buildCardHTML, buildCardRow, buildCardInner, flattenFleet, sortCardsByRelevance, summarizeFleet, summarizeMachine, renderStatusCounts, isStale, partitionStale, groupByMachine };
 });

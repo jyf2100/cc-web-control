@@ -99,6 +99,9 @@
             url.searchParams.set('session', sessionName);
             window.history.replaceState({}, '', url.toString());
         } catch {}
+        // 窗口 title 显示当前 session 名:7684 单机直开 与 7685 hub /jump 跳来 都用同一个 index.html,
+        // 多标签页时一眼区分各自 session。几乎所有 currentSession 变更都伴随此调用(初始化/切换/新建/回退)。
+        if (sessionName) document.title = sessionName;
     }
 
     async function loadConfig() {
