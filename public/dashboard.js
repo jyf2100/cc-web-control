@@ -20,7 +20,14 @@
 
     function goToSession(name) {
         if (!name) return;
-        window.location.href = '/?session=' + encodeURIComponent(name);
+        // 独立标签页:同 session 复用已开标签(聚焦+重载最新),不同 session 各开一个 —— 与 7685 hub
+        // 卡片 <a target="cc-<m>-<s>"> 同一套复用语义。窗口名 cc-local-<session>:cc- 前缀避 _blank 等
+        // 保留名;session 名经 server 白名单 ^[A-Za-z0-9._-]{1,64}$,这里再 sanitize(纵深防御,与
+        // board_render.windowNameFor 同正则)。不依赖 BR:board_render 未加载时单机回退仍可用。
+        var safe = String(name).replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 64);
+        var url = '/?session=' + encodeURIComponent(name);
+        var win = window.open(url, 'cc-local-' + safe);
+        if (win) { win.focus(); } else { window.location.href = url; } // 被弹窗拦截 → 回退当前页跳
     }
     function rowFromEvent(e) {
         return e.target.closest ? e.target.closest('.session') : null; // §7.2:210 .session-row → .session
