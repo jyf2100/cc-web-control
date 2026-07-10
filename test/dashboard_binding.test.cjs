@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 
-const { readBinding, writeBinding, deleteBinding, migrateStaleBindings } = require('../dashboard_binding.cjs');
+const { readBinding, writeBinding, deleteBinding, migrateStaleBindings, listBindings } = require('../dashboard_binding.cjs');
 const { cwdToSlug } = require('../dashboard_slug.cjs');
 
 // 绑定路径约定:<projectsDir>/<slug>/.cc-web-bindings/<tmuxName>,内容为单行 sessionId。
@@ -211,5 +211,35 @@ test('writeBinding 同 tmuxName 覆盖:常规文件正常覆盖(symlink 预检�
     writeBinding(SLUG, 'sess-ov', 'old', base);
     writeBinding(SLUG, 'sess-ov', 'new', base);
     assert.equal(readBinding(SLUG, 'sess-ov', base), 'new');
+  } finally { rm(base); }
+});
+
+// --- listBindings(评审团 HIGH #1):供续接路径算「被活跃 session 占用的 uuid 集合」,防串扰 ---
+
+test('listBindings: 列出 slug 下所有有效 {tmuxName, sid}', () => {
+  const base = tmpDir();
+  try {
+    writeBinding(SLUG, 'sess-a', 'uuid-a', base);
+    writeBinding(SLUG, 'sess-b', 'uuid-b', base);
+    const out = listBindings(SLUG, base).sort((x, y) => x.tmuxName.localeCompare(y.tmuxName));
+    assert.deepEqual(out, [{ tmuxName: 'sess-a', sid: 'uuid-a' }, { tmuxName: 'sess-b', sid: 'uuid-b' }]);
+  } finally { rm(base); }
+});
+
+test('listBindings: 无绑定目录 → [] 不抛', () => {
+  const base = tmpDir();
+  try {
+    assert.deepEqual(listBindings(SLUG, base), []);
+  } finally { rm(base); }
+});
+
+test('listBindings: 跳过空内容绑定文件(只返回有效 sid)', () => {
+  const base = tmpDir();
+  try {
+    writeBinding(SLUG, 'sess-good', 'uuid-good', base);
+    const dir = path.join(base, SLUG, '.cc-web-bindings');
+    fs.writeFileSync(path.join(dir, 'sess-empty'), ''); // 模拟异常空写入
+    const out = listBindings(SLUG, base);
+    assert.deepEqual(out, [{ tmuxName: 'sess-good', sid: 'uuid-good' }]);
   } finally { rm(base); }
 });

@@ -76,8 +76,9 @@ function writeBinding(slug, tmuxName, claudeSessionId, projectsDir) {
       /* 不存在,正常 */
     }
     fs.writeFileSync(file, claudeSessionId + '\n', { mode: 0o600 });
-  } catch {
-    /* 绑定写失败不致命,看板降级 mtime */
+  } catch (e) {
+    // 绑定写失败不致命,看板降级 mtime;但系统性故障(磁盘满/权限/只读 fs)需有信号,否则难排查。
+    console.warn(`[binding] writeBinding 失败 ${slug}/${tmuxName},看板将降级 mtime:`, e?.message || e);
   }
 }
 
@@ -95,7 +96,9 @@ function deleteBinding(slug, tmuxName, projectsDir) {
 /**
  * 启动时一次性迁移:扫描 <projectsDir>/<slug>/.cc-web-bindings/ 下所有绑定文件,
  * 校验其 sid 在该 slug 目录顶层是否有同名 <sid>.jsonl,无则删除。
- * 陈旧 sid 会让 listSessions readBinding 回填错误,看板错位。新流程不再写绑定。
+ * 陈旧 sid 会让 listSessions readBinding 回填错误,看板错位。注意:startClaudeInSession 事前
+ * writeBinding,运行期仍会产生孤儿(claude 未落 jsonl / 文件名映射破裂);此处仅清启动前残留,
+ * 运行期孤儿由 dashboard_cache._compute 绑定缺失时降级 mtime 兜底(不致永久 unknown)。
  * @param {string} [projectsDir] 默认 ~/.claude/projects;测试传 tmpDir 隔离
  * @returns {Array<{slug:string, tmuxName:string, sid:string}>} 被删绑定(日志用)
  */
@@ -135,4 +138,28 @@ function migrateStaleBindings(projectsDir = DEFAULT_PROJECTS_DIR) {
   return removed;
 }
 
-module.exports = { readBinding, writeBinding, deleteBinding, migrateStaleBindings, BINDING_DIRNAME };
+/**
+ * 列出某 slug 下所有有效绑定 [{tmuxName, sid}],供续接路径算「被活跃 session 占用的 uuid 集合」
+ * (评审团 HIGH #1,防续接串扰)。tmuxName 来自磁盘 readdir(不可信),readBinding 内部白名单 +
+ * 空内容过滤会跳过非法名/空绑定,故只返回有效项。容错:目录不存在/读失败 → []。
+ */
+function listBindings(slug, projectsDir) {
+  if (!slug) return [];
+  const dir = path.join(projectsDir || DEFAULT_PROJECTS_DIR, slug, BINDING_DIRNAME);
+  let names;
+  try {
+    names = fs.readdirSync(dir, { withFileTypes: true })
+      .filter((e) => e.isFile())
+      .map((e) => e.name);
+  } catch {
+    return [];
+  }
+  const out = [];
+  for (const tmuxName of names) {
+    const sid = readBinding(slug, tmuxName, projectsDir); // 白名单非法名 / 空内容 → null 跳过
+    if (sid) out.push({ tmuxName, sid });
+  }
+  return out;
+}
+
+module.exports = { readBinding, writeBinding, deleteBinding, migrateStaleBindings, listBindings, BINDING_DIRNAME };

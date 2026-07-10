@@ -8,7 +8,8 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { resolveProjectDir, listProjectJsonls } = require('./dashboard_slug.cjs');
+const { resolveProjectDir, listProjectJsonls, cwdToSlug } = require('./dashboard_slug.cjs');
+const { listBindings } = require('./dashboard_binding.cjs');
 
 function shouldContinue(cwd, baseDir) {
   const dir = resolveProjectDir(cwd, baseDir);
@@ -44,4 +45,48 @@ function pickLatestSessionUuid(cwd, baseDir) {
   return latest ? path.basename(latest, '.jsonl') : null;
 }
 
-module.exports = { shouldContinue, pickLatestSessionUuid };
+/**
+ * 续接路径取「可安全 resume 的 uuid」(评审团 HIGH #1):按 mtime 降序取第一个**未被其它活跃
+ * tmux session 占用**的 jsonl uuid,防新开 session B 续接进活跃 session A 的 jsonl(双写 + 塌缩)。
+ * excludeTmuxName 自己的旧绑定不计入占用(允许 session 重启续接自己的历史)。
+ * 全被占用 / 无 jsonl → null(调用方降级为新建独立会话)。
+ * @param {string} cwd
+ * @param {string} [excludeTmuxName] 当前要启动的 tmux session 名(占用集合排除它)
+ * @param {string} [baseDir] 测试隔离用
+ * @returns {string|null}
+ */
+function pickResumableSessionUuid(cwd, excludeTmuxName, baseDir) {
+  const dir = resolveProjectDir(cwd, baseDir);
+  if (!dir) return null;
+  let jsonls;
+  try {
+    jsonls = listProjectJsonls(dir);
+  } catch {
+    return null;
+  }
+  if (!jsonls.length) return null;
+  const sorted = [];
+  for (const f of jsonls) {
+    try {
+      sorted.push({ f, m: fs.statSync(f).mtimeMs });
+    } catch {
+      /* skip unreadable */
+    }
+  }
+  sorted.sort((a, b) => b.m - a.m);
+  // 占用集合:其它活跃 tmux session 绑定的 uuid(排除 excludeTmuxName 自己)
+  const occupied = new Set();
+  const slug = cwdToSlug(cwd);
+  if (slug && excludeTmuxName) {
+    for (const b of listBindings(slug, baseDir)) {
+      if (b.tmuxName !== excludeTmuxName) occupied.add(b.sid);
+    }
+  }
+  for (const { f } of sorted) {
+    const uuid = path.basename(f, '.jsonl');
+    if (!occupied.has(uuid)) return uuid;
+  }
+  return null;
+}
+
+module.exports = { shouldContinue, pickLatestSessionUuid, pickResumableSessionUuid };
