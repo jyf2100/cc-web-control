@@ -191,7 +191,7 @@ test('buildCardRow emits li.card-row with sibling button + a', () => {
   );
   assert.match(html, /<li class="card-row"[^>]* data-machine="m1"[^>]* data-session="ses-1"[^>]* data-key="m1\/ses-1"[^>]* role="group"/);
   assert.match(html, /<button class="card__select" type="button"[^>]* aria-pressed="false"/);
-  assert.match(html, /<a class="card"[^>]* href="\/jump\?m=m1&amp;s=ses-1"[^>]* target="_blank"[^>]* rel="noopener noreferrer"/);
+  assert.match(html, /<a class="card"[^>]* href="\/jump\?m=m1&amp;s=ses-1"[^>]* target="cc-m1-ses-1"[^>]* rel="noopener noreferrer"/);
   // button 在 a 之前(同级,DOM 顺序)— Plan A 的核心结构契约
   const btnIdx = html.indexOf('class="card__select"');
   const aIdx = html.indexOf('class="card"');
@@ -446,4 +446,55 @@ test('renderStatusCounts: 嵌套 s-dot + 数字,非零项带中文 title,无 emo
 
 test('renderStatusCounts: 全 0 → 空串', () => {
   assert.equal(B.renderStatusCounts({ working: 0, waiting: 0, errored: 0, idle: 0, offline: 0, unknown: 0, total: 0 }), '');
+});
+
+// ---- windowNameFor + 卡片 target 复用(同 session 复用已开标签,不再每次新开)----
+// 浏览器原生:target="<name>" 存在同名 browsing context 就在其内加载并 focus,没有才新开。
+// 故每张卡片 target 按 machine+session 唯一 → 点同一卡总复用同一标签页;不同卡各自独立标签页。
+// 安全约束:不以 _ 开头(避 _blank/_self/_parent/_top 保留字),不含空格/引号/< >(HTML 属性 + 窗口名双重安全)。
+
+test('windowNameFor: cc- 前缀 + machine + session', () => {
+  assert.equal(B.windowNameFor('m1', 'ses-1'), 'cc-m1-ses-1');
+});
+
+test('windowNameFor: 同 machine+session 同名(复用契约),异 session/异 machine 不同名', () => {
+  assert.equal(B.windowNameFor('m1', 'a'), B.windowNameFor('m1', 'a'), '同参必同名');
+  assert.notEqual(B.windowNameFor('m1', 'a'), B.windowNameFor('m1', 'b'), '不同 session 必不同名');
+  assert.notEqual(B.windowNameFor('m1', 'a'), B.windowNameFor('m2', 'a'), '不同 machine 必不同名');
+});
+
+test('windowNameFor: 非法字符(空格/斜杠/引号/尖括号)→ 替换为 -,不破 HTML target 属性', () => {
+  assert.equal(B.windowNameFor('a b', 'c/d'), 'cc-a-b-c-d');
+  const n = B.windowNameFor('"><img src=x>', 'x');
+  assert.ok(!/["<>]/.test(n), '窗口名绝不残留引号/尖括号(防 target 属性 breakout)');
+});
+
+test('windowNameFor: cc- 前缀保证不以 _ 开头(避 _blank 等保留 browsing-context 名)', () => {
+  assert.ok(!B.windowNameFor('_blank', 'x').startsWith('_'));
+  assert.ok(!B.windowNameFor('m1', 'ses').startsWith('_'));
+});
+
+test('buildCardInner hub + single 模式 target 均为 session 唯一名(非 _blank,可复用)', () => {
+  const m = { id: 'm1', name: 'a', online: true };
+  const s = { name: 'ses-1', status: 'idle' };
+  const hub = B.buildCardInner(m, s, { mode: 'hub' });
+  const single = B.buildCardInner(m, s, {});
+  assert.match(hub, /target="cc-m1-ses-1"/);
+  assert.match(single, /target="cc-m1-ses-1"/);
+  assert.doesNotMatch(hub, /target="_blank"/);
+  assert.doesNotMatch(single, /target="_blank"/);
+  // rel="noopener" 保留(noopener 安全不因 target 改名而丢失)
+  assert.match(hub, /rel="noopener noreferrer"/);
+  assert.match(single, /rel="noopener noreferrer"/);
+});
+
+test('buildCardHTML XSS 场景:target 名经 sanitize,不含注入字符', () => {
+  const html = B.buildCardHTML({ id: '<x>', name: '<x>', online: true }, { name: '<s>', status: 'idle' });
+  // < > " 等经 sanitize → -(保留位置,不删除,避折叠碰撞);提取 target 值校验只含安全字符
+  const tm = html.match(/target="([^"]*)"/);
+  assert.ok(tm, '应有 target 属性');
+  assert.equal(tm[1].slice(0, 3), 'cc-', 'cc- 前缀(避 _blank 保留名)');
+  assert.ok(!/[<>"']/.test(tm[1]), 'target 值不含尖括号/引号(防属性 breakout)');
+  // href 仍 URL 编码(< → %3C)—— 与 target 改名无关,保持
+  assert.match(html, /href="\/jump\?m=%3Cx%3E/);
 });
