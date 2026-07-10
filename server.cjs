@@ -22,7 +22,7 @@ const { cwdToSlug } = require('./dashboard_slug.cjs');
 const { resolveDefaultSessionForCwd } = require('./session_default.cjs');
 const { isSessionInUse } = require('./session_in_use.cjs');
 const { readBinding, writeBinding, deleteBinding, migrateStaleBindings } = require('./dashboard_binding.cjs');
-const { shouldContinue, pickLatestSessionUuid } = require('./claude_session.cjs');
+const { shouldContinue, pickResumableSessionUuid } = require('./claude_session.cjs');
 const crypto = require('node:crypto');
 const { createRateLimiter } = require('./rate_limit.cjs');
 const { loadConfig, SINGLE_SCHEMA, SINGLE_CONFIG_PATH } = require('./config_loader.cjs');
@@ -173,7 +173,7 @@ function normalizeProjectCwd(cwdInput) {
 async function startClaudeInSession(sessionName, cwd, opts = {}) {
   // realpath 统一口径:claude 内部按 realpath(cwd) 算 slug 写 jsonl(gate 实证),
   // tmux pane_current_path 也返回 realpath;此处统一 realCwd,让 shouldContinue /
-  // pickLatestSessionUuid 定位目录、writeBinding 的 slug 都与 listSessions 回读一致。
+  // pickResumableSessionUuid 定位目录、writeBinding 的 slug 都与 listSessions 回读一致。
   const realCwd = tryRealpath(cwd) || cwd;
   const escapedCwd = shellEscapeForDoubleQuotes(realCwd);
   const slug = cwdToSlug(realCwd);
@@ -185,12 +185,18 @@ async function startClaudeInSession(sessionName, cwd, opts = {}) {
   const isContinue = opts.useClaudeContinue ? CLAUDE_CONTINUE : shouldContinue(realCwd);
   let sessionId, resumeId;
   if (isContinue) {
-    const latest = pickLatestSessionUuid(realCwd);
+    // 续接路径:跳过被其它活跃 session 占用的 uuid(评审团 HIGH #1,防续接串扰 ——
+    // 否则新开 session B 会 --resume 进活跃 session A 的 jsonl,双写同一文件 + 看板塌缩)。
+    // 取到 → --resume;取不到(无历史 / 全被占用)→ 退化为新建独立会话(--session-id 新 uuid + 绑定),
+    // 既避免劫持活跃会话,又保证绑定即写(不留孤儿,看板精确)。
+    const latest = pickResumableSessionUuid(realCwd, sessionName);
     if (latest) {
       resumeId = latest;
       if (slug) writeBinding(slug, sessionName, latest);
+    } else {
+      sessionId = crypto.randomUUID();
+      if (slug) writeBinding(slug, sessionName, sessionId);
     }
-    // 无历史却要求续接 → 走 plain(claude 自生成 uuid,不绑定,看板降级 mtime,与现状一致)
   } else {
     sessionId = crypto.randomUUID();
     if (slug) writeBinding(slug, sessionName, sessionId);
@@ -828,8 +834,9 @@ function startWebServer() {
 }
 
 // 启动
-// 一次性迁移:旧流程写的绑定(sid 指向已不存在的 jsonl)会让 listSessions readBinding
-// 回填陈旧 sid,看板错位。新流程不再写绑定,迁移后目录自然不再增长。与 tmux 无关,两种模式都跑。
+// 一次性迁移:绑定 sid 指向已不存在的 jsonl 时会让 listSessions readBinding 回填陈旧 sid,看板错位。
+// startClaudeInSession 事前 writeBinding,运行期仍可能产生孤儿(claude 未落 jsonl / 文件名映射破裂);
+// 此处仅在启动时清一次残留,运行期孤儿由 _compute 绑定缺失时降级 mtime 兜底。与 tmux 无关,两种模式都跑。
 try {
   const removed = migrateStaleBindings();
   if (removed.length > 0) {

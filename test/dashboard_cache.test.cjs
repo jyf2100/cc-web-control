@@ -142,11 +142,29 @@ test('_compute 有 claudeSessionId → 精确定位该 jsonl(不取 mtime 最新
   } finally { rm(base); }
 });
 
-test('_compute 有 claudeSessionId 但文件不存在 → unknown', () => {
+// --- 降级兜底(评审团 HIGH #2):绑定的 jsonl 文件缺失时回落 mtime,而非硬 unknown ---
+// 场景:--session-id 文件名映射破裂 / 陈旧绑定残留 / claude 改存储格式。
+// 修复前(_compute 有 claudeSessionId 时 ENOENT 直接 unknown)会让该 session 永久空白,
+// 比 #24 前(mtime 至少反映最后写入)更糟。修复:bound 缺失 → 降级 mtime 最新,保持可见。
+
+test('_compute 有 claudeSessionId 但绑定文件缺失 → 降级 mtime 最新(不硬 unknown)', () => {
   const base = tmpDir();
   try {
     const slugDir = makeSlugDir(base, '/Users/roc/proj');
     writeJsonl(slugDir, 'other.jsonl', [toolUse('Bash')]);
+    const cache = new DashboardCache({ projectsDir: base, intervalMs: 999999 });
+    cache.setSessions([{ name: 's1', cwd: '/Users/roc/proj', claudeSessionId: 'target' }]);
+    cache.refresh();
+    const snap = cache.getSnapshots()[0];
+    assert.equal(snap.status, 'working', 'bound 缺失应降级 mtime 读 other.jsonl');
+    assert.equal(snap.lastLine, '[tool: Bash]');
+  } finally { rm(base); }
+});
+
+test('_compute 有 claudeSessionId 且 bound 缺失且 dir 无任何 jsonl → unknown(降级安全网不在)', () => {
+  const base = tmpDir();
+  try {
+    makeSlugDir(base, '/Users/roc/proj'); // 空目录,无 jsonl 可降级
     const cache = new DashboardCache({ projectsDir: base, intervalMs: 999999 });
     cache.setSessions([{ name: 's1', cwd: '/Users/roc/proj', claudeSessionId: 'target' }]);
     cache.refresh();
