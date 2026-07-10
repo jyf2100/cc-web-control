@@ -1,10 +1,17 @@
 /**
  * 多会话看板:tmux 会话名 ↔ claude JSONL sessionId 绑定(M9)
  *
- * 历史:旧流程曾由 startClaudeInSession 在 forceNew 时预生成 UUID 并写绑定,
- * 让 jsonl 文件名 = 该 UUID,listSessions 回填后看板精确定位。新流程(Task 3)
- * 改走续接优先(shouldContinue),不再预生成/写绑定;遗留的陈旧绑定由
+ * 绑定写入:startClaudeInSession 在启动前事前钉死 jsonl 文件名——
+ *   新建走 `claude --session-id <uuid>`(jsonl 文件名恰好 = uuid,已实证),
+ *   续接走 `claude --resume <latestUuid>`(精确追加进同一 jsonl)。
+ * 启动前 writeBinding(slug, tmuxName, sid),listSessions 回填后看板精确定位,
+ * 同项目多 session 不再塌缩到同一 mtime 最新文件。遗留陈旧绑定由
  * migrateStaleBindings 在启动时一次性清理(sid 在 slug 目录下无同名 jsonl 即删)。
+ *
+ * 安全校验(评审团 4 号):绑定的 sid 会被消费端(dashboard_cache._compute)作为
+ * 文件名拼成 path.join(dir, sid+'.jsonl'),故 writeBinding sanitize sid(拒空/含
+ * / \ .. 控制字符)、写前 symlink 预检(防 symlink 覆写敏感文件)、bindingFile 对
+ * tmuxName 走白名单(防 tmuxName 注入路径)。消费端另有 realpath 边界兜底。
  *
  * 所有操作容错:失败不抛(看板降级 unknown/mtime,详见 dashboard_cache)。
  */
@@ -17,14 +24,35 @@ const { cwdToSlug, listProjectJsonls } = require('./dashboard_slug.cjs');
 const DEFAULT_PROJECTS_DIR = path.join(os.homedir(), '.claude', 'projects');
 const BINDING_DIRNAME = '.cc-web-bindings';
 
+// tmuxName 走白名单:它直接拼进绑定文件路径,bindingFile 对非法值返回 null 短路。
+// 与 server.cjs isValidSessionName 同口径。
+const VALID_TMUX_NAME = /^[A-Za-z0-9._-]{1,64}$/;
+
+/**
+ * sanitize 绑定的 claudeSessionId:它会被消费端(dashboard_cache._compute)作为
+ * 文件名拼成 path.join(dir, sid+'.jsonl'),必须拒绝可穿越/含控制字符的值。
+ * 不强制 UUID 正则——保留现有 fixture('sid-123'/'target' 等合法串)语义;
+ * 穿越的终极防御由消费端 realpath 边界兜底。
+ */
+function isSafeSid(sid) {
+  if (typeof sid !== 'string' || !sid) return false;
+  if (/[/\\]/.test(sid)) return false;            // 路径分隔符
+  if (sid.includes('..')) return false;             // 上溯段
+  if (/[\x00-\x1f\x7f]/.test(sid)) return false;    // 控制字符
+  return true;
+}
+
 function bindingFile(slug, tmuxName, projectsDir) {
+  if (!slug || typeof tmuxName !== 'string' || !VALID_TMUX_NAME.test(tmuxName)) return null;
   return path.join(projectsDir || DEFAULT_PROJECTS_DIR, slug, BINDING_DIRNAME, tmuxName);
 }
 
 function readBinding(slug, tmuxName, projectsDir) {
   if (!slug || !tmuxName) return null;
+  const file = bindingFile(slug, tmuxName, projectsDir);
+  if (!file) return null;
   try {
-    const raw = fs.readFileSync(bindingFile(slug, tmuxName, projectsDir), 'utf8');
+    const raw = fs.readFileSync(file, 'utf8');
     const sid = raw.trim();
     return sid || null;
   } catch {
@@ -34,10 +62,20 @@ function readBinding(slug, tmuxName, projectsDir) {
 
 function writeBinding(slug, tmuxName, claudeSessionId, projectsDir) {
   if (!slug || !tmuxName || !claudeSessionId) return;
+  if (!isSafeSid(claudeSessionId)) return;   // sanitize:拒穿越/控制字符
+  const file = bindingFile(slug, tmuxName, projectsDir);
+  if (!file) return;                          // 非法 tmuxName
   try {
-    const file = bindingFile(slug, tmuxName, projectsDir);
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, claudeSessionId + '\n');
+    // symlink 预检:已存在且非常规文件(如 symlink)→ 先删,防 writeFileSync
+    // 跟随 symlink 覆写其目标(敏感文件)。
+    try {
+      const st = fs.lstatSync(file);
+      if (!st.isFile()) fs.rmSync(file, { force: true });
+    } catch {
+      /* 不存在,正常 */
+    }
+    fs.writeFileSync(file, claudeSessionId + '\n', { mode: 0o600 });
   } catch {
     /* 绑定写失败不致命,看板降级 mtime */
   }
@@ -45,8 +83,10 @@ function writeBinding(slug, tmuxName, claudeSessionId, projectsDir) {
 
 function deleteBinding(slug, tmuxName, projectsDir) {
   if (!slug || !tmuxName) return;
+  const file = bindingFile(slug, tmuxName, projectsDir);
+  if (!file) return;
   try {
-    fs.rmSync(bindingFile(slug, tmuxName, projectsDir), { force: true });
+    fs.rmSync(file, { force: true });
   } catch {
     /* 幂等:不存在即视为已删 */
   }

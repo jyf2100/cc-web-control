@@ -178,3 +178,49 @@ test('buildDashboardPayload 空 sessions / undefined snapshots 安全', () => {
   const p2 = buildDashboardPayload([{ name: 'x', cwd: null }], undefined, true);
   assert.equal(p2.sessions[0].status, 'unknown');
 });
+
+// --- 安全校验(评审团 4 号 A):claudeSessionId 从磁盘读出后被拼成路径,realpath 边界防穿越 ---
+
+test('_compute claudeSessionId 穿越(../../x 指向 dir 外真实文件)→ unknown(realpath 边界)', () => {
+  const base = tmpDir();
+  const siblingDir = path.join(path.dirname(base), 'dash-cache-evil');
+  try {
+    const slugDir = makeSlugDir(base, '/Users/roc/proj');
+    // 在 dir 外(base 同级)构造一个真实可读的 jsonl,诱使穿越读取
+    fs.mkdirSync(siblingDir, { recursive: true });
+    writeJsonl(siblingDir, 'leak.jsonl', [endTurn('越界读到的机密')]);
+    // dir = <base>/-Users-roc-proj;从 dir 到 siblingDir 需 ../../<evil 名>/leak
+    const evilName = path.basename(siblingDir);
+    const evilSid = `../../${evilName}/leak`;
+    const cache = new DashboardCache({ projectsDir: base, intervalMs: 999999 });
+    cache.setSessions([{ name: 's1', cwd: '/Users/roc/proj', claudeSessionId: evilSid }]);
+    cache.refresh();
+    const snap = cache.getSnapshots()[0];
+    assert.equal(snap.status, 'unknown', '穿越的 sid 应被 realpath 边界拦截');
+    assert.notEqual(snap.lastLine, '越界读到的机密', '绝不读出 dir 外文件内容');
+  } finally {
+    rm(base);
+    rm(siblingDir);
+  }
+});
+
+test('_compute claudeSessionId 经符号链接指向 dir 外 → unknown(realpath 边界)', () => {
+  const base = tmpDir();
+  const siblingDir = path.join(path.dirname(base), 'dash-cache-evil-link');
+  try {
+    const slugDir = makeSlugDir(base, '/Users/roc/proj');
+    fs.mkdirSync(siblingDir, { recursive: true });
+    writeJsonl(siblingDir, 'secret.jsonl', [endTurn('符号链接越界')]);
+    // 在 dir 内放一个指向 dir 外 secret.jsonl 的符号链接,绑定该名
+    fs.symlinkSync(path.join(siblingDir, 'secret.jsonl'), path.join(slugDir, 'hooked.jsonl'));
+    const cache = new DashboardCache({ projectsDir: base, intervalMs: 999999 });
+    cache.setSessions([{ name: 's1', cwd: '/Users/roc/proj', claudeSessionId: 'hooked' }]);
+    cache.refresh();
+    const snap = cache.getSnapshots()[0];
+    assert.equal(snap.status, 'unknown', '符号链接指向 dir 外应被拦截');
+    assert.notEqual(snap.lastLine, '符号链接越界');
+  } finally {
+    rm(base);
+    rm(siblingDir);
+  }
+});

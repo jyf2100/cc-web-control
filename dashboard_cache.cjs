@@ -85,9 +85,21 @@ class DashboardCache {
       // 无绑定 → 降级 mtime 最新(向后兼容老 session / 非 wrapper 启动的 claude)
       let latest;
       if (session.claudeSessionId) {
+        // realpath 边界(评审团 4 号 A):claudeSessionId 从磁盘绑定读出后被拼成路径,
+        // 必须防穿越/符号链接越界。dir 与 bound 都 realpathSync(消解符号链接,让 macOS
+        // /tmp↔/private/tmp 等不致误杀),relative 后若逃出 dir(以 .. 开头或跨卷绝对路径)→ unknown。
+        // bound 不存在(realpathSync 抛 ENOENT)→ unknown,与旧 existsSync 行为一致。
         const bound = path.join(dir, session.claudeSessionId + '.jsonl');
-        latest = fs.existsSync(bound) ? bound : null;
-        if (!latest) return unknown;
+        let realDir, realBound;
+        try {
+          realDir = fs.realpathSync(dir);
+          realBound = fs.realpathSync(bound);
+        } catch {
+          return unknown;
+        }
+        const rel = path.relative(realDir, realBound);
+        if (rel.startsWith('..') || path.isAbsolute(rel)) return unknown;
+        latest = realBound;
       } else {
         latest = latestJsonlByMtime(listProjectJsonls(dir));
         if (!latest) return unknown;

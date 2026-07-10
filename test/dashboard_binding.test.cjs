@@ -138,3 +138,78 @@ test('dashboard_binding.cjs: 不再导出 createSessionBinding', () => {
   assert.equal(typeof mod.readBinding, 'function');
   assert.equal(typeof mod.deleteBinding, 'function');
 });
+
+// --- 安全校验(评审团 4 号):writeBinding sanitize + bindingFile tmuxName 白名单 + symlink 预检 ---
+// 现有 fixture('sid-123' 等)不含 / \ .. 控制字符 → 不受影响。
+
+test('writeBinding sanitize: 拒绝含 .. 的 sid(防穿越),不写', () => {
+  const base = tmpDir();
+  try {
+    writeBinding(SLUG, 'sess-x', '../etc/passwd', base);
+    assert.equal(readBinding(SLUG, 'sess-x', base), null);
+  } finally { rm(base); }
+});
+
+test('writeBinding sanitize: 拒绝含 / 的 sid', () => {
+  const base = tmpDir();
+  try {
+    writeBinding(SLUG, 'sess-y', 'a/b', base);
+    assert.equal(readBinding(SLUG, 'sess-y', base), null);
+  } finally { rm(base); }
+});
+
+test('writeBinding sanitize: 拒绝含 \\ 的 sid', () => {
+  const base = tmpDir();
+  try {
+    writeBinding(SLUG, 'sess-z', 'a\\b', base);
+    assert.equal(readBinding(SLUG, 'sess-z', base), null);
+  } finally { rm(base); }
+});
+
+test('writeBinding sanitize: 拒绝空 / 控制字符 sid', () => {
+  const base = tmpDir();
+  try {
+    writeBinding(SLUG, 'sess-c1', '', base);
+    writeBinding(SLUG, 'sess-c2', 'a\x00b', base);
+    assert.equal(readBinding(SLUG, 'sess-c1', base), null);
+    assert.equal(readBinding(SLUG, 'sess-c2', base), null);
+  } finally { rm(base); }
+});
+
+test('bindingFile: 非法 tmuxName(含 / 、..)被拒,write/read 均 null,不越界建目录', () => {
+  const base = tmpDir();
+  try {
+    writeBinding(SLUG, '../evil', 'sid-ok', base);
+    writeBinding(SLUG, 'a/b', 'sid-ok', base);
+    assert.equal(readBinding(SLUG, '../evil', base), null);
+    assert.equal(readBinding(SLUG, 'a/b', base), null);
+  } finally { rm(base); }
+});
+
+test('writeBinding symlink 预检:绑定文件是 symlink → 不跟随覆盖,改写常规文件', () => {
+  const base = tmpDir();
+  try {
+    writeBinding(SLUG, 'sess-l', 'first', base);
+    const file = path.join(base, SLUG, '.cc-web-bindings', 'sess-l');
+    // 攻击模型:把绑定文件替换成指向敏感文件的 symlink
+    fs.rmSync(file, { force: true });
+    const target = path.join(base, 'sensitive.txt');
+    fs.writeFileSync(target, 'SECRET');
+    fs.symlinkSync(target, file);
+
+    writeBinding(SLUG, 'sess-l', 'second', base);
+
+    assert.equal(fs.lstatSync(file).isSymbolicLink(), false, '应已替换为常规文件');
+    assert.equal(readBinding(SLUG, 'sess-l', base), 'second');
+    assert.equal(fs.readFileSync(target, 'utf8'), 'SECRET', 'symlink 目标未被覆盖');
+  } finally { rm(base); }
+});
+
+test('writeBinding 同 tmuxName 覆盖:常规文件正常覆盖(symlink 预检不影响正常路径)', () => {
+  const base = tmpDir();
+  try {
+    writeBinding(SLUG, 'sess-ov', 'old', base);
+    writeBinding(SLUG, 'sess-ov', 'new', base);
+    assert.equal(readBinding(SLUG, 'sess-ov', base), 'new');
+  } finally { rm(base); }
+});
