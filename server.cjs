@@ -21,8 +21,8 @@ const { getDashboardCache, buildDashboardPayload } = require('./dashboard_cache.
 const { cwdToSlug } = require('./dashboard_slug.cjs');
 const { resolveDefaultSessionForCwd } = require('./session_default.cjs');
 const { isSessionInUse } = require('./session_in_use.cjs');
-const { readBinding, deleteBinding, migrateStaleBindings } = require('./dashboard_binding.cjs');
-const { shouldContinue } = require('./claude_session.cjs');
+const { readBinding, writeBinding, deleteBinding, migrateStaleBindings } = require('./dashboard_binding.cjs');
+const { shouldContinue, pickLatestSessionUuid } = require('./claude_session.cjs');
 const crypto = require('node:crypto');
 const { createRateLimiter } = require('./rate_limit.cjs');
 const { loadConfig, SINGLE_SCHEMA, SINGLE_CONFIG_PATH } = require('./config_loader.cjs');
@@ -171,15 +171,32 @@ function normalizeProjectCwd(cwdInput) {
  *   web 路径不传 → 走 shouldContinue(cwd) 续接优先(范围限定)。
  */
 async function startClaudeInSession(sessionName, cwd, opts = {}) {
-  const escapedCwd = shellEscapeForDoubleQuotes(cwd);
-  // web 路径(默认):shouldContinue 判断 —— 有历史会话 → -c 续接;无 → 纯新建。
-  //   不再预生成 UUID / writeBinding,看板走 mtime 降级(test/dashboard_cache.test.cjs:157 已覆盖)。
-  // DEFAULT_SESSION 路径(useClaudeContinue=true):沿用 CLAUDE_CONTINUE,行为不变。
-  const continueConversation = opts.useClaudeContinue
-    ? CLAUDE_CONTINUE
-    : shouldContinue(cwd);
+  // realpath 统一口径:claude 内部按 realpath(cwd) 算 slug 写 jsonl(gate 实证),
+  // tmux pane_current_path 也返回 realpath;此处统一 realCwd,让 shouldContinue /
+  // pickLatestSessionUuid 定位目录、writeBinding 的 slug 都与 listSessions 回读一致。
+  const realCwd = tryRealpath(cwd) || cwd;
+  const escapedCwd = shellEscapeForDoubleQuotes(realCwd);
+  const slug = cwdToSlug(realCwd);
+  // 事前绑定(--session-id / --resume,评审团 2/3 号方案,替代已废弃的「启动后轮询捕获」):
+  //   web 路径(默认):shouldContinue 判断 —— 有历史 → --resume <最近 uuid> 续接;无 → --session-id <新 uuid> 新建。
+  //   DEFAULT_SESSION 路径(useClaudeContinue=true):沿用 CLAUDE_CONTINUE,也参与绑定。
+  // 两条 flag 在启动前就钉死 jsonl 文件名(--session-id 文件名恰好=uuid、--resume 追加进同一 jsonl),
+  // 启动前 writeBinding 事前绑定 → listSessions 回填后看板精确定位,同 cwd 多 session 不再塌缩到 mtime 最新。
+  const isContinue = opts.useClaudeContinue ? CLAUDE_CONTINUE : shouldContinue(realCwd);
+  let sessionId, resumeId;
+  if (isContinue) {
+    const latest = pickLatestSessionUuid(realCwd);
+    if (latest) {
+      resumeId = latest;
+      if (slug) writeBinding(slug, sessionName, latest);
+    }
+    // 无历史却要求续接 → 走 plain(claude 自生成 uuid,不绑定,看板降级 mtime,与现状一致)
+  } else {
+    sessionId = crypto.randomUUID();
+    if (slug) writeBinding(slug, sessionName, sessionId);
+  }
   // cd 与 claude 启动合并为单条命令,消除慢盘 / direnv hook 下 cd 未生效就发 claude 的时序竞态
-  const launch = buildClaudeLaunchCommand({ wrapperPath: CLAUDE_WRAPPER, continueConversation });
+  const launch = buildClaudeLaunchCommand({ wrapperPath: CLAUDE_WRAPPER, sessionId, resumeId });
   await tmux.sendKeys(sessionName, `cd "${escapedCwd}" && ${launch}`);
 }
 
@@ -201,9 +218,10 @@ async function listSessions() {
       .map(line => {
         const [name, attached, created, cwd] = line.split('|');
         const createdEpoch = Number.parseInt(created, 10);
-        // 回填 claudeSessionId:wrapper 启动时写入的绑定文件(无绑定 → undefined,_compute 降级 mtime)
+        // 回填 claudeSessionId:wrapper 启动时写入的绑定文件(无绑定 → undefined,_compute 降级 mtime)。
+        // name 经 isValidSessionName 守卫:非法名绝不下沉到 readBinding 的文件路径(评审团 4 号 D)。
         const slug = cwd ? cwdToSlug(cwd) : null;
-        const claudeSessionId = slug ? (readBinding(slug, name) || undefined) : undefined;
+        const claudeSessionId = (slug && isValidSessionName(name)) ? (readBinding(slug, name) || undefined) : undefined;
         return {
           name,
           attached: Number.parseInt(attached, 10) > 0,
@@ -556,6 +574,10 @@ function startWebServer() {
     try {
       if (!requireSameOriginForUnsafeMethods(req, res)) return;
       const name = req.params.name;
+      // 名字校验(评审团 4 号 D):非法名直接 400,绝不下沉到后续 tmux/绑定操作,防注入。
+      if (!isValidSessionName(name)) {
+        return res.status(400).json({ success: false, error: 'Invalid session name' });
+      }
       // 防自杀:控制台正连着该会话(WS 活跃)则拒绝删除(多标签/多设备兜底)
       if (isSessionInUse(name, clients)) {
         return res.status(409).json({ success: false, error: 'session_in_use' });
