@@ -8,7 +8,12 @@ yarn-error.log*
 .env
 .env.*
 
-.claude/
+# .claude/：放行 project scope 的 settings.json + hooks（SPEC §决策#23 PreToolUse hook 须随 worktree 检出生效）；
+# 仍忽略 local scope（settings.local.json 等本地个人配置）。
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
+!.claude/hooks/**
 
 __pycache__/
 *.pyc

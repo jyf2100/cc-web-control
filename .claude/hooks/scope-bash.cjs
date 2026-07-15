@@ -1,0 +1,44 @@
+#!/usr/bin/env node
+// PreToolUse hook (SPEC §决策#23)：把 dev-loop agent 的 Bash 限定到安全前缀白名单。
+// 随 worktree 检出生效（.claude/ 已在 .gitignore 放行进 git）。
+// 协议：stdin 收 JSON {tool_name, tool_input}；exit 0=放行，exit 2=deny（stderr 反馈给 agent，非致命）。
+"use strict";
+
+const ALLOW = [
+  /^npm (test|ci|install|i|it|run|run-script|ls|view|why)\b/,
+  /^npx\b/,
+  /^node\b/,
+  /^git (status|diff|log|show|branch|ls-files|blame|rev-parse|describe)\b/,
+  /^(ls|ll|cat|head|tail|less|more|pwd|grep|egrep|fgrep|rg|wc|sort|uniq|cut|tr|file|stat|which|basename|dirname|echo|printf|du|df)\b/,
+  /^(mkdir|touch|cp|mv)\b/,
+];
+
+// 禁止重定向 / 命令替换 / 后台等绕过手段
+const FORBIDDEN = /[<>`]|\$\(/;
+
+let raw = "";
+process.stdin.on("data", (d) => (raw += d));
+process.stdin.on("end", () => {
+  let event = {};
+  try {
+    event = JSON.parse(raw || "{}");
+  } catch {
+    process.exit(0); // 非 JSON，放行（不阻塞正常流程）
+  }
+  if (event.tool_name !== "Bash") process.exit(0);
+  const cmd = String((event.tool_input && event.tool_input.command) || "").trim();
+  if (!cmd) process.exit(0);
+  if (FORBIDDEN.test(cmd)) {
+    process.stderr.write(`[scope-bash] 拒绝(含重定向/命令替换): ${cmd.slice(0, 100)}\n`);
+    process.exit(2);
+  }
+  // 按 shell 控制符拆段，每段首词都必须命中白名单（防 npm test && rm -rf 式拼接）
+  const parts = cmd.split(/[;&|]/).map((s) => s.trim()).filter(Boolean);
+  const pass = parts.length > 0 && parts.every((p) => ALLOW.some((re) => re.test(p)));
+  if (pass) process.exit(0);
+  process.stderr.write(
+    `[scope-bash] 拒绝: ${cmd.slice(0, 100)}\n` +
+      `  允许: npm(test/ci/install/run) / npx / node / git(只读) / 常规读命令 / mkdir,touch,cp,mv\n`
+  );
+  process.exit(2);
+});
