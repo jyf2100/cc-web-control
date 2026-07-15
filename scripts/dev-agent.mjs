@@ -149,7 +149,7 @@ async function main() {
     `停下前用一段话总结：改了什么 / test 结果 / 遗留风险。`,
   ].join("\n");
 
-  // 3. SDK dev loop（model 省略→代理默认；bypassPermissions 因无人值守；maxTurns 兜底防跑飞）
+  // 3. SDK dev loop（对齐 Agent-Loop 方案 prd_runner.py / SPEC §决策#23：acceptEdits + settingSources + allowedTools）
   let resultMsg = null;
   try {
     const q = query({
@@ -157,8 +157,13 @@ async function main() {
       options: {
         cwd: REPO_ROOT,
         // model: 刻意省略 → 走 roc 代理默认（glm-5.2）
-        // 权限：allowedTools 有界放行（非 bypassPermissions，遵 hooks.md）。
-        //   表内自动放行（headless 非交互）；表外被拒。2b 升级=加 canUseTool 限定 Bash 前缀。
+        // 权限（对齐 prd_runner.py / SPEC §决策#23 ——Node SDK 与 Python SDK 同源，options 字段语义一一对应，
+        //   仅命名 snake_case↔camelCase：permission_mode↔permissionMode、setting_sources↔settingSources）：
+        //   permissionMode=acceptEdits → 编辑类自动过（fail-safe，摩擦≈bypass 但不裸放）；
+        //   settingSources=["project"] → 加载仓 CLAUDE.md(dev 守则) + .claude/hooks（PreToolUse 限 Bash 前缀）；
+        //   allowedTools 定向放行（headless 非交互）；表外被拒。非 bypassPermissions（遵 hooks.md）。
+        permissionMode: "acceptEdits",
+        settingSources: ["project"],
         allowedTools: ["Read", "Grep", "Glob", "Edit", "Write", "MultiEdit", "TodoWrite", "Bash"],
         maxTurns: 150,
         stderr: (data) => process.stderr.write(`[claude] ${data}`),
