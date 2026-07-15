@@ -77,6 +77,16 @@
         return null;
     })();
 
+    // 编排预设(skill 纪律):选定后该会话的任务消息按预设注入纪律前缀(默认档不注入)。
+    // 页面级状态:新开页面/会话默认回到「直接执行」,单次会话内保持一致。
+    const orchestrationPresets = (function () {
+        try {
+            if (window.OrchestrationPresets) return window.OrchestrationPresets;
+        } catch {}
+        return null;
+    })();
+    let currentPreset = orchestrationPresets ? orchestrationPresets.getDefaultId() : 'direct';
+
     function sendBatch(actions) {
         if (!ws || ws.readyState !== 1 || !isConnected) return;
         if (!Array.isArray(actions) || !actions.length) return;
@@ -211,6 +221,40 @@
         headerTitle.className = 'terminal-header-title';
         headerTitle.textContent = currentSession ? `Session: ${currentSession}` : 'Roc-CC Remote Control';
         terminalHeader.appendChild(headerTitle);
+
+        // 编排预设(skill 纪律)选择器:选定后该会话的任务消息按预设注入纪律前缀。
+        // 放 terminal-header 与 session 关联;点击时 stopPropagation 防 terminalView 的
+        // focusInput 抢走 <select> 焦点导致下拉无法展开(stop 按钮不受影响:动作已触发)。
+        const presetControl = document.createElement('div');
+        presetControl.className = 'preset-control';
+        presetControl.addEventListener('click', (e) => { e.stopPropagation(); });
+        if (orchestrationPresets) {
+            const presetLabel = document.createElement('span');
+            presetLabel.className = 'preset-control-label';
+            presetLabel.textContent = '编排';
+            presetLabel.setAttribute('aria-hidden', 'true');
+            const presetSelect = document.createElement('select');
+            presetSelect.className = 'control-input preset-select';
+            presetSelect.id = 'presetSelect';
+            presetSelect.setAttribute('aria-label', '编排预设');
+            for (const p of orchestrationPresets.listPresets()) {
+                const opt = document.createElement('option');
+                opt.value = p.id;
+                opt.textContent = p.label;
+                if (p.description) opt.title = p.description;
+                presetSelect.appendChild(opt);
+            }
+            presetSelect.value = currentPreset;
+            presetSelect.addEventListener('change', () => {
+                currentPreset = presetSelect.value || orchestrationPresets.getDefaultId();
+                const cur = orchestrationPresets.getPreset(currentPreset);
+                if (cur && currentPreset !== orchestrationPresets.getDefaultId()) {
+                    window.ccModules?.showToast?.(`编排预设:${cur.label}`, 'info', 2500);
+                }
+            });
+            presetControl.append(presetLabel, presetSelect);
+        }
+        terminalHeader.appendChild(presetControl);
 
         // 移动端止损：Esc / Ctrl+C 一键发送（桌面端隐藏，物理键盘已可直发）
         const stopControls = document.createElement('div');
@@ -405,10 +449,13 @@
             return;
         }
 
+        // 预设注入:非 slash 任务消息按当前编排预设前置纪律指令(默认档 applyPreset 原样返回,不注入)。
+        // slash 命令(/model 等)与空输入已在上方提前 return,不进入此注入路径。
+        const payload = orchestrationPresets ? orchestrationPresets.applyPreset(raw, currentPreset) : raw;
         if (tmuxActions?.buildSubmitLine) {
-            sendBatch(tmuxActions.buildSubmitLine(raw));
+            sendBatch(tmuxActions.buildSubmitLine(payload));
         } else {
-            sendBatch([{ type: 'key', data: 'C-u' }, { type: 'input', data: raw, enter: true }]);
+            sendBatch([{ type: 'key', data: 'C-u' }, { type: 'input', data: payload, enter: true }]);
         }
         terminalInputEl.value = '';
     }

@@ -194,6 +194,20 @@ html, body {
 .btn.stop-btn:active { color: var(--accent-2); background: var(--accent-bg); }
 .btn.stop-btn:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 1px; }
 
+/* 编排预设(skill 纪律)选择器:terminal-header 内,title 与 stop 按钮之间 */
+.preset-control { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.preset-control-label {
+    font-size: 11px; color: var(--fg-2); letter-spacing: 0.02em; user-select: none;
+}
+.preset-select {
+    height: 26px; max-width: 132px; padding: 0 6px;
+    font-family: var(--mono); font-size: 11px; color: var(--fg);
+    border: 1px solid var(--border-2); border-radius: var(--r-sm);
+    background: var(--surface); cursor: pointer;
+}
+.preset-select:focus { border-color: var(--accent-2); box-shadow: 0 0 0 3px var(--accent-dim); outline: none; }
+.preset-select:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+
 .quick-reply {
     display: flex; gap: 8px; padding: 10px 14px;
     background: var(--bg-2); border-bottom: 1px solid var(--border);
@@ -322,6 +336,7 @@ html, body {
 @media (max-width: 768px) {
     .header { padding: 8px 12px; }
     .control-label { display: none; }
+    .preset-control-label { display: none; }
     .messages { padding: 10px; }
     .terminal-content { padding: 10px; font-size: 12px; }
     .terminal-input-row { padding: 10px; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
