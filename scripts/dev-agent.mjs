@@ -25,13 +25,21 @@
  */
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { resolve, basename } from "node:path";
+import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
+import { resolve, basename, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { argv, cwd, exit, stdout, stderr } from "node:process";
 
 const REPO_ROOT = cwd();
 
-function parseArgs(args) {
+// ─── 仓内主动刹车 + 监控常量（SPEC §决策#27，2026-07-16 grill 共识）───
+export const WRITE_TOOLS = new Set(["Edit", "Write", "MultiEdit"]); // 写类工具（Bash 不算：跑 test/git，不直接判为"尝试修代码"）
+export const N_STALL = 3;              // verifiedRed 后连续 N 轮无写类 tool_use → stalled
+export const INPUT_TRUNC = 500;        // tool_use.input 落盘截断
+export const MAX_BUDGET = 10;          // maxBudgetUsd（降级兜底，宽松）
+const STATE_RUNS_DIR = join(REPO_ROOT, "state", "runs");
+
+export function parseArgs(args) {
   const out = { prd: null, source: null, base: "main", dryRun: false, branchPrefix: "pa-dev", help: false };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -95,6 +103,141 @@ function readText(p) {
   }
 }
 
+/** 截断字符串到 n（落盘防大 input 撑爆日志）。 */
+export function trunc(s, n) {
+  const x = (s ?? "").toString();
+  return x.length > n ? x.slice(0, n) + "…[trunc]" : x;
+}
+
+/** git diff --stat 摘要（取末 3 行拼一行，截 200 字符；失败返空串）。 */
+function gitDiffStat() {
+  try {
+    return git(["diff", "--stat"]).split("\n").filter(Boolean).slice(-3).join(" | ").slice(0, 200);
+  } catch {
+    return "";
+  }
+}
+
+/** 识别 npm test 结果红/绿（配对 Bash npm test 的 tool_result 文本）。有失败优先 red。
+ *  覆盖 node --test 格式（ℹ pass N / ℹ fail M）+ npm 层（npm ERR! Test failed）+ jest 风格（passing/failed）。 */
+export function classifyTestResult(text) {
+  const t = (text ?? "").toLowerCase();
+  const hasFail = /failed|failing|npm err|test failed|\bfail\s+[1-9]/.test(t);  // fail 0 不算红
+  const hasPass = /passing|passed|\bpass\s+[1-9]/.test(t);                        // pass 0 不算绿
+  if (hasFail) return "red";
+  if (hasPass) return "green";
+  return null;
+}
+
+/** 判定一次"干净" Bash `npm test` 的红/绿（SPEC #27 ② 主力刹车的 verifiedRed 信号源）。
+ *  优先用 tool_result.is_error（= 退出码：node --test 失败必 exit≠0）—— 不依赖输出文本，
+ *  避开大输出被 SDK 截断后文本解析失效的问题（本仓 744 测试，npm test 输出恒大、尾部汇总被截）。
+ *  因捕获端已过滤掉带管道/重定向的变体（hook 会拒），此处无需再判 hook 拒绝文案。
+ *  is_error 缺失（某些代理回传不含该字段）→ fallback 到文本解析 classifyTestResult。 */
+export function classifyTestExit(toolResult, text) {
+  if (toolResult?.is_error === true) return "red";    // exit≠0 = 测试失败
+  if (toolResult?.is_error === false) return "green"; // exit 0 = 通过（不靠文本，避截断）
+  return classifyTestResult(text);                    // is_error 缺失 → 文本 fallback（小输出可靠）
+}
+
+/** 判定 Bash command 是否为"干净" npm test（SPEC #27：捕获端过滤）。
+ *  只跟踪无管道/重定向/链式的裸 npm test —— 这类不被 scope-bash hook 拒，
+ *  tool_result 才是真结果、is_error 才可信；带 |>&; 的变体 hook 会拒，结果无意义。 */
+export function isCleanNpmTest(cmd) {
+  const c = (cmd ?? "").toString().trim();
+  return /^\s*npm\s+(run\s+)?test\b/.test(c) && !/[|>&;]/.test(c);
+}
+
+/** 落盘一行 run 记录到 state/runs/<branch>-<stamp>.jsonl（SPEC #27 监控，per-turn）。失败忽略不阻塞 loop。 */
+function appendRunLine(runLogPath, obj) {
+  try {
+    mkdirSync(STATE_RUNS_DIR, { recursive: true });
+    appendFileSync(runLogPath, JSON.stringify(obj) + "\n", "utf8");
+  } catch (e) {
+    stderr.write(`⚠ run 落盘失败（忽略）: ${e.message}\n`);
+  }
+}
+
+/** 创建 dev loop 状态对象（processDevLoop 的可注入状态；测试用此构造初始态）。 */
+export function createLoopState(runLogPath) {
+  return {
+    runLogPath,
+    turn: 0,
+    lastTest: null,          // null | "green" | "red"（最近一次 npm test 结果，动态）
+    noWriteStreak: 0,        // verifiedRed（lastTest==="red"）后连续无写类轮数
+    stalled: false,
+    pendingTestIds: new Set(), // 待配对 tool_result 的 Bash `npm test` tool_use_id
+  };
+}
+
+/** dev loop 循环体（SPEC #27：监控落盘 + ② 无进展刹车 + ③ 配对 tool_result 拿红/绿）。
+ *  从 main 抽出以支持喂脚本化 msg 序列做 stall E2E（真 dev loop 无法构造"持续红+无写类"场景，
+ *  dev 守则要求绝不留红）。行为与原内联 for-await 等价：
+ *  - assistant msg：计数 turn、收集 tool_use、落盘 per-turn jsonl、② 无进展计数 + stall break；
+ *  - user msg：配对 tool_result 拿 npm test 红/绿（动态更新 lastTest）；
+ *  - result msg：捕获 resultMsg 返回。
+ *  state 由调用方持有，函数读写其字段；返回 resultMsg（可能为 null）。 */
+export async function processDevLoop(messages, state) {
+  let resultMsg = null;
+  for await (const msg of messages) {
+    if (msg.type === "assistant") {
+      state.turn += 1;
+      const blocks = msg.message?.content ?? [];
+      let hasWrite = false;
+      const toolUses = [];
+      for (const b of blocks) {
+        if (b.type === "text") {
+          stderr.write(`[dev] ${b.text}\n`);
+        } else if (b.type === "tool_use") {
+          const name = b.name ?? "?";
+          const input = b.input ?? {};
+          const target = input.file_path || input.path || input.notebook_path
+            || (typeof input.command === "string" ? input.command.split("\n")[0] : "") || "";
+          toolUses.push({ name, target: trunc(target, 120), input: trunc(JSON.stringify(input), INPUT_TRUNC) });
+          if (WRITE_TOOLS.has(name)) hasWrite = true;
+          if (name === "Bash" && typeof input.command === "string") {
+            if (isCleanNpmTest(input.command.trim())) {
+              state.pendingTestIds.add(b.id); // 标记，等下个 user msg 配对 tool_result 拿红/绿
+            }
+          }
+        }
+      }
+      // ② 无进展计数：本轮有写类 → 重置；无写类且当前 test 红 → +1（test 未红不数，避前期误杀）
+      if (hasWrite) state.noWriteStreak = 0;
+      else if (state.lastTest === "red") state.noWriteStreak += 1;
+      appendRunLine(state.runLogPath, {
+        turn: state.turn, tool_use: toolUses, diff_stat: gitDiffStat(), test: state.lastTest,
+        verified_red: state.lastTest === "red", no_write_streak: state.noWriteStreak,
+      });
+      if (state.lastTest === "red" && state.noWriteStreak >= N_STALL) {
+        state.stalled = true;
+        stderr.write(`🧯 stalled：验证红后连续 ${state.noWriteStreak} 轮无写类进展（Edit/Write/MultiEdit），主动刹车\n`);
+        break;
+      }
+    } else if (msg.type === "user") {
+      // 配对 tool_result（补 #27 前丢弃的 user msg）→ 拿 npm test 红/绿
+      const blocks = msg.message?.content ?? msg.content ?? [];
+      if (blocks.length) stderr.write(`[dev] ← user msg（${blocks.length} blocks）\n`);
+      for (const b of blocks) {
+        if (b.type === "tool_result" && state.pendingTestIds.has(b.tool_use_id)) {
+          const txt = typeof b.content === "string" ? b.content : JSON.stringify(b.content ?? "");
+          const res = classifyTestExit(b, txt);
+          if (res) {
+            state.lastTest = res;
+            stderr.write(`[dev] npm test → ${res}（is_error=${b.is_error}, ${txt.length} chars）\n`);
+          } else {
+            stderr.write(`[dev] npm test 结果未识别（is_error=${b.is_error}, ${txt.length} chars）\n`);
+          }
+          state.pendingTestIds.delete(b.tool_use_id);
+        }
+      }
+    } else if (msg.type === "result") {
+      resultMsg = msg;
+    }
+  }
+  return resultMsg;
+}
+
 async function main() {
   const args = parseArgs(argv.slice(2));
   if (args.help) {
@@ -145,12 +288,26 @@ async function main() {
     `5. 不要 push、不要开 PR——push/PR 由本脚本在你停下后代办。`,
     `6. 不碰 .github/ branch protection、不 force push、不删分支、不 npm publish、不动 pretext/（vendored 独立子项目）。`,
     ``,
+    `## 何时用子代理分工（Agent 工具）`,
+    `满足任一才考虑分工，否则单干（子代理有独立 context 成本，别为分工而分工）：`,
+    `- PRD 横跨多个独立关注点（新增功能 + 补测试 + 审类型，可拆开）；`,
+    `- 估摸单干要 30+ turn 或读改 5+ 文件。`,
+    ``,
+    `分工纪律：`,
+    `- 用 Agent 工具 spawn 子代理，每个单一职责（"写 X 测试"/"实现 Y"/"审查 Z 类型"）；`,
+    `- 给子代理明确目标 + 限定它只动该职责范围内文件；`,
+    `- 子代理产出回你这里，由你整合 + 跑 npm test 验证整体；`,
+    `- commit/push 仍只由你（parent）守，子代理不碰 git。`,
+    ``,
     `现在：读 PRD → 规划 → 改代码 → npm test → 到"可提交且 test 绿"即停。`,
     `停下前用一段话总结：改了什么 / test 结果 / 遗留风险。`,
   ].join("\n");
 
   // 3. SDK dev loop（对齐 Agent-Loop 方案 prd_runner.py / SPEC §决策#23：acceptEdits + settingSources + allowedTools）
-  let resultMsg = null;
+  //    监控 + ②无进展刹车 状态（SPEC #27）打包进 state，循环体抽到 processDevLoop 供测试注入 msg 流。
+  const runLogPath = join(STATE_RUNS_DIR, `${branch.replace(/\//g, "-")}-${stamp()}.jsonl`);
+  const state = createLoopState(runLogPath);
+  let resultMsg;
   try {
     const q = query({
       prompt,
@@ -164,24 +321,32 @@ async function main() {
         //   allowedTools 定向放行（headless 非交互）；表外被拒。非 bypassPermissions（遵 hooks.md）。
         permissionMode: "acceptEdits",
         settingSources: ["project"],
-        allowedTools: ["Read", "Grep", "Glob", "Edit", "Write", "MultiEdit", "TodoWrite", "Bash"],
+        allowedTools: ["Read", "Grep", "Glob", "Edit", "Write", "MultiEdit", "TodoWrite", "Bash", "Agent"], // Agent = 子代理分工放行（SPEC §决策#29）
         maxTurns: 150,
+        maxBudgetUsd: MAX_BUDGET, // ③ 预算刹车（降级兜底，SPEC #27；LiteLLM cost 准确性待实测）
         stderr: (data) => process.stderr.write(`[claude] ${data}`),
       },
     });
-    for await (const msg of q) {
-      if (msg.type === "assistant") {
-        const blocks = msg.message?.content ?? [];
-        for (const b of blocks) {
-          if (b.type === "text") stderr.write(`[dev] ${b.text}\n`);
-        }
-      } else if (msg.type === "result") {
-        resultMsg = msg;
-      }
-    }
+    resultMsg = await processDevLoop(q, state);
   } catch (e) {
     stderr.write(`✗ SDK dev loop 异常: ${e.message}\n`);
     return 11;
+  }
+
+  const cost = resultMsg?.total_cost_usd ?? null;
+  const turns = resultMsg?.num_turns ?? state.turn;
+
+  // ③ 预算自检（降级兜底，#27）：cost 未回传/为 0 → 预算刹车形同虚设，仅 maxTurns 兜底
+  if (cost === null || cost === undefined || cost === 0) {
+    stderr.write(`⚠ 预算刹车未生效（total_cost_usd=${cost}，cost 未回传），仅 maxTurns 兜底\n`);
+  } else {
+    stderr.write(`💰 本次 cost=$${cost}（maxBudgetUsd=${MAX_BUDGET}）\n`);
+  }
+
+  // stalled：不 commit/不开 PR，吐 JSON + exit 12（SPEC #27 / grill 决策5；半成品靠 run_log 留痕）
+  if (state.stalled) {
+    stdout.write(JSON.stringify({ ok: false, stalled: true, branch, base, run_log: runLogPath, cost, turns }) + "\n");
+    return 12;
   }
 
   if (resultMsg?.is_error) {
@@ -189,12 +354,9 @@ async function main() {
     return 11;
   }
 
-  const cost = resultMsg?.total_cost_usd ?? null;
-  const turns = resultMsg?.num_turns ?? null;
-
   // 4. dry-run：到此为止
   if (args.dryRun) {
-    stdout.write(JSON.stringify({ ok: true, dry_run: true, branch, base, cost, turns, result: resultMsg?.result ?? null }) + "\n");
+    stdout.write(JSON.stringify({ ok: true, dry_run: true, branch, base, cost, turns, run_log: runLogPath, result: resultMsg?.result ?? null }) + "\n");
     return 0;
   }
 
@@ -218,9 +380,14 @@ async function main() {
   }
 }
 
-main()
-  .then((code) => exit(code ?? 0))
-  .catch((e) => {
-    stderr.write(`✗ 未捕获异常: ${e.stack || e.message}\n`);
-    exit(99);
-  });
+// main guard：仅当本文件是 node 入口（argv[1] 指向它）时跑 main；
+// 被 import 做单测时不跑（import.meta.url ≠ argv[1] 的 file:// URL）。
+const __entryUrl = argv[1] ? pathToFileURL(argv[1]).href : "";
+if (import.meta.url === __entryUrl) {
+  main()
+    .then((code) => exit(code ?? 0))
+    .catch((e) => {
+      stderr.write(`✗ 未捕获异常: ${e.stack || e.message}\n`);
+      exit(99);
+    });
+}

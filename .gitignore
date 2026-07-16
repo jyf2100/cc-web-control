@@ -19,5 +19,6 @@ __pycache__/
 *.pyc
 /.worktrees/
 /pretext/
+/state/
 .playwright-mcp/
 .superpowers/
