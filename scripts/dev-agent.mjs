@@ -260,11 +260,15 @@ async function main() {
   const branch = `${args.branchPrefix}/${stamp()}-${slug}`;
 
   // 1. 建 feature 分支（基于 base；不碰主干）
-  try {
-    git(["checkout", "-b", branch, base]);
-  } catch (e) {
-    stderr.write(`✗ 建分支失败: ${e.message}\n`);
-    return 13;
+  //    dry-run 不切分支——在当前工作区跑，改动留工作树供 review（git restore 清），
+  //    避免每次 dry-run 切到临时分支又不切回（堆积临时分支 + HEAD 漂移到 base，曾踩坑）。
+  if (!args.dryRun) {
+    try {
+      git(["checkout", "-b", branch, base]);
+    } catch (e) {
+      stderr.write(`✗ 建分支失败: ${e.message}\n`);
+      return 13;
+    }
   }
 
   // 2. 组 prompt：PRD + 可选 source + 自治守则（与根 CLAUDE.md 互为兜底）
@@ -273,8 +277,12 @@ async function main() {
     : "";
 
   const prompt = [
-    `你是本仓（cc-web-control）的自治 dev agent。当前分支 ${branch}（基点 ${base}）。`,
-    `主干 ${base} 有 branch protection——你永远只在这个 feature 分支上干活，绝不直推主干。`,
+    args.dryRun
+      ? `你是本仓（cc-web-control）的自治 dev agent。**dry-run 模式**：在当前工作区跑，不切分支 / 不 commit / 不 push，改动留工作树供 review。`
+      : `你是本仓（cc-web-control）的自治 dev agent。当前分支 ${branch}（基点 ${base}）。`,
+    args.dryRun
+      ? ""
+      : `主干 ${base} 有 branch protection——你永远只在这个 feature 分支上干活，绝不直推主干。`,
     ``,
     `## 你的任务（PRD）`,
     prdText,
