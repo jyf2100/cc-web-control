@@ -1,0 +1,25 @@
+# 最小 CI：push（main / pa-dev/**）与 PR 触发，跑 npm test。
+# 意图：给 SPEC #24「branch protection 平台兜底」提供可挂的 required status check；
+# dev-agent 自治产出的 pa-dev/** 分支也在干净 ubuntu 环境再验一遍（dev loop 内已绿，CI 复核）。
+# 如需跨版本覆盖，把 node-version 改为 matrix：strategy.matrix.node-version: [18.x, 20.x, 22.x]。
+name: test
+
+on:
+  push:
+    branches: [main, "pa-dev/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm test
