@@ -28,6 +28,20 @@ class AgentClient {
     }
   }
 
+  // 拉单机 spawn 级审计(供 hub /api/global-audit 聚合)。cmd 已在单机侧脱敏。
+  async fetchAudit(limit = 100) {
+    try {
+      const res = await fetch(`${this.url}/api/audit/cc-subprocess?limit=${limit}`, {
+        headers: { Authorization: `Bearer ${this.token}` },
+      });
+      if (!res.ok) return { ok: false, error: `${res.status}` };
+      const payload = await res.json();
+      return { ok: true, entries: Array.isArray(payload && payload.entries) ? payload.entries : [] };
+    } catch (e) {
+      return { ok: false, error: e.code || e.message };
+    }
+  }
+
   async createSession({ name, cwd }) {
     try {
       const res = await fetch(`${this.url}/api/sessions`, {

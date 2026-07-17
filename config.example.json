@@ -20,5 +20,7 @@
   "hubRegisterToken": "",
   "machineId": "",
   "machineName": "",
-  "publicUrl": ""
+  "publicUrl": "",
+
+  "anthropic_api_key": "keychain://cc-web-control/anthropic-api-key"
 }

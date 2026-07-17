@@ -218,6 +218,28 @@ async function showEnvironment(sessionName, key) {
   return stdout;
 }
 
+/** 构造读 pane dead/exit 状态的 tmux 参数。格式 "#{pane_dead}:#{pane_dead_status}"。 */
+function buildPaneExitStatusArgs(sessionName) {
+  return ['display-message', '-p', '-t', sessionName, '#{pane_dead}:#{pane_dead_status}'];
+}
+
+/**
+ * 读 session 首个 pane 的退出状态(子进程审计 stop 用)。
+ * @returns {Promise<number|null>} pane 已死 → 退出码(0-255);仍活跃/未知 → null
+ */
+async function paneExitStatus(sessionName) {
+  if (!sessionName || typeof sessionName !== 'string') {
+    throw new Error('Session name must be a non-empty string');
+  }
+  const { stdout } = await runTmux(buildPaneExitStatusArgs(sessionName), { maxStdoutChars: 1024 });
+  const [dead, status] = String(stdout).trim().split(':');
+  if (dead === '1') {
+    const n = Number.parseInt(status, 10);
+    if (Number.isInteger(n)) return n;
+  }
+  return null; // 活跃 / 解析不出 → null
+}
+
 module.exports = {
   checkSession,
   createSession,
@@ -228,8 +250,10 @@ module.exports = {
   buildCaptureArgs,
   buildCreateArgs,
   buildShowEnvArgs,
+  buildPaneExitStatusArgs,
   parseCaptureHistory,
   showEnvironment,
+  paneExitStatus,
 };
 
 async function sendKey(sessionName, key) {

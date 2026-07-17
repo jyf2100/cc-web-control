@@ -13,6 +13,7 @@ const { loadMachines } = require('./config.cjs');
 const { MachineRegistry } = require('./registry.cjs');
 const { AgentRegistrar } = require('./register_server.cjs');
 const { DashboardAggregator } = require('./dashboard_aggregator.cjs');
+const { AuditAggregator } = require('./audit_aggregator.cjs');
 const { AgentClient } = require('./agent_client.cjs');
 const { WsBridge } = require('./ws_bridge.cjs');
 const { createRateLimiter } = require('../rate_limit.cjs');
@@ -71,6 +72,19 @@ function startHub(opts) {
       const r = await ac.fetchDashboard();
       if (!r.ok) registrar.notifyUnreachable(sec.id, sec.url, r.error);
       return r.ok ? { ok: true, payload: r.payload } : { ok: false, error: r.error };
+    },
+  });
+
+  // 子进程 spawn 审计聚合(各机 /api/audit/cc-subprocess → /api/global-audit)
+  const auditAggregator = new AuditAggregator({
+    registry,
+    intervalMs,
+    fetchOne: async (sec, limit) => {
+      const ac = clients.get(sec.id);
+      if (!ac) return { ok: false, error: `unknown machine: ${sec.id}` };
+      const r = await ac.fetchAudit(limit);
+      if (!r.ok) registrar.notifyUnreachable(sec.id, sec.url, r.error);
+      return r.ok ? { ok: true, entries: r.entries } : { ok: false, error: r.error };
     },
   });
 
@@ -279,6 +293,11 @@ function startHub(opts) {
   // 全局聚合 dashboard
   app.get('/api/global-dashboard', (req, res) => {
     res.json(aggregator.getLatest());
+  });
+
+  // 全局聚合子进程审计(Audit 面板):各单机 cc-subprocess.jsonl 合并,ts 倒序
+  app.get('/api/global-audit', (req, res) => {
+    res.json(auditAggregator.getLatest());
   });
 
   // —— 主控 agent 内部端点(只读参谋 T1)——
@@ -516,6 +535,7 @@ function startHub(opts) {
     server.on('error', reject);
     server.listen(port, host, () => {
       aggregator.start();
+      auditAggregator.start();
       const addr = server.address();
       // 0.0.0.0 归一为 127.0.0.1:浏览器/本机访问开不了 0.0.0.0(url 供 server_entry 自动开浏览器)
       const displayHost = (!host || host === '0.0.0.0') ? '127.0.0.1' : host;
@@ -538,6 +558,7 @@ function startHub(opts) {
             try { await mainAgentHandles.localTmux.kill(mainAgentHandles.sessionName); } catch {}
           });
           aggregator.stop();
+          auditAggregator.stop();
           registrar.cleanup();
           for (const ac of clients.values()) ac.close();
           wss.close();
