@@ -11,6 +11,7 @@ const auth = require('../auth.cjs');
 const { existsSync } = require('node:fs');
 const { loadMachines } = require('./config.cjs');
 const { MachineRegistry } = require('./registry.cjs');
+const { querySessions, CLI_TOOLS } = require('./sessions_query.cjs');
 const { AgentRegistrar } = require('./register_server.cjs');
 const { DashboardAggregator } = require('./dashboard_aggregator.cjs');
 const { AgentClient } = require('./agent_client.cjs');
@@ -313,6 +314,37 @@ function startHub(opts) {
     if (!dispatcher) { res.status(503).json({ error: 'main agent disabled' }); return; }
     const ok = await dispatcher.ack(runId, outcome);
     res.json({ ok });
+  });
+
+  // 多 CLI 工具会话查询(聚合 latest):
+  //  GET /api/sessions                      → 全部会话(每条带 cli_tool/machine/machineName)
+  //  GET /api/sessions?group_by=cli_tool    → { groups: {每个枚举:count}, total }
+  //  GET /api/sessions?cli_tool=<enum>      → 过滤后 { sessions: [...] };非法枚举 → 400
+  //  GET /api/sessions/:machine             → 该机 { machine, machineName, cli_tool, online, sessions }
+  app.get('/api/sessions', (req, res) => {
+    const groupBy = req.query.group_by ? String(req.query.group_by) : '';
+    const cliTool = req.query.cli_tool != null ? String(req.query.cli_tool) : '';
+    try {
+      const result = querySessions(aggregator.getLatest(), { groupBy, cliTool });
+      res.json(result);
+    } catch (e) {
+      // 非法 cli_tool 枚举值:400 + 合法枚举清单(供调用方提示)
+      res.status(400).json({ error: e.message, allowed: e.allowed || CLI_TOOLS });
+    }
+  });
+
+  app.get('/api/sessions/:machine', (req, res) => {
+    const mid = req.params.machine;
+    const latest = aggregator.getLatest();
+    const m = (latest && Array.isArray(latest.machines) ? latest.machines : []).find((x) => x && x.id === mid);
+    if (!m) { res.status(404).json({ error: `unknown machine: ${mid}` }); return; }
+    res.json({
+      machine: m.id,
+      machineName: typeof m.name === 'string' ? m.name : m.id,
+      cli_tool: m.cli_tool || 'unknown',
+      online: m.online !== false,
+      sessions: m.sessions || [],
+    });
   });
 
   // 代理:创建会话(body 带 machine 字段指定目标机)

@@ -4,7 +4,7 @@
 // 数据通道(看板轮询 + 出站 WS 终端)不经此模块。
 const WebSocket = require('ws');
 const os = require('node:os');
-const { ID_RE } = require('./hub/config.cjs');
+const { ID_RE, normalizeCliTool } = require('./hub/config.cjs');
 
 const PING_INTERVAL_MS = 20000;
 const RECONNECT_BASE_MS = 500;
@@ -22,6 +22,7 @@ class RegisterClient {
     hubUrl, registerToken, authToken,
     machineId, machineName, publicUrl,
     bindHost, port,
+    cliTool,
     pingIntervalMs = PING_INTERVAL_MS,
     reconnectBaseMs = RECONNECT_BASE_MS,
     reconnectMaxMs = RECONNECT_MAX_MS,
@@ -37,6 +38,9 @@ class RegisterClient {
     this._publicUrl = publicUrl || '';
     this._bindHost = bindHost || '127.0.0.1';
     this._port = port;
+    // 上报的 CLI 工具类型(hub 聚合分类/徽标用)。cc-web-control 自身恒为 claude-code;
+    // 未来若用本库注册非 claude-code 被控,可显式传入合法枚举值。非法值由 normalizeCliTool 回退 unknown。
+    this._cliTool = normalizeCliTool(cliTool || 'claude-code');
     this._pingIntervalMs = pingIntervalMs;
     this._reconnectBaseMs = reconnectBaseMs;
     this._reconnectMaxMs = reconnectMaxMs;
@@ -164,6 +168,7 @@ class RegisterClient {
       name: this._machineName || id,
       url: this._publicUrl,
       token: this._authToken,
+      cli_tool: this._cliTool,
     }));
   }
 

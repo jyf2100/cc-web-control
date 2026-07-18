@@ -60,7 +60,7 @@ class AgentRegistrar {
   _handleRegister(ws, m) {
     let machine;
     try {
-      machine = validateMachine({ id: m.id, name: m.name, url: m.url, token: m.token });
+      machine = validateMachine({ id: m.id, name: m.name, url: m.url, token: m.token, cli_tool: m.cli_tool });
     } catch (e) {
       this._log.error?.(`[registrar] 注册帧非法: ${e.message}`);
       try { ws.close(WS_CLOSE_POLICY, 'invalid register'); } catch {}

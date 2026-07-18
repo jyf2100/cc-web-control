@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const { loadMachines, validateMachine } = require('../hub/config.cjs');
+const { loadMachines, validateMachine, normalizeCliTool, CLI_TOOLS } = require('../hub/config.cjs');
 
 function writeTmp(content) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hub-cfg-'));
@@ -15,8 +15,33 @@ function rm(p) { fs.rmSync(p, { recursive: true, force: true }); }
 
 test('validateMachine 合法', () => {
   assert.deepEqual(validateMachine({ id: 'mc1', name: 'Mac', url: 'http://1.2.3.4:7684', token: 't' }), {
-    id: 'mc1', name: 'Mac', url: 'http://1.2.3.4:7684', token: 't',
+    id: 'mc1', name: 'Mac', url: 'http://1.2.3.4:7684', token: 't', cli_tool: 'unknown',
   });
+});
+
+test('validateMachine 透传合法 cli_tool(grok-build)', () => {
+  assert.equal(validateMachine({ id: 'm1', name: 'x', url: 'http://h', token: 't', cli_tool: 'grok-build' }).cli_tool, 'grok-build');
+});
+
+test('validateMachine cli_tool 缺省/空/非枚举 → unknown(不抛错,旧 agent 兼容)', () => {
+  const base = { id: 'm1', name: 'x', url: 'http://h', token: 't' };
+  assert.equal(validateMachine(base).cli_tool, 'unknown');
+  assert.equal(validateMachine({ ...base, cli_tool: '' }).cli_tool, 'unknown');
+  assert.equal(validateMachine({ ...base, cli_tool: null }).cli_tool, 'unknown');
+  assert.equal(validateMachine({ ...base, cli_tool: 'foo' }).cli_tool, 'unknown');
+  assert.equal(validateMachine({ ...base, cli_tool: 42 }).cli_tool, 'unknown');
+});
+
+test('normalizeCliTool 已知枚举原样 / 非法回退 unknown', () => {
+  for (const t of CLI_TOOLS) assert.equal(normalizeCliTool(t), t);
+  assert.equal(normalizeCliTool('foo'), 'unknown');
+  assert.equal(normalizeCliTool(''), 'unknown');
+  assert.equal(normalizeCliTool(undefined), 'unknown');
+  assert.equal(normalizeCliTool(null), 'unknown');
+});
+
+test('CLI_TOOLS 含 5 个枚举(claude-code/grok-build/codex/cursor/unknown)', () => {
+  assert.deepEqual(CLI_TOOLS, ['claude-code', 'grok-build', 'codex', 'cursor', 'unknown']);
 });
 
 test('validateMachine id 含 / → 抛错', () => {
