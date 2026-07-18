@@ -34,7 +34,7 @@ const REPO_ROOT = cwd();
 
 // ─── 仓内主动刹车 + 监控常量（SPEC §决策#27，2026-07-16 grill 共识）───
 export const WRITE_TOOLS = new Set(["Edit", "Write", "MultiEdit"]); // 写类工具（Bash 不算：跑 test/git，不直接判为"尝试修代码"）
-export const N_STALL = 3;              // verifiedRed 后连续 N 轮无写类 tool_use → stalled
+export const N_STALL = 100;             // verifiedRed 后连续 N 轮无写类 tool_use → stalled（2026-07-18：3→100，避免 dev「先诊断后改」被过早刹车）
 export const INPUT_TRUNC = 500;        // tool_use.input 落盘截断
 export const MAX_BUDGET = 10;          // maxBudgetUsd（降级兜底，宽松）
 const STATE_RUNS_DIR = join(REPO_ROOT, "state", "runs");
