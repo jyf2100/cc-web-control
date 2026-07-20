@@ -21,11 +21,14 @@ function mergeDashboards(results) {
 }
 
 // 轮询器:依赖注入 registry + fetchOne(secret) -> {ok, payload?, error?}
+// onResult(可选):每轮 _tick 结束后以原始 results(含 payload)回调,供下游消费(如 autonomy 增量检测)。
+//   不传 → 行为与历史完全一致(向后兼容)。回调抛错被吞(不影响聚合主流程)。
 class DashboardAggregator {
-  constructor({ registry, fetchOne, intervalMs = 2000 }) {
+  constructor({ registry, fetchOne, intervalMs = 2000, onResult } = {}) {
     this._registry = registry;
     this._fetchOne = fetchOne;
     this._intervalMs = intervalMs;
+    this._onResult = typeof onResult === 'function' ? onResult : null;
     this._timer = null;
     this._latest = { machines: [] };
   }
@@ -57,6 +60,9 @@ class DashboardAggregator {
       }
     }));
     this._latest = mergeDashboards(results);
+    if (this._onResult) {
+      try { this._onResult(results); } catch { /* 下游消费失败不影响聚合 */ }
+    }
   }
   getLatest() { return this._latest; }
 }

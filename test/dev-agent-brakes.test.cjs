@@ -196,22 +196,23 @@ test("parseArgs: -h / --help", async () => {
 //    用脚本化 msg 序列注入，断言 stalled 路径。无法用真 dev loop 测。
 // ════════════════════════════════════════════════════════════════════
 
-test("stall: 红 + 连续 3 轮无写类 → stalled=true 并 break（主力路径）", async () => {
-  const { processDevLoop, createLoopState } = await modPromise;
+test("stall: 红 + 连续 N_STALL 轮无写类 → stalled=true 并 break（主力路径）", async () => {
+  const { processDevLoop, createLoopState, N_STALL } = await modPromise;
   const state = createLoopState(tmpRunLog());
+  // 动态构造 N_STALL 轮无写类（首轮用 Bash 读类，验证 Bash 不算写类；阈值可调，测试随之缩放）
+  const noWriteTurns = Array.from({ length: N_STALL }, (_, i) =>
+    i === 0 ? assistantMsg(bashUse("t2", "grep -r foo .")) : assistantMsg(text("还在想")));
   const seq = [
     assistantMsg(bashUse("t1", "npm test")),
     userResult("t1", true, "fail 1"),               // → lastTest=red
-    assistantMsg(text("读代码找 bug")),              // 无写类 → streak=1
-    assistantMsg(bashUse("t2", "grep -r foo .")),    // Bash 读类不算写 → streak=2
-    assistantMsg(text("还在想")),                     // 无写类 → streak=3 → stall break
+    ...noWriteTurns,                                 // streak 1..N_STALL，末轮触发 stall break
     assistantMsg(text("不该被处理（break 后）")),     // 断言 break 生效：此 msg 不进 turn
   ];
   await processDevLoop(fromArray(seq), state);
   assert.equal(state.stalled, true, "应 stalled");
   assert.equal(state.lastTest, "red");
-  assert.equal(state.noWriteStreak, 3);
-  assert.equal(state.turn, 4, "break 前共 4 个 assistant msg 进入 turn 计数；seq 里第 5 个 assistant（索引 5）因 break 不处理");
+  assert.equal(state.noWriteStreak, N_STALL);
+  assert.equal(state.turn, N_STALL + 1, "break 前 1（npm test）+ N_STALL（无写类）个 assistant 计入 turn；break 后那条不处理");
 });
 
 test("stall: 红 + 中间 Write → 重置 streak，不 stall", async () => {
@@ -231,7 +232,7 @@ test("stall: 红 + 中间 Write → 重置 streak，不 stall", async () => {
 });
 
 test("stall: 红 + MultiEdit → 同样重置 streak（写类集合覆盖）", async () => {
-  const { processDevLoop, createLoopState, WRITE_TOOLS } = await modPromise;
+  const { processDevLoop, createLoopState, WRITE_TOOLS, N_STALL } = await modPromise;
   assert.ok(WRITE_TOOLS.has("MultiEdit"), "前置：MultiEdit 在写类集合");
   const state = createLoopState(tmpRunLog());
   const seq = [
@@ -239,13 +240,11 @@ test("stall: 红 + MultiEdit → 同样重置 streak（写类集合覆盖）", a
     userResult("t1", true, "fail"),
     assistantMsg(text(".")),                         // streak=1
     assistantMsg(writeUse("m1", "MultiEdit")),        // → streak=0
-    assistantMsg(text(".")),                         // streak=1
-    assistantMsg(text(".")),                         // streak=2
-    assistantMsg(text(".")),                         // streak=3 → stall
+    ...Array.from({ length: N_STALL }, () => assistantMsg(text("."))),  // streak 1..N_STALL → stall
   ];
   await processDevLoop(fromArray(seq), state);
-  assert.equal(state.stalled, true, "MultiEdit 重置后从 0 重新累计到 3 应 stall");
-  assert.equal(state.noWriteStreak, 3);
+  assert.equal(state.stalled, true, `MultiEdit 重置后从 0 重新累计到 N_STALL(${N_STALL}) 应 stall`);
+  assert.equal(state.noWriteStreak, N_STALL);
 });
 
 test("stall: 未跑过 test（lastTest=null）连续无写类 → 不计数、不 stall（避前期误杀）", async () => {
@@ -280,19 +279,18 @@ test("stall: test 绿（lastTest=green）连续无写类 → 不计数（绿不�
   assert.equal(state.lastTest, "green");
 });
 
-test("stall: 红 + 仅 2 轮无写类 → 未达 N_STALL=3，不 stall", async () => {
+test("stall: 红 + 仅 N_STALL-1 轮无写类 → 未达阈值，不 stall", async () => {
   const { processDevLoop, createLoopState, N_STALL } = await modPromise;
-  assert.equal(N_STALL, 3, "前置：阈值=3");
+  assert.ok(N_STALL >= 2, "前置：阈值≥2 才能构造 N_STALL-1 轮");
   const state = createLoopState(tmpRunLog());
   const seq = [
     assistantMsg(bashUse("t1", "npm test")),
     userResult("t1", true, "fail"),
-    assistantMsg(text(".")),                         // streak=1
-    assistantMsg(text(".")),                         // streak=2（结束，未到 3）
+    ...Array.from({ length: N_STALL - 1 }, () => assistantMsg(text("."))),  // streak 1..N_STALL-1（未达阈值）
   ];
   await processDevLoop(fromArray(seq), state);
   assert.equal(state.stalled, false);
-  assert.equal(state.noWriteStreak, 2);
+  assert.equal(state.noWriteStreak, N_STALL - 1);
 });
 
 test("stall: 动态修绿回退 — 红→绿后停止累计（SPEC #27 verifiedRed 动态口径）", async () => {
@@ -315,15 +313,13 @@ test("stall: 动态修绿回退 — 红→绿后停止累计（SPEC #27 verified
 });
 
 test("stall: is_error 主导 — 真 exit≠0 即使输出被截断只剩 '...' 也判红", async () => {
-  const { processDevLoop, createLoopState } = await modPromise;
+  const { processDevLoop, createLoopState, N_STALL } = await modPromise;
   const state = createLoopState(tmpRunLog());
   // 模拟本仓 744 测试场景：npm test 输出巨大被 SDK 截断，尾部汇总看不到
   const seq = [
     assistantMsg(bashUse("t1", "npm test")),
     userResult("t1", true, "...（中间几千行 test 输出，尾部 pass/fail 汇总被 SDK 截断看不到）"),
-    assistantMsg(text(".")),
-    assistantMsg(text(".")),
-    assistantMsg(text(".")),                         // streak=3 → stall
+    ...Array.from({ length: N_STALL }, () => assistantMsg(text("."))),  // streak 1..N_STALL → stall
   ];
   await processDevLoop(fromArray(seq), state);
   assert.equal(state.lastTest, "red", "is_error=true 主导，不靠被截断的文本");

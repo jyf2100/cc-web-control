@@ -100,3 +100,44 @@ test('DashboardAggregator fetchOne 抛异常 → 该机 online:false + lastError
   assert.equal(mc1.lastError, 'boom');
   assert.equal(mc2.online, true); // 异常隔离,mc2 仍正常
 });
+
+// —— onResult 钩子(autonomy 增量检测消费;向后兼容:不传 = 无副作用) ——
+
+test('DashboardAggregator onResult:每轮 _tick 后以原始 results 回调(含 payload)', async () => {
+  const seen = [];
+  const reg = fakeRegistry([{ id: 'mc1', name: 'A', url: 'http://1', token: 't1' }]);
+  const agg = new DashboardAggregator({
+    registry: reg,
+    fetchOne: async () => ({ ok: true, payload: { tmuxOk: true, sessions: [{ autonomy: { commits: 1, rollbacks: 0, interventions: 0 } }] } }),
+    intervalMs: 999999,
+    onResult: (results) => { seen.push(results); },
+  });
+  await agg._tick();
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0][0].machine.id, 'mc1');
+  assert.equal(seen[0][0].online, true);
+  assert.equal(seen[0][0].payload.sessions[0].autonomy.commits, 1);
+});
+
+test('DashboardAggregator 无 onResult → 行为不变(向后兼容)', async () => {
+  const reg = fakeRegistry([{ id: 'mc1', name: 'A', url: 'http://1', token: 't1' }]);
+  const agg = new DashboardAggregator({
+    registry: reg,
+    fetchOne: async () => ({ ok: true, payload: { tmuxOk: true, sessions: [] } }),
+    intervalMs: 999999,
+  });
+  await agg._tick(); // 不抛即通过
+  assert.equal(agg.getLatest().machines[0].online, true);
+});
+
+test('DashboardAggregator onResult 抛错被吞,不影响聚合主流程', async () => {
+  const reg = fakeRegistry([{ id: 'mc1', name: 'A', url: 'http://1', token: 't1' }]);
+  const agg = new DashboardAggregator({
+    registry: reg,
+    fetchOne: async () => ({ ok: true, payload: { tmuxOk: true, sessions: [] } }),
+    intervalMs: 999999,
+    onResult: () => { throw new Error('downstream boom'); },
+  });
+  await agg._tick(); // onResult 抛错被吞,_tick 正常 resolve
+  assert.equal(agg.getLatest().machines[0].online, true);
+});
