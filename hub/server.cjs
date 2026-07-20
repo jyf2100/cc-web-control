@@ -27,6 +27,7 @@ const { EventWatcher } = require('./event_watcher.cjs');
 const { AuditLog } = require('./audit_log.cjs');
 const rootTmux = require('../tmux.cjs');
 const { writeMainAgentFiles } = require('./main_agent_config.cjs');
+const { AgentStateStore } = require('./agent_state_store.cjs');
 
 function startHub(opts) {
   const {
@@ -52,6 +53,10 @@ function startHub(opts) {
     console.warn(`[hub] hub-machines.json 已 deprecated,将在后续版本移除;请改为在各单机配置 CC_WEB_HUB_URL + CC_WEB_HUB_TOKEN(详见 README 迁移指引)`);
   }
   const registry = new MachineRegistry(machines);
+
+  // Agent 任务生命周期聚合 store:各单机 /api/dashboard payload.agents 上报 → ingestReport;
+  // 命令(retry/approve/...)→ transition。hub 看板按状态分组显示(AC1-AC8)。
+  const agentStateStore = new AgentStateStore({ nowFn: Date.now, log: console });
 
   // 每机一个 agent_client(持有 token,内部用);静态种子启动即建,运行时注册由 registrar 增建
   const clients = new Map();
@@ -84,6 +89,11 @@ function startHub(opts) {
       if (!ac) return { ok: false, error: `unknown machine: ${sec.id}` };
       const r = await ac.fetchDashboard();
       if (!r.ok) registrar.notifyUnreachable(sec.id, sec.url, r.error);
+      // 单机可在 /api/dashboard payload 携带 agents(任务生命周期上报)→ 每 intervalMs(默认 2s)
+      // 聚合一次。AC2/3/4:注册后 ≤2s 看板可见、迁移 ≤2s 可观测、多机多 agent 按 agent_id 聚合。
+      if (r.ok && r.payload && Array.isArray(r.payload.agents)) {
+        try { agentStateStore.ingestReport(sec.id, r.payload.agents); } catch { /* 上报异常不阻断聚合 */ }
+      }
       return r.ok ? { ok: true, payload: r.payload } : { ok: false, error: r.error };
     },
     onResult: (results) => {
@@ -310,6 +320,45 @@ function startHub(opts) {
   // 全局聚合 dashboard
   app.get('/api/global-dashboard', (req, res) => {
     res.json(aggregator.getLatest());
+  });
+
+  // —— Agent 任务生命周期(6 状态机聚合)——
+  // GET /api/agents:按状态分组(恒含全部 6 状态键)+ 全部 agent 列表 + 事件日志(最近 N 条)。
+  //   ?events_limit=N 限制事件日志条数(默认 100,上限 1000)。
+  app.get('/api/agents', (req, res) => {
+    const grouped = agentStateStore.groupByState();
+    const eventsLimitRaw = Number(req.query.events_limit);
+    const eventsLimit = Math.min(Math.max(Number.isFinite(eventsLimitRaw) ? eventsLimitRaw : 100, 1), 1000);
+    const events = agentStateStore.getEventLog();
+    res.json({
+      groups: grouped.groups,
+      byState: grouped.byState,
+      total: grouped.total,
+      agents: agentStateStore.all(),
+      events: events.slice(-eventsLimit),
+    });
+  });
+
+  // POST /api/agents/:agent_id/transition:命令式迁移(AC7 retry / AC8 非法拒绝)。
+  //   body: { event: 'retry'|'approve'|..., trigger?: '<string>' }
+  //   合法 → 200 { ok, agent, event };非法迁移 → 409 { error, code:'illegal transition' };
+  //   未知 agent → 404;缺 event → 400。
+  app.post('/api/agents/:agent_id/transition', (req, res) => {
+    if (!requireSameOriginForUnsafeMethods(req, res)) return;
+    const agent_id = req.params.agent_id;
+    const event = req.body && typeof req.body.event === 'string' ? req.body.event : '';
+    const trigger = req.body && typeof req.body.trigger === 'string' ? req.body.trigger : event;
+    if (!event) { res.status(400).json({ error: 'event required' }); return; }
+    const r = agentStateStore.transition(agent_id, event, trigger);
+    if (!r.ok) {
+      const code = r.code || 'transition_failed';
+      const status = code === 'unknown agent' ? 404
+        : (code === 'illegal transition' || code === 'invalid event' ? 409 : 400);
+      res.status(status).json({ error: r.error, code });
+      return;
+    }
+    const lastEvent = agentStateStore.getEventLog().slice(-1)[0] || null;
+    res.json({ ok: true, agent: agentStateStore.get(agent_id), event: lastEvent });
   });
 
   // autonomy 指标面板数据:?window=1h|24h|7d(默认 24h)。按机聚合 commit/rollback/intervention 三项计数,
