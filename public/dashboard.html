@@ -37,6 +37,22 @@
             <div id="stateMessage" class="state-message" hidden></div>
         </main>
 
+        <!-- hub 模式:受监督自主运行指标面板(commit / rollback / 人工干预,1h/24h/7d 窗口)-->
+        <section id="autonomy-panel" class="autonomy-panel" hidden aria-label="自主运行指标">
+            <div class="autonomy-panel__head">
+                <div class="autonomy-panel__title">
+                    <span class="autonomy-panel__name">自主运行指标</span>
+                    <span class="autonomy-panel__hint">commit / rollback / 人工干预 · 衡量「受监督自主运行」程度</span>
+                </div>
+                <div class="autonomy-window" role="group" aria-label="时间窗口">
+                    <button type="button" class="autonomy-window__btn" data-window="1h" aria-pressed="false">1h</button>
+                    <button type="button" class="autonomy-window__btn" data-window="24h" aria-pressed="true">24h</button>
+                    <button type="button" class="autonomy-window__btn" data-window="7d" aria-pressed="false">7d</button>
+                </div>
+            </div>
+            <div id="autonomy-body" class="autonomy-body" aria-live="polite"></div>
+        </section>
+
         <!-- 三页面:扇出 bar(选中卡片后显示,Enter 广播,不跳控制台)-->
         <form id="fanout-bar" class="fanout-bar" hidden>
             已选 <span class="sel-count" id="sel-count">0</span>

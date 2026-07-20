@@ -14,6 +14,8 @@ const { MachineRegistry } = require('./registry.cjs');
 const { querySessions, CLI_TOOLS } = require('./sessions_query.cjs');
 const { AgentRegistrar } = require('./register_server.cjs');
 const { DashboardAggregator } = require('./dashboard_aggregator.cjs');
+const { AutonomyStore } = require('./autonomy_store.cjs');
+const { AutonomyAggregator, summarizeResults } = require('./autonomy_aggregator.cjs');
 const { AuditAggregator } = require('./audit_aggregator.cjs');
 const { AgentClient } = require('./agent_client.cjs');
 const { WsBridge } = require('./ws_bridge.cjs');
@@ -68,6 +70,16 @@ function startHub(opts) {
     registerToken: opts.registerToken || '',
   });
 
+  // autonomy 指标:事件存储(7d 持久化 ~/.cc-web-control/autonomy-metrics.jsonl)+ 增量聚合器。
+  // onResult 钩子把每轮各机 /api/dashboard 的 autonomy 单调计数喂给聚合器 → 正增量落成事件存入 store。
+  const autonomyStore = new AutonomyStore({
+    filePath: path.join(process.env.HOME || '/tmp', '.cc-web-control', 'autonomy-metrics.jsonl'),
+    fsImpl: require('node:fs'),
+  });
+  const autonomyAggregator = new AutonomyAggregator({ store: autonomyStore });
+  // compact:每 10min 裁掉 7d 外事件并整表重写文件(防 append-only 无限增长)
+  const autonomyCompactTimer = setInterval(() => { try { autonomyStore.compact(); } catch {} }, 10 * 60 * 1000);
+
   const aggregator = new DashboardAggregator({
     registry,
     intervalMs,
@@ -83,6 +95,10 @@ function startHub(opts) {
         try { agentStateStore.ingestReport(sec.id, r.payload.agents); } catch { /* 上报异常不阻断聚合 */ }
       }
       return r.ok ? { ok: true, payload: r.payload } : { ok: false, error: r.error };
+    },
+    onResult: (results) => {
+      // 各机 autonomy 单调计数 → 增量事件(2s 量级精度,满足验收 5s 内计入)
+      try { autonomyAggregator.ingest(summarizeResults(results), Date.now()); } catch { /* 观测失败不影响聚合 */ }
     },
   });
 
@@ -343,6 +359,19 @@ function startHub(opts) {
     }
     const lastEvent = agentStateStore.getEventLog().slice(-1)[0] || null;
     res.json({ ok: true, agent: agentStateStore.get(agent_id), event: lastEvent });
+  });
+
+  // autonomy 指标面板数据:?window=1h|24h|7d(默认 24h)。按机聚合 commit/rollback/intervention 三项计数,
+  // 离线机标记 stale。0 机 → machines:[](前端显示「无数据」占位)。切换窗口为纯内存聚合(≤1s)。
+  const AUTONOMY_WINDOWS = { '1h': 3600_000, '24h': 86400_000, '7d': 7 * 86400_000 };
+  app.get('/api/autonomy', (req, res) => {
+    const key = typeof req.query.window === 'string' && AUTONOMY_WINDOWS[req.query.window] ? req.query.window : '24h';
+    const windowMs = AUTONOMY_WINDOWS[key];
+    const nowMs = Date.now();
+    // 机器宇宙 = registry 快照(剥离 token,含 online 标志)。离线机 online:false → aggregate 标 stale。
+    const machines = registry.snapshot().map((m) => ({ id: m.id, name: m.name, online: !!m.online }));
+    const body = autonomyStore.aggregate(windowMs, nowMs, machines);
+    res.json({ window: key, windowMs, generatedAt: nowMs, machines: body.machines });
   });
 
   // 全局聚合子进程审计(Audit 面板):各单机 cc-subprocess.jsonl 合并,ts 倒序
@@ -639,6 +668,8 @@ function startHub(opts) {
             try { await mainAgentHandles.localTmux.kill(mainAgentHandles.sessionName); } catch {}
           });
           aggregator.stop();
+          clearInterval(autonomyCompactTimer);
+          try { autonomyStore.compact(); } catch {} // 关闭时整表重写,裁掉过期事件
           auditAggregator.stop();
           registrar.cleanup();
           for (const ac of clients.values()) ac.close();

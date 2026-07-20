@@ -495,7 +495,76 @@
     async function hubLoop() {
         if (!hubPolling) return;
         await pollHub();
+        pollAutonomy(); // 自主指标随 hub 轮询一起刷新(独立 try/catch,不阻塞 board)
         if (hubPolling) setTimeout(hubLoop, HUB_POLL_MS); // Fix 10:HUB_POLL_MS 命名常量
+    }
+
+    // ---- hub 模式:受监督自主运行指标面板(commit / rollback / 人工干预)----
+    var autonomyPanel = document.getElementById('autonomy-panel');
+    var autonomyBody = document.getElementById('autonomy-body');
+    var autonomyWindow = '24h';                 // 当前窗口(1h/24h/7d)
+    var autonomyVisible = false;                // 是否已探测到 hub 提供 /api/autonomy
+    function esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    function renderAutonomy(data) {
+        if (!autonomyBody) return;
+        var machines = (data && data.machines) || [];
+        if (!machines.length) {
+            autonomyBody.innerHTML = '<div class="autonomy-empty"><span class="eyebrow">NO DATA</span> 尚无机器注册,暂无自主运行指标</div>';
+            return;
+        }
+        var rows = machines.map(function (m) {
+            var stale = m.stale ? '<span class="autonomy-stale" title="该机离线,显示最后已知值">stale</span>' : '';
+            return '<tr class="autonomy-row' + (m.stale ? ' autonomy-row--stale' : '') + '">' +
+                '<td class="autonomy-row__name">' + esc(m.name || m.id) + stale + '</td>' +
+                '<td class="autonomy-metric autonomy-metric--commit">' + (m.commit || 0) + '</td>' +
+                '<td class="autonomy-metric autonomy-metric--rollback">' + (m.rollback || 0) + '</td>' +
+                '<td class="autonomy-metric autonomy-metric--intervention">' + (m.intervention || 0) + '</td>' +
+                '</tr>';
+        }).join('');
+        autonomyBody.innerHTML =
+            '<table class="autonomy-table">' +
+            '<thead><tr><th>机器</th><th title="git commit 数">commit</th><th title="git 回退/历史改写数">rollback</th><th title="人工打断次数">干预</th></tr></thead>' +
+            '<tbody>' + rows + '</tbody>' +
+            '</table>';
+    }
+    async function pollAutonomy() {
+        if (!autonomyPanel || autonomyPanel.hidden) return; // 单机模式 / 未揭示 → 不轮询
+        try {
+            var res = await fetch('/api/autonomy?window=' + encodeURIComponent(autonomyWindow), { headers: { 'Accept': 'application/json' } });
+            if (res.status === 401) { return; }              // 交给 pollHub 的 401 跳登录,这里不重复跳
+            if (res.status === 404) { autonomyPanel.hidden = true; autonomyVisible = false; return; } // hub 不提供 → 隐藏
+            if (res.ok) {
+                var ct = res.headers.get('content-type') || '';
+                if (ct.indexOf('application/json') !== -1) {
+                    var data; try { data = await res.json(); } catch (e) { return; }
+                    autonomyVisible = true;
+                    renderAutonomy(data);
+                }
+            }
+        } catch (e) { /* 网络抖动:静默,下轮重试(与 pollHub 一致的容错策略) */ }
+    }
+    function setAutonomyWindow(win) {
+        if (win !== '1h' && win !== '24h' && win !== '7d') return;
+        if (autonomyWindow === win) return;
+        autonomyWindow = win;
+        // 切换窗口:即时重画 + 即时拉取(≤1s,不等下次 2s 轮询)
+        if (autonomyPanel && !autonomyPanel.hidden) pollAutonomy();
+    }
+    if (autonomyPanel) {
+        var winBtns = autonomyPanel.querySelectorAll('.autonomy-window__btn');
+        Array.prototype.forEach.call(winBtns, function (btn) {
+            btn.addEventListener('click', function () {
+                var w = btn.getAttribute('data-window');
+                setAutonomyWindow(w);
+                Array.prototype.forEach.call(winBtns, function (b) {
+                    var on = b.getAttribute('data-window') === autonomyWindow;
+                    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+                });
+            });
+        });
     }
 
     async function detectMode() {
@@ -520,6 +589,8 @@
         hubModeActive = true;                              // Fix 7:标记 hub 模式,visibility 恢复时重启 hubLoop
         hubPolling = true;
         renderBoard(data);
+        if (autonomyPanel) autonomyPanel.hidden = false;   // 揭示自主指标面板(hub 模式);pollAutonomy 首帧填充
+        pollAutonomy();
         hubLoop();
     }
 

@@ -131,13 +131,17 @@ function getDashboardCache(opts) {
 }
 
 // 端点聚合纯函数:tmux 会话列表 + 缓存快照 → 看板 payload
-function buildDashboardPayload(sessions, snapshots, tmuxOk) {
+// autonomyBySession(可选,第 4 参):{name → {commit,rollback,interventions}} —— 单机 autonomy 指标。
+//   提供时给每个 session 挂 autonomy 字段(供 hub 聚合);不提供(undefined)→ 完全向后兼容,
+//   payload 形状与无该参数时一致(既有调用方/测试不受影响)。
+function buildDashboardPayload(sessions, snapshots, tmuxOk, autonomyBySession) {
   const snapMap = new Map((snapshots || []).map((s) => [s.name, s]));
+  const hasAuto = autonomyBySession && typeof autonomyBySession === 'object';
   return {
     tmuxOk: !!tmuxOk,
     sessions: (sessions || []).map((s) => {
       const snap = snapMap.get(s.name) || { status: 'unknown', lastLine: '', lastTs: null };
-      return {
+      const out = {
         name: s.name,
         cwd: s.cwd || null,
         status: snap.status,
@@ -145,6 +149,16 @@ function buildDashboardPayload(sessions, snapshots, tmuxOk) {
         lastTs: snap.lastTs,
         attached: !!s.attached,
       };
+      if (hasAuto) {
+        // autonomy 计数缺失补零;字段名沿用 interventions(复数,计数语义)
+        const a = autonomyBySession[s.name] || { commits: 0, rollbacks: 0, interventions: 0 };
+        out.autonomy = {
+          commits: typeof a.commits === 'number' ? a.commits : 0,
+          rollbacks: typeof a.rollbacks === 'number' ? a.rollbacks : 0,
+          interventions: typeof a.interventions === 'number' ? a.interventions : 0,
+        };
+      }
+      return out;
     }),
   };
 }
