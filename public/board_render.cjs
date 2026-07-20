@@ -23,6 +23,69 @@
 
   function statusMeta(status) { return STATUS_META[status] || DEFAULT_META; }
 
+  // CLI 工具徽标元数据(hub 多 CLI 聚合分类用)。cls = 枚举值(同时作 CSS 后缀 + data-cli-tool);
+  // label = 完整名(filter chip / title 用);short = 卡片徽标短码(紧凑)。
+  // 与 hub/config.cjs 的 CLI_TOOLS 同源(浏览器侧独立持有,不 require 后端)。
+  var CLI_TOOL_META = {
+    'claude-code': { cls: 'claude-code', label: 'Claude Code', short: 'CC' },
+    'grok-build':  { cls: 'grok-build',  label: 'Grok Build',  short: 'Grok' },
+    'codex':       { cls: 'codex',       label: 'Codex',       short: 'Codex' },
+    'cursor':      { cls: 'cursor',      label: 'Cursor',      short: 'Cursor' },
+    'unknown':     { cls: 'unknown',     label: 'Unknown',     short: '?' },
+  };
+  var CLI_TOOL_ORDER = ['claude-code', 'grok-build', 'codex', 'cursor', 'unknown'];
+  function cliToolMeta(tool) {
+    var meta = CLI_TOOL_META[tool];
+    return meta || CLI_TOOL_META['unknown'];
+  }
+
+  // 工具徽标 HTML:<span class="cli-badge cli-badge--<cls>" data-cli-tool="<cls>" title="<label>">short</span>
+  // 文本 + 背景色(背景色由 dashboard.css 的 .cli-badge--<cls> → var(--cli-<cls>) 令牌驱动,非魔法色值)。
+  function buildCliBadge(tool) {
+    var meta = cliToolMeta(tool);
+    return '<span class="cli-badge cli-badge--' + meta.cls + '" data-cli-tool="' + escapeHtml(meta.cls) + '" title="' + escapeHtml(meta.label) + '">' + escapeHtml(meta.short) + '</span>';
+  }
+
+  // 收集 machines 中出现的工具(规范枚举,unknown 兜底),按 CLI_TOOL_ORDER 排序(unknown 居末)。
+  // 供 renderCliFilter 决定渲染哪些 chip。仅返回实际出现的工具(空集→[])。
+  function collectCliTools(machines) {
+    var present = new Set();
+    for (var i = 0; i < (machines || []).length; i++) {
+      var m = machines[i];
+      if (!m) continue;
+      var mTool = cliToolMeta(m.cli_tool).cls;
+      var sessions = (m && m.sessions) || [];
+      if (!sessions.length) {
+        // 无会话的机器仍按其自身 cli_tool 计入(机维度也参与过滤)
+        present.add(mTool);
+        continue;
+      }
+      for (var j = 0; j < sessions.length; j++) {
+        var s = sessions[j] || {};
+        present.add(cliToolMeta(s.cli_tool || m.cli_tool).cls);
+      }
+    }
+    return CLI_TOOL_ORDER.filter(function (k) { return present.has(k); });
+  }
+
+  // 「按工具过滤」控件 HTML:≥2 种工具才渲染(单工具无可区分性,省 UI)。
+  // active: null/'' = 全部;否则为某枚举值。每 chip data-cli-filter="" (全部) 或 = 枚举。
+  // 工具 chip 内嵌 buildCliBadge(色由令牌驱动)+ 完整 label;全部 chip 用 accent 高亮态。
+  function renderCliFilter(machines, active) {
+    var tools = collectCliTools(machines);
+    if (tools.length <= 1) return '';
+    var allOn = active == null || active === '';
+    var parts = [];
+    parts.push('<button type="button" class="cli-filter__chip' + (allOn ? ' cli-filter__chip--active' : '') + '" data-cli-filter="" aria-pressed="' + allOn + '"><span class="cli-filter__name">全部</span></button>');
+    for (var i = 0; i < tools.length; i++) {
+      var t = tools[i];
+      var meta = CLI_TOOL_META[t];
+      var on = active === t;
+      parts.push('<button type="button" class="cli-filter__chip' + (on ? ' cli-filter__chip--active' : '') + '" data-cli-filter="' + escapeHtml(t) + '" aria-pressed="' + on + '">' + buildCliBadge(t) + '<span class="cli-filter__name">' + escapeHtml(meta.label) + '</span></button>');
+    }
+    return parts.join('');
+  }
+
   // 注:仅转义 & < > "(双引号属性安全)。单引号未转义 —— buildCardHTML 所有属性均用双引号,
   // 故安全;若未来引入单引号属性,需补 .replace(/'/g, '&#39;')。
   function escapeHtml(s) {
@@ -106,6 +169,7 @@
         `<div class="card__head">` +
         `<span class="s-dot ${meta.dot}" aria-hidden="true"></span>` +
         `<span class="card__name">${name}</span>` +
+        `${buildCliBadge(s.cli_tool || m.cli_tool)}` +
         `<span class="sr-only">${meta.cn}</span>` +
         `${offTag}` +
         `<span class="card__time">${time}</span>` +
@@ -143,9 +207,10 @@
     const sessRaw = String(s.name != null ? s.name : '');
     const key = `${midRaw}/${sessRaw}`;
     const st = escapeHtml(String(s.status || 'unknown'));
+    const cliCls = escapeHtml(cliToolMeta(s.cli_tool || m.cli_tool).cls);
     const grpLabel = escapeHtml(`${m.name || m.id} / ${s.name}`);
     const togLabel = escapeHtml(`选择 ${m.name || m.id} / ${s.name}`);
-    return `<li class="card-row" data-machine="${escapeHtml(midRaw)}" data-session="${escapeHtml(sessRaw)}" data-status="${st}" data-key="${escapeHtml(key)}" role="group" aria-label="${grpLabel}">` +
+    return `<li class="card-row" data-machine="${escapeHtml(midRaw)}" data-session="${escapeHtml(sessRaw)}" data-status="${st}" data-key="${escapeHtml(key)}" data-cli-tool="${cliCls}" role="group" aria-label="${grpLabel}">` +
       `<button class="card__select" type="button" data-toggle="select" aria-pressed="false" aria-label="${togLabel}">☐</button>` +
       buildCardInner(machine, session, opts) +
       `</li>`;
@@ -276,5 +341,5 @@
     return parts.join('');
   }
 
-  return { statusMeta, escapeHtml, relativeTime, windowNameFor, buildCardHTML, buildCardRow, buildCardInner, flattenFleet, sortCardsByRelevance, summarizeFleet, summarizeMachine, renderStatusCounts, isStale, partitionStale, groupByMachine };
+  return { statusMeta, escapeHtml, relativeTime, windowNameFor, buildCardHTML, buildCardRow, buildCardInner, flattenFleet, sortCardsByRelevance, summarizeFleet, summarizeMachine, renderStatusCounts, isStale, partitionStale, groupByMachine, cliToolMeta, buildCliBadge, collectCliTools, renderCliFilter, CLI_TOOL_META, CLI_TOOL_ORDER };
 });

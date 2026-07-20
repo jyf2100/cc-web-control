@@ -145,3 +145,43 @@ test('无 ping → idle 超时正常断开(对照组)', async () => {
     await stop();
   });
 });
+
+// ---- cli_tool 注册协议(验收 #1 显式上报 / #2 缺省回退 unknown)----
+test('register 帧带 cli_tool=grok-build → registry 持久化该值', async () => {
+  await withRegistrar({ hubToken: 'ht' }, async ({ registry, port, stop }) => {
+    const ws = connect(port, 'ht');
+    await new Promise((r) => ws.on('open', r));
+    ws.send(JSON.stringify({ type: 'register', id: 'm1', name: 'M1', url: 'http://h:1', token: 't', cli_tool: 'grok-build' }));
+    await new Promise((r) => setTimeout(r, 80));
+    const m = registry.getById('m1');
+    assert.equal(m.cli_tool, 'grok-build'); // 验收 #1:显式上报原样持久化
+    ws.close(); await stop();
+  });
+});
+
+test('register 帧不含 cli_tool → 回退 unknown(旧 agent 兼容,2xx 注册成功)', async () => {
+  await withRegistrar({ hubToken: 'ht' }, async ({ registry, port, stop }) => {
+    const ws = connect(port, 'ht');
+    await new Promise((r) => ws.on('open', r));
+    // 旧版 agent:不带 cli_tool 字段
+    ws.send(JSON.stringify({ type: 'register', id: 'm1', name: 'M1', url: 'http://h:1', token: 't' }));
+    const got = await new Promise((r) => {
+      ws.on('message', (buf) => { let m; try { m = JSON.parse(buf.toString()); } catch { return; } if (m.type === 'registered') r(true); });
+    });
+    assert.ok(got, '缺省 cli_tool 仍应注册成功(2xx 语义:回执 registered)');
+    await new Promise((r) => setTimeout(r, 60));
+    assert.equal(registry.getById('m1').cli_tool, 'unknown'); // 验收 #2:缺省回退 unknown
+    ws.close(); await stop();
+  });
+});
+
+test('register 帧 cli_tool 非枚举值 → 回退 unknown(不报错)', async () => {
+  await withRegistrar({ hubToken: 'ht' }, async ({ registry, port, stop }) => {
+    const ws = connect(port, 'ht');
+    await new Promise((r) => ws.on('open', r));
+    ws.send(JSON.stringify({ type: 'register', id: 'm1', name: 'M1', url: 'http://h:1', token: 't', cli_tool: 'not-a-tool' }));
+    await new Promise((r) => setTimeout(r, 80));
+    assert.equal(registry.getById('m1').cli_tool, 'unknown');
+    ws.close(); await stop();
+  });
+});

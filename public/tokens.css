@@ -31,6 +31,14 @@
   --offline: rgba(38,37,30,0.6);   /* 离线:同暖灰系,alpha 2× 于 --idle(0.3→0.6),状态点可辨;机名用 --fg-2 承载阅读 */
   --errored: #c01a4b;    /* 偏紫玫红,增大与暖橙色相差 */
   --success: #1f8a65;   /* 与 --working 同值:状态语义分离,色相统一,二者不并列出现 */
+  /* CLI 工具徽标色(hub 多 CLI 聚合分类用):5 色两两色相可辨,均配白字达 AA。
+     复用暖橙作 claude-code(与品牌 accent-2 同值,护城河工具);其余为新引入工具色相。
+     改色请保持 5 值两两不同(测试锁 pairwise-distinct)。 */
+  --cli-claude-code: #b54e0e;   /* 暖橙(= --accent-2),Claude Code */
+  --cli-grok-build: #1f4fa6;    /* 深蓝,Grok Build */
+  --cli-codex: #2f6f7f;         /* 青蓝,Codex */
+  --cli-cursor: #6b3aa0;        /* 紫,Cursor */
+  --cli-unknown: #6b6a63;       /* 中性暖灰,未识别 */
   /* 字体三栈 */
   --sans: system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Helvetica, Arial, sans-serif;
   --mono: 'SF Mono', 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;

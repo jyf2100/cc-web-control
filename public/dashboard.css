@@ -196,6 +196,46 @@ html, body {
   overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
 
+/* === CLI 工具徽标(hub 多 CLI 聚合分类:每条 session 行一个,文本+背景色)===
+   背景色全部取自 tokens.css 的 --cli-<tool> 令牌(单一事实来源,不硬编码魔法色值)。
+   5 枚举两两色相可辨;白字配深底达 AA。仅 hub 卡片渲染(board_render buildCardInner hub 模式)。*/
+.cli-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 22px; padding: 1px 6px; flex-shrink: 0;
+  border-radius: var(--r-xs);
+  background: var(--cli-unknown); color: #ffffff;
+  font-family: var(--mono); font-size: 10px; font-weight: 600;
+  line-height: 1.5; letter-spacing: 0.02em;
+}
+.cli-badge--claude-code { background: var(--cli-claude-code); }
+.cli-badge--grok-build  { background: var(--cli-grok-build); }
+.cli-badge--codex       { background: var(--cli-codex); }
+.cli-badge--cursor      { background: var(--cli-cursor); }
+.cli-badge--unknown     { background: var(--cli-unknown); }
+/* hub 卡片头部:徽标贴在会话名右侧,与时间分置两端 */
+.card--hub .cli-badge { margin-left: 2px; }
+
+/* === 「按工具过滤」控件(≥2 种工具时由 dashboard.js 注入 #cli-filter-bar)===
+   chip 内嵌 .cli-badge(色由令牌)+ 完整工具名;active 态用 accent 高亮。*/
+.cli-filter-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  padding: 6px 2px 2px;
+}
+.cli-filter__chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  min-height: 28px; padding: 2px 10px;
+  border: 1px solid var(--border-2); border-radius: var(--r-pill);
+  background: transparent; color: var(--fg-2);
+  font-family: var(--sans); font-size: 12px; cursor: pointer;
+}
+.cli-filter__chip:hover { background: var(--surface-2); }
+.cli-filter__chip:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+.cli-filter__chip--active {
+  border-color: var(--accent-2); color: var(--fg); background: var(--accent-bg);
+}
+/* chip 内徽标略小,与卡片徽标区分 */
+.cli-filter__chip .cli-badge { min-width: 18px; padding: 0 5px; font-size: 9px; }
+
 /* card--single 已移除(:7685 多机 hub 永远机器维度,singleMachine 废弃,见 gap-audit §1) */
 
 /* 陈旧会话折叠区:<li> 占整行,<details> 默认 closed 收起 */

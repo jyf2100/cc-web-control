@@ -30,6 +30,8 @@
             <h1 class="visually-hidden">CC 看板</h1>
             <!-- 单机模式:session-list(dashboard_render 渲染) -->
             <ul id="sessionList" class="session-list" aria-label="会话列表"></ul>
+            <!-- hub 模式:按 CLI 工具过滤(dashboard.js 在 ≥2 种工具时注入 chip;hidden 默认)-->
+            <div id="cli-filter-bar" class="cli-filter-bar" role="group" aria-label="按 CLI 工具过滤" hidden></div>
             <!-- hub 模式:按机分节容器(renderBoard 塞 <li class="machine-group">;组内 .board-grid 才是卡片网格)-->
             <ul id="board-body" class="board-body" aria-label="机器会话看板" hidden></ul>
             <div id="stateMessage" class="state-message" hidden></div>
