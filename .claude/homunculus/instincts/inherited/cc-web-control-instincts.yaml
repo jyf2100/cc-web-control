@@ -1,0 +1,357 @@
+# Instincts generated from https://github.com/jyf2100/cc-web-control
+# Generated: 2026-07-20T03:46:22.113Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: cc-web-control-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/jyf2100/cc-web-control
+---
+
+# Cc Web Control Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: chore, feat
+
+## Evidence
+
+- 2 commits analyzed
+- Detected conventional commit pattern
+- Examples: chore(pa-dev): 放宽 dev-agent 无进展刹车 N_STALL 3→100, feat(pa-dev): 20260720_hub-supervised-autonomy
+
+---
+id: cc-web-control-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/jyf2100/cc-web-control
+---
+
+# Cc Web Control Commit Length
+
+## Action
+
+Keep commit messages concise (~47 characters)
+
+## Evidence
+
+- Average commit message length: 47 chars
+- Based on 2 commits
+
+---
+id: cc-web-control-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/jyf2100/cc-web-control
+---
+
+# Cc Web Control Naming Files
+
+## Action
+
+Use snake_case naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: snake_case
+
+---
+id: cc-web-control-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/jyf2100/cc-web-control
+---
+
+# Cc Web Control Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: cc-web-control-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/jyf2100/cc-web-control
+---
+
+# Cc Web Control Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: cc-web-control-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/jyf2100/cc-web-control
+---
+
+# Cc Web Control Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: cc-web-control-test-naming
+trigger: "when creating a test file"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/jyf2100/cc-web-control
+---
+
+# Cc Web Control Test Naming
+
+## Action
+
+Name test files using the pattern: *.test.ts
+
+## Evidence
+
+- File pattern: *.test.ts
+- Consistent across test files
+
+---
+id: cc-web-control-instinct-file-naming
+trigger: "When creating a new file"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: jyf2100/cc-web-control
+---
+
+# Cc Web Control Instinct File Naming
+
+## Action
+
+Name the file using snake_case
+
+## Evidence
+
+- Pattern in files: file naming convention is snake_case
+
+---
+id: cc-web-control-instinct-function-naming
+trigger: "When defining a new function"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: jyf2100/cc-web-control
+---
+
+# Cc Web Control Instinct Function Naming
+
+## Action
+
+Use camelCase for the function name
+
+## Evidence
+
+- Pattern in files: function naming convention is camelCase
+
+---
+id: cc-web-control-instinct-class-naming
+trigger: "When defining a new class"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: jyf2100/cc-web-control
+---
+
+# Cc Web Control Instinct Class Naming
+
+## Action
+
+Use PascalCase for the class name
+
+## Evidence
+
+- Pattern in files: class naming convention is PascalCase
+
+---
+id: cc-web-control-instinct-constant-naming
+trigger: "When defining a constant"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: jyf2100/cc-web-control
+---
+
+# Cc Web Control Instinct Constant Naming
+
+## Action
+
+Use SCREAMING_SNAKE_CASE for the constant name
+
+## Evidence
+
+- Pattern in files: constant naming convention is SCREAMING_SNAKE_CASE
+
+---
+id: cc-web-control-instinct-import-style
+trigger: "When importing modules"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: jyf2100/cc-web-control
+---
+
+# Cc Web Control Instinct Import Style
+
+## Action
+
+Use relative import paths
+
+## Evidence
+
+- Pattern in files: import style is relative
+
+---
+id: cc-web-control-instinct-export-style
+trigger: "When exporting from a module"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: jyf2100/cc-web-control
+---
+
+# Cc Web Control Instinct Export Style
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- Pattern in files: export style is named
+
+---
+id: cc-web-control-instinct-test-file-naming
+trigger: "When creating a test file"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: jyf2100/cc-web-control
+---
+
+# Cc Web Control Instinct Test File Naming
+
+## Action
+
+Name the file with a .test.ts suffix
+
+## Evidence
+
+- Pattern in files: test file pattern is *.test.ts
+
+---
+id: cc-web-control-instinct-test-type
+trigger: "When writing tests"
+confidence: 0.7
+domain: testing
+source: repo-analysis
+source_repo: jyf2100/cc-web-control
+---
+
+# Cc Web Control Instinct Test Type
+
+## Action
+
+Write unit tests
+
+## Evidence
+
+- Pattern in files: testTypes includes 'unit'
+
+---
+id: cc-web-control-instinct-commit-format
+trigger: "When writing a commit message"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: jyf2100/cc-web-control
+---
+
+# Cc Web Control Instinct Commit Format
+
+## Action
+
+Use conventional commit format with 'chore' or 'feat' as prefix
+
+## Evidence
+
+- Seen in commit: 'chore(pa-dev): ...'
+- Seen in commit: 'feat(pa-dev): ...'
+
+---
+id: cc-web-control-instinct-commit-length
+trigger: "When writing a commit message"
+confidence: 0.7
+domain: git
+source: repo-analysis
+source_repo: jyf2100/cc-web-control
+---
+
+# Cc Web Control Instinct Commit Length
+
+## Action
+
+Keep the commit message concise, around 47 characters on average
+
+## Evidence
+
+- Pattern in commits: averageLength is 47
+
+---
+id: cc-web-control-instinct-error-handling
+trigger: "When handling errors in code"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: jyf2100/cc-web-control
+---
+
+# Cc Web Control Instinct Error Handling
+
+## Action
+
+Use try-catch blocks for error handling
+
+## Evidence
+
+- Pattern in files: errorHandling style is try-catch
+
