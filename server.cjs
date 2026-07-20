@@ -12,6 +12,7 @@ const express = require('express');
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const { spawn, exec } = require('child_process');
 const { WebSocketServer } = require('ws');
 const tmux = require('./tmux.cjs');
@@ -26,12 +27,15 @@ const { readBinding, writeBinding, deleteBinding, migrateStaleBindings } = requi
 const { shouldContinue, pickResumableSessionUuid } = require('./claude_session.cjs');
 const crypto = require('node:crypto');
 const { createRateLimiter } = require('./rate_limit.cjs');
-const { loadConfig, SINGLE_SCHEMA, SINGLE_CONFIG_PATH } = require('./config_loader.cjs');
+const { loadConfig, SINGLE_SCHEMA, SINGLE_CONFIG_PATH, CONFIG_DIR } = require('./config_loader.cjs');
 const { RegisterClient } = require('./register_client.cjs');
+const { createSecretStore, resolveApiKey, maskSecret } = require('./secret_store.cjs');
+const { migrateConfigKeyToKeychain } = require('./secret_migrate.cjs');
+const { SubprocessAudit } = require('./subprocess_audit.cjs');
 
 // 配置文件(~/.cc-web-control/config.json,--config 覆盖)+ env 覆盖(env > file > default)。
 // 无文件 = 纯 env/默认 = 现状行为(向后兼容)。warnings:未知字段 / token 权限过松。
-const { config: CFG, warnings: cfgWarnings } = loadConfig({
+const { config: CFG, warnings: cfgWarnings, filePath: CONFIG_FILE } = loadConfig({
   schema: SINGLE_SCHEMA,
   defaultFilePath: SINGLE_CONFIG_PATH,
 });
@@ -87,6 +91,26 @@ const CLAUDE_CONTINUE = CFG.claudeContinue;
 const PROJECT_ROOTS = CFG.projectRoots;
 // 启动 cwd 命中某项目根 → 'claude-<项目名>'(与项目启动区 client.js:845 同名,避免双会话);否则回退 CFG.session。
 const RESOLVED_DEFAULT_SESSION = resolveDefaultSessionForCwd(process.cwd(), PROJECT_ROOTS, DEFAULT_SESSION);
+
+// —— keychain + 子进程审计(本 PR:secret 不落盘明文 + spawn 级可观测)——
+// secret 唯一落盘点:OS keychain;启动时迁移明文 → keychain 引用,解析后内存持有,
+// 经 tmux new-session -e 注入子进程 env(不落 shell 历史;与 CC_WEB_OWNED 同通道,本机 trusted)。
+const HOSTNAME = os.hostname();
+// instance_id 与 hub 注册一致(register_client 未设 machineId 时默认 hostname)
+const INSTANCE_ID = MACHINE_ID || HOSTNAME;
+const secretStore = createSecretStore();
+let CLAUDE_API_KEY = null; // bootstrap() 里解析(空=未配置,claude 走自己的登录)
+function claudeSessionEnv() {
+  return CLAUDE_API_KEY ? { ANTHROPIC_API_KEY: CLAUDE_API_KEY } : undefined;
+}
+// spawn 级审计:<state-dir>/audit/cc-subprocess.jsonl,字段/校验见 subprocess_audit.cjs。
+const AUDIT_DIR = path.join(CONFIG_DIR, 'audit');
+const subprocessAudit = new SubprocessAudit({
+  filePath: path.join(AUDIT_DIR, 'cc-subprocess.jsonl'),
+  errorLogPath: path.join(AUDIT_DIR, 'audit-write-errors.log'),
+  host: HOSTNAME,
+  instanceId: INSTANCE_ID,
+});
 
 // 创建 Express 应用
 const app = express();
@@ -204,7 +228,14 @@ async function startClaudeInSession(sessionName, cwd, opts = {}) {
   }
   // cd 与 claude 启动合并为单条命令,消除慢盘 / direnv hook 下 cd 未生效就发 claude 的时序竞态
   const launch = buildClaudeLaunchCommand({ wrapperPath: CLAUDE_WRAPPER, sessionId, resumeId });
-  await tmux.sendKeys(sessionName, `cd "${escapedCwd}" && ${launch}`);
+  const cmd = `cd "${escapedCwd}" && ${launch}`;
+  await tmux.sendKeys(sessionName, cmd);
+  // spawn 级审计(best-effort:审计失败不阻断 claude 启动)。cmd 为传给 tmux 的精确命令串。
+  try {
+    await subprocessAudit.recordStart({ sessionName, cmd, cwd: realCwd });
+  } catch (e) {
+    console.error('[audit] recordStart 失败(非致命):', e.message);
+  }
 }
 
 /**
@@ -268,7 +299,8 @@ async function initAndAttachSession() {
     if (!exists) {
       console.log(`[Init] 创建 tmux 会话: ${RESOLVED_DEFAULT_SESSION}`);
       // 创建会话并启动 shell，在 shell 中切换到当前目录再启动 claude
-      await tmux.createSession(RESOLVED_DEFAULT_SESSION);
+      // ANTHROPIC_API_KEY 经 tmux -e 进 session env(子进程继承,不落 shell 历史)
+      await tmux.createSession(RESOLVED_DEFAULT_SESSION, null, { env: claudeSessionEnv() });
 
       const hasClaude = await isCommandAvailable('claude', ['--version']);
       if (!hasClaude) {
@@ -521,6 +553,18 @@ function startWebServer() {
     }
   });
 
+  // 子进程 spawn 级审计(供 hub 聚合 /api/global-audit)。cmd 字段脱敏(防 key 泄露)。
+  app.get('/api/audit/cc-subprocess', async (req, res) => {
+    try {
+      const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 500);
+      const entries = await subprocessAudit.readRecent(limit);
+      const masked = entries.map((e) => ({ ...e, cmd: maskSecret(e.cmd) }));
+      res.json({ entries: masked });
+    } catch (error) {
+      res.json({ entries: [] }); // 审计端点绝不 500,降级空列表
+    }
+  });
+
   app.get('/api/projects', async (req, res) => {
     try {
       if (!PROJECT_ROOTS.length) {
@@ -569,7 +613,7 @@ function startWebServer() {
       if (!name) return res.status(400).json({ error: 'Session name required' });
       if (!isValidSessionName(name)) return res.status(400).json({ error: 'Invalid session name' });
 
-      await tmux.createSession(name);
+      await tmux.createSession(name, null, { env: claudeSessionEnv() });
       if (cwd) {
         const normalizedCwd = normalizeProjectCwd(cwd);
         const hasClaude = await isCommandAvailable('claude', ['--version']);
@@ -602,7 +646,19 @@ function startWebServer() {
       // kill 前取 cwd → slug,清理绑定文件(否则同名会话复用会读到旧 sid,定位错 jsonl)
       const sessions = await listSessions();
       const target = sessions.find((s) => s.name === name);
+      // 审计 exit_code:claude 已自然退出(pane dead)→ 读真实状态;仍活跃 → kill 终止记 137(SIGKILL 语义)
+      let exitCode = 137;
+      try {
+        const ds = await tmux.paneExitStatus(name);
+        if (ds != null) exitCode = ds;
+      } catch { /* paneExitStatus 失败不阻断删除 */ }
       await tmux.killSession(name);
+      // spawn 级审计 stop(best-effort)
+      try {
+        await subprocessAudit.recordStop({ sessionName: name, exitCode });
+      } catch (e) {
+        console.error('[audit] recordStop 失败(非致命):', e.message);
+      }
       if (target && target.cwd) {
         const slug = cwdToSlug(target.cwd);
         if (slug) deleteBinding(slug, name);
@@ -850,22 +906,45 @@ function startWebServer() {
   });
 }
 
-// 启动
+// 启动 —— 先 keychain 迁移 + 解析 key(子进程 env 依赖),再清旧绑定、起服务。
 // 一次性迁移:绑定 sid 指向已不存在的 jsonl 时会让 listSessions readBinding 回填陈旧 sid,看板错位。
 // startClaudeInSession 事前 writeBinding,运行期仍可能产生孤儿(claude 未落 jsonl / 文件名映射破裂);
 // 此处仅在启动时清一次残留,运行期孤儿由 _compute 绑定缺失时降级 mtime 兜底。与 tmux 无关,两种模式都跑。
-try {
-  const removed = migrateStaleBindings();
-  if (removed.length > 0) {
-    console.log(`[Init] 清理 ${removed.length} 个陈旧会话绑定:${removed.map((r) => r.tmuxName).join(', ')}`);
+async function bootstrap() {
+  // 1) 明文 anthropic_api_key → keychain 迁移(验收 A3);失败绝不回退明文、不阻断启动(验收 A5)
+  try {
+    const r = await migrateConfigKeyToKeychain({ configPath: CONFIG_FILE, store: secretStore });
+    if (r.migrated) {
+      console.log(`[keychain] 已把明文 anthropic_api_key 迁入 OS keychain,原值备份于 ${r.backupPath}(核对后可自删)`);
+    } else if (r.reason === 'keychain-unavailable') {
+      console.error(`[keychain] 明文迁移失败 ${r.error && r.error.code}: ${r.error && r.error.reason}(config 未改动,请解锁 keychain / 安装 libsecret 后重启)`);
+    }
+  } catch (e) {
+    console.error('[keychain] 迁移异常(非致命):', e.message);
   }
-} catch (err) {
-  console.error('[Init] 旧绑定迁移失败(非致命):', err.message);
+  // 2) 解析 API key → 内存持有(供 createSession 注入 env;空=未配置,claude 走自己的登录)
+  try {
+    CLAUDE_API_KEY = await resolveApiKey(CFG.anthropic_api_key, secretStore);
+    if (CLAUDE_API_KEY) console.log('[keychain] ANTHROPIC_API_KEY 已解析(经 tmux -e 注入子进程,不落盘)');
+  } catch (e) {
+    console.error(`[keychain] 解析 API key 失败 ${e.code || ''}: ${e.reason || e.message}(子进程将缺少 ANTHROPIC_API_KEY)`);
+  }
+  // 3) 清陈旧会话绑定
+  try {
+    const removed = migrateStaleBindings();
+    if (removed.length > 0) {
+      console.log(`[Init] 清理 ${removed.length} 个陈旧会话绑定:${removed.map((r) => r.tmuxName).join(', ')}`);
+    }
+  } catch (err) {
+    console.error('[Init] 旧绑定迁移失败(非致命):', err.message);
+  }
+  // 4) 起服务
+  if (WEB_ONLY) {
+    console.log('[Init] 已设置 --web-only / CC_WEB_WEB_ONLY=1，仅启动 Web 服务（不创建/附加 tmux 会话）');
+    startWebServer();
+  } else {
+    void initAndAttachSession();
+  }
 }
 
-if (WEB_ONLY) {
-  console.log('[Init] 已设置 --web-only / CC_WEB_WEB_ONLY=1，仅启动 Web 服务（不创建/附加 tmux 会话）');
-  startWebServer();
-} else {
-  void initAndAttachSession();
-}
+void bootstrap();

@@ -498,3 +498,93 @@ test('buildCardHTML XSS 场景:target 名经 sanitize,不含注入字符', () =>
   // href 仍 URL 编码(< → %3C)—— 与 target 改名无关,保持
   assert.match(html, /href="\/jump\?m=%3Cx%3E/);
 });
+
+// ---- CLI 工具徽标 + 按工具过滤(多 CLI 聚合分类)----
+// 验收 #5(徽标 5 色可辨)+ #6(过滤控件渲染)。
+test('cliToolMeta:已知工具返回 cls;未知值回退 unknown', () => {
+  assert.equal(B.cliToolMeta('grok-build').cls, 'grok-build');
+  assert.equal(B.cliToolMeta('bogus').cls, 'unknown');
+  assert.equal(B.cliToolMeta(undefined).cls, 'unknown');
+});
+
+test('buildCliBadge:渲染 cli-badge + cli-badge--<cls> + data-cli-tool + title + 短码文本', () => {
+  const html = B.buildCliBadge('grok-build');
+  assert.match(html, /<span class="cli-badge cli-badge--grok-build"/);
+  assert.match(html, /data-cli-tool="grok-build"/);
+  assert.match(html, /title="Grok Build"/);
+  assert.match(html, />Grok</); // short 短码
+});
+
+test('buildCliBadge:5 种枚举各有可区分的 cls(色由 dashboard.css 令牌驱动)', () => {
+  for (const t of ['claude-code', 'grok-build', 'codex', 'cursor', 'unknown']) {
+    const html = B.buildCliBadge(t);
+    assert.match(html, new RegExp('cli-badge--' + t), `${t} 应有对应 cls`);
+    assert.match(html, new RegExp('data-cli-tool="' + t + '"'));
+  }
+});
+
+test('buildCardInner hub:渲染工具徽标(取 machine.cli_tool);缺省 unknown', () => {
+  const html = B.buildCardInner(
+    { id: 'm1', name: 'mac', online: true, cli_tool: 'grok-build' },
+    { name: 'ses', status: 'working' },
+    { mode: 'hub' }
+  );
+  assert.match(html, /<span class="cli-badge cli-badge--grok-build"[^>]*data-cli-tool="grok-build"/);
+  // 缺省(无 cli_tool)→ unknown 徽标
+  const html2 = B.buildCardInner({ id: 'm1', name: 'mac', online: true }, { name: 'ses', status: 'idle' }, { mode: 'hub' });
+  assert.match(html2, /cli-badge--unknown/);
+});
+
+test('buildCardRow:<li> 带 data-cli-tool(取 machine 维度,供过滤选择)', () => {
+  const html = B.buildCardRow({ id: 'm1', name: 'a', cli_tool: 'codex' }, { name: 's', status: 'idle' }, { mode: 'hub' });
+  assert.match(html, /<li class="card-row"[^>]*data-cli-tool="codex"/);
+  // 缺省 → unknown
+  const html2 = B.buildCardRow({ id: 'm1', name: 'a' }, { name: 's', status: 'idle' }, {});
+  assert.match(html2, /data-cli-tool="unknown"/);
+});
+
+test('collectCliTools:出现的工具去重 + 按 canonical 顺序(unknown 居末)', () => {
+  const tools = B.collectCliTools([
+    { id: 'a', cli_tool: 'grok-build', online: true, sessions: [{ name: 's', cli_tool: 'grok-build' }] },
+    { id: 'b', cli_tool: 'claude-code', online: true, sessions: [{ name: 's', cli_tool: 'claude-code' }] },
+    { id: 'c', cli_tool: 'grok-build', online: true, sessions: [{ name: 's', cli_tool: 'grok-build' }] }, // 重复 grok-build
+  ]);
+  assert.deepEqual(tools, ['claude-code', 'grok-build']); // 去重 + canonical 序
+});
+
+test('collectCliTools:无会话的机器仍按机维度 cli_tool 计入', () => {
+  const tools = B.collectCliTools([{ id: 'a', cli_tool: 'cursor', online: true, sessions: [] }]);
+  assert.deepEqual(tools, ['cursor']);
+});
+
+test('renderCliFilter:≥2 种工具 → 渲染 chip 行 + 「全部」 + 每工具内嵌徽标', () => {
+  const machines = [
+    { id: 'a', cli_tool: 'claude-code', online: true, sessions: [{ name: 's', cli_tool: 'claude-code' }] },
+    { id: 'b', cli_tool: 'grok-build', online: true, sessions: [{ name: 's', cli_tool: 'grok-build' }] },
+  ];
+  const html = B.renderCliFilter(machines, null);
+  assert.match(html, /<button[^>]*class="cli-filter__chip[^"]*cli-filter__chip--active"[^>]*data-cli-filter=""/); // 全部(active)
+  assert.match(html, />全部</);
+  assert.match(html, /data-cli-filter="claude-code"/);
+  assert.match(html, /data-cli-filter="grok-build"/);
+  assert.match(html, /cli-badge--grok-build/); // chip 内嵌徽标
+});
+
+test('renderCliFilter:单工具 / 空 → 空串(无可区分性,省 UI)', () => {
+  assert.equal(B.renderCliFilter([{ id: 'a', cli_tool: 'claude-code', sessions: [{ name: 's', cli_tool: 'claude-code' }] }], null), '');
+  assert.equal(B.renderCliFilter([], null), '');
+});
+
+test('renderCliFilter:active 态落在选中工具 chip(非全部),aria-pressed 正确', () => {
+  const machines = [
+    { id: 'a', cli_tool: 'claude-code', online: true, sessions: [{ name: 's', cli_tool: 'claude-code' }] },
+    { id: 'b', cli_tool: 'grok-build', online: true, sessions: [{ name: 's', cli_tool: 'grok-build' }] },
+  ];
+  const html = B.renderCliFilter(machines, 'grok-build');
+  // grok-build chip active,全部 chip 非 active
+  const allChip = html.match(/<button[^>]*data-cli-filter=""[^>]*aria-pressed="([^"]*)"/);
+  const grokChip = html.match(/<button[^>]*data-cli-filter="grok-build"[^>]*aria-pressed="([^"]*)"/);
+  assert.equal(allChip[1], 'false');
+  assert.equal(grokChip[1], 'true');
+  assert.match(grokChip[0], /cli-filter__chip--active/, 'grok-build chip 应带 --active class（复用上方 grokChip，不依赖属性顺序）');
+});

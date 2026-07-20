@@ -31,6 +31,31 @@ test('fetchDashboard 连接失败 → ok:false', async () => {
   assert.equal(r.ok, false);
 });
 
+test('fetchAudit:带透传 token + limit,解析 entries(连接失败 → ok:false)', async () => {
+  const origFetch = global.fetch;
+  let calledUrl = '';
+  let calledAuth = '';
+  global.fetch = async (url, opts) => {
+    calledUrl = url;
+    calledAuth = opts.headers.Authorization;
+    return { ok: true, json: async () => ({ entries: [{ action: 'start', cmd: 'claude', ts: '2026-07-17T08:30:00Z' }] }) };
+  };
+  try {
+    const ac = new AgentClient({ id: 'mc1', url: 'http://hub:7685', token: 'sek' });
+    const r = await ac.fetchAudit(50);
+    assert.equal(r.ok, true);
+    assert.equal(r.entries.length, 1);
+    assert.equal(calledAuth, 'Bearer sek');
+    assert.match(calledUrl, /\/api\/audit\/cc-subprocess\?limit=50/);
+  } finally {
+    global.fetch = origFetch;
+  }
+  // 连接失败路径(用不可达端口,恢复真实 fetch)
+  const ac2 = new AgentClient({ id: 'mc1', url: 'http://127.0.0.1:1', token: 't' });
+  const r2 = await ac2.fetchAudit();
+  assert.equal(r2.ok, false);
+});
+
 test('attachSession 懒建 WS,收到 init 后回调,引用计数共享', async () => {
   const stub = await new StubMachine({ token: 't' }).start();
   try {

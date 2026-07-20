@@ -43,6 +43,45 @@ test('start 后连上 hub 并发 register 帧(id/url 推导正确)', async () =>
   await hub.stop();
 });
 
+// ---- cli_tool 上报(验收 #8:当前 cc-web-control agent 报 claude-code;可显式覆盖)----
+test('register 帧默认带 cli_tool="claude-code"(cc-web-control 自身语义)', async () => {
+  const hub = await startFakeHub({ onRegister: (ws) => ws.send(JSON.stringify({ type: 'registered' })) });
+  const rc = new RegisterClient({
+    hubUrl: `http://127.0.0.1:${hub.port}`, registerToken: 't', authToken: 'x',
+    bindHost: '127.0.0.1', port: 1, machineId: 'm', machineName: '', publicUrl: '',
+  });
+  rc.start();
+  await new Promise((r) => setTimeout(r, 150));
+  const reg = hub.received.find((m) => m.type === 'register');
+  assert.equal(reg.cli_tool, 'claude-code');
+  rc.close(); await hub.stop();
+});
+
+test('register 帧 cliTool 可显式覆盖(如 grok-build);非法值回退 unknown', async () => {
+  const hub = await startFakeHub({ onRegister: (ws) => ws.send(JSON.stringify({ type: 'registered' })) });
+  const rc = new RegisterClient({
+    hubUrl: `http://127.0.0.1:${hub.port}`, registerToken: 't', authToken: 'x',
+    bindHost: '127.0.0.1', port: 1, machineId: 'm', machineName: '', publicUrl: '',
+    cliTool: 'grok-build',
+  });
+  rc.start();
+  await new Promise((r) => setTimeout(r, 150));
+  assert.equal(hub.received.find((m) => m.type === 'register').cli_tool, 'grok-build');
+  rc.close(); await hub.stop();
+
+  // 非法值 → unknown(由 normalizeCliTool 兜底)
+  const hub2 = await startFakeHub({ onRegister: (ws) => ws.send(JSON.stringify({ type: 'registered' })) });
+  const rc2 = new RegisterClient({
+    hubUrl: `http://127.0.0.1:${hub2.port}`, registerToken: 't', authToken: 'x',
+    bindHost: '127.0.0.1', port: 1, machineId: 'm2', machineName: '', publicUrl: '',
+    cliTool: 'bogus',
+  });
+  rc2.start();
+  await new Promise((r) => setTimeout(r, 150));
+  assert.equal(hub2.received.find((m) => m.type === 'register').cli_tool, 'unknown');
+  rc2.close(); await hub2.stop();
+});
+
 test('machineId 显式优先,否则用 hostname', async () => {
   const hub = await startFakeHub({ onRegister: (ws) => ws.send(JSON.stringify({ type: 'registered' })) });
   const rc = new RegisterClient({

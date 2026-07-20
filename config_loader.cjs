@@ -185,6 +185,10 @@ const SINGLE_SCHEMA = {
   machineId:           { type: 'string',  env: 'CC_WEB_MACHINE_ID',            default: '' },
   machineName:         { type: 'string',  env: 'CC_WEB_MACHINE_NAME',          default: '' },
   publicUrl:           { type: 'string',  env: 'CC_WEB_PUBLIC_URL',            default: '' },
+  // Anthropic API key:明文(遗留)或 keychain:// 引用(迁移后)。字段名用 snake_case 以匹配
+  // PRD 验收对 config 文件字面值的 grep 断言;env 沿用标准 ANTHROPIC_API_KEY(env 非落盘,
+  // 不违反「零明文落盘」)。明文→keychain 迁移见 secret_migrate.cjs。
+  anthropic_api_key:   { type: 'string',  env: 'ANTHROPIC_API_KEY',            default: '' },
 };
 
 // 7685(hub)全字段 schema:env / default / type 对齐 spec §5.2(11 字段,mainAgent 为 passthrough 对象)

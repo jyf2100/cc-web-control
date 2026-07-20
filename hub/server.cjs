@@ -11,10 +11,12 @@ const auth = require('../auth.cjs');
 const { existsSync } = require('node:fs');
 const { loadMachines } = require('./config.cjs');
 const { MachineRegistry } = require('./registry.cjs');
+const { querySessions, CLI_TOOLS } = require('./sessions_query.cjs');
 const { AgentRegistrar } = require('./register_server.cjs');
 const { DashboardAggregator } = require('./dashboard_aggregator.cjs');
 const { AutonomyStore } = require('./autonomy_store.cjs');
 const { AutonomyAggregator, summarizeResults } = require('./autonomy_aggregator.cjs');
+const { AuditAggregator } = require('./audit_aggregator.cjs');
 const { AgentClient } = require('./agent_client.cjs');
 const { WsBridge } = require('./ws_bridge.cjs');
 const { createRateLimiter } = require('../rate_limit.cjs');
@@ -87,6 +89,19 @@ function startHub(opts) {
     onResult: (results) => {
       // 各机 autonomy 单调计数 → 增量事件(2s 量级精度,满足验收 5s 内计入)
       try { autonomyAggregator.ingest(summarizeResults(results), Date.now()); } catch { /* 观测失败不影响聚合 */ }
+    },
+  });
+
+  // 子进程 spawn 审计聚合(各机 /api/audit/cc-subprocess → /api/global-audit)
+  const auditAggregator = new AuditAggregator({
+    registry,
+    intervalMs,
+    fetchOne: async (sec, limit) => {
+      const ac = clients.get(sec.id);
+      if (!ac) return { ok: false, error: `unknown machine: ${sec.id}` };
+      const r = await ac.fetchAudit(limit);
+      if (!r.ok) registrar.notifyUnreachable(sec.id, sec.url, r.error);
+      return r.ok ? { ok: true, entries: r.entries } : { ok: false, error: r.error };
     },
   });
 
@@ -310,6 +325,11 @@ function startHub(opts) {
     res.json({ window: key, windowMs, generatedAt: nowMs, machines: body.machines });
   });
 
+  // 全局聚合子进程审计(Audit 面板):各单机 cc-subprocess.jsonl 合并,ts 倒序
+  app.get('/api/global-audit', (req, res) => {
+    res.json(auditAggregator.getLatest());
+  });
+
   // —— 主控 agent 内部端点(只读参谋 T1)——
   app.get('/api/mcp/list_sessions', (req, res) => {
     res.json(aggregator.getLatest());
@@ -342,6 +362,37 @@ function startHub(opts) {
     if (!dispatcher) { res.status(503).json({ error: 'main agent disabled' }); return; }
     const ok = await dispatcher.ack(runId, outcome);
     res.json({ ok });
+  });
+
+  // 多 CLI 工具会话查询(聚合 latest):
+  //  GET /api/sessions                      → 全部会话(每条带 cli_tool/machine/machineName)
+  //  GET /api/sessions?group_by=cli_tool    → { groups: {每个枚举:count}, total }
+  //  GET /api/sessions?cli_tool=<enum>      → 过滤后 { sessions: [...] };非法枚举 → 400
+  //  GET /api/sessions/:machine             → 该机 { machine, machineName, cli_tool, online, sessions }
+  app.get('/api/sessions', (req, res) => {
+    const groupBy = req.query.group_by ? String(req.query.group_by) : '';
+    const cliTool = req.query.cli_tool != null ? String(req.query.cli_tool) : '';
+    try {
+      const result = querySessions(aggregator.getLatest(), { groupBy, cliTool });
+      res.json(result);
+    } catch (e) {
+      // 非法 cli_tool 枚举值:400 + 合法枚举清单(供调用方提示)
+      res.status(400).json({ error: e.message, allowed: e.allowed || CLI_TOOLS });
+    }
+  });
+
+  app.get('/api/sessions/:machine', (req, res) => {
+    const mid = req.params.machine;
+    const latest = aggregator.getLatest();
+    const m = (latest && Array.isArray(latest.machines) ? latest.machines : []).find((x) => x && x.id === mid);
+    if (!m) { res.status(404).json({ error: `unknown machine: ${mid}` }); return; }
+    res.json({
+      machine: m.id,
+      machineName: typeof m.name === 'string' ? m.name : m.id,
+      cli_tool: m.cli_tool || 'unknown',
+      online: m.online !== false,
+      sessions: m.sessions || [],
+    });
   });
 
   // 代理:创建会话(body 带 machine 字段指定目标机)
@@ -545,6 +596,7 @@ function startHub(opts) {
     server.on('error', reject);
     server.listen(port, host, () => {
       aggregator.start();
+      auditAggregator.start();
       const addr = server.address();
       // 0.0.0.0 归一为 127.0.0.1:浏览器/本机访问开不了 0.0.0.0(url 供 server_entry 自动开浏览器)
       const displayHost = (!host || host === '0.0.0.0') ? '127.0.0.1' : host;
@@ -569,8 +621,16 @@ function startHub(opts) {
           aggregator.stop();
           clearInterval(autonomyCompactTimer);
           try { autonomyStore.compact(); } catch {} // 关闭时整表重写,裁掉过期事件
+          auditAggregator.stop();
+          registrar.cleanup();
           for (const ac of clients.values()) ac.close();
           wss.close();
+          // 强制终结存活连接:server.close(cb) 的 cb 要等所有连接自然 drain 才触发,
+          // 而 rc 的 WS + fetch 的 keep-alive 会一直挂着 → cb 永不触发 → 关停永久挂起
+          // (e2e「hub 重启」测试曾因此 hang 死整个 npm test)。terminate WS 后再
+          // closeAllConnections 清掉 keep-alive HTTP,server.close 即可立即回调。
+          wss.clients.forEach((c) => c.terminate());
+          if (typeof server.closeAllConnections === 'function') server.closeAllConnections();
           await new Promise((r) => server.close(r));
         },
         stop: async function () { await this.close(); },

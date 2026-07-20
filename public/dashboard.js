@@ -172,10 +172,12 @@
     var boardBody = document.getElementById('board-body');
     var fleetSummary = document.getElementById('fleet-summary');
     var boardStale = document.getElementById('board-stale');
+    var cliFilterBar = document.getElementById('cli-filter-bar'); // hub:按 CLI 工具过滤控件
     var pollFailCount = 0;
     var lastPollOkTs = 0;
     var hubModeActive = false;            // Fix 7:visibilitychange 据 hubModeActive 决定是否重启 hubLoop
     var hubPolling = false;
+    var activeCliFilter = null;           // 当前 CLI 工具过滤(null/'' = 全部;否则为某枚举值)。跨 2s 重建存活。
 
     function renderFleetSummary(machines) {
         var msum = BR.summarizeFleet(machines);            // 机器维度 online/total
@@ -341,6 +343,49 @@
             updateFanoutBar();
         });
     }
+    // ---- hub:按 CLI 工具过滤(≥2 种工具时显示 chip 行;点 chip 仅显示对应工具会话)----
+    // 渲染 chip 行(基于当次 payload 的工具集合);空/单工具 → 隐藏。active 态跨轮询保留。
+    function renderCliFilterBar(machines) {
+        if (!cliFilterBar) return;
+        var html = BR.renderCliFilter(machines, activeCliFilter);
+        cliFilterBar.innerHTML = html;
+        cliFilterBar.hidden = !html;
+    }
+    // 应用 activeCliFilter:隐藏不匹配的 .card-row;整组卡片都被隐藏时连机组一起隐藏。
+    // 全量重建(renderBoard)后调用,确保过滤态在 2s 轮询刷新后仍然成立。
+    function applyCliFilter() {
+        if (!boardBody) return;
+        var any = activeCliFilter != null && activeCliFilter !== '';
+        var rows = boardBody.querySelectorAll('.card-row');
+        Array.prototype.forEach.call(rows, function (row) {
+            var t = row.getAttribute('data-cli-tool') || 'unknown';
+            row.style.display = (any && t !== activeCliFilter) ? 'none' : '';
+        });
+        // 整组(机组 / 陈旧组)无可见卡片 → 连组一起隐藏,避免空标题占位
+        var groups = boardBody.querySelectorAll('.machine-group, .board-stale-group');
+        Array.prototype.forEach.call(groups, function (g) {
+            var cards = g.querySelectorAll('.card-row');
+            var vis = 0;
+            Array.prototype.forEach.call(cards, function (r) { if (r.style.display !== 'none') vis++; });
+            g.style.display = (any && vis === 0) ? 'none' : '';
+        });
+    }
+    if (cliFilterBar) {
+        cliFilterBar.addEventListener('click', function (e) {
+            var chip = e.target.closest ? e.target.closest('[data-cli-filter]') : null;
+            if (!chip) return;
+            var v = chip.getAttribute('data-cli-filter');
+            activeCliFilter = (v === '' || v == null) ? null : v;
+            // 仅刷新 chip active 态 + aria-pressed,不必重建整行
+            Array.prototype.forEach.call(cliFilterBar.querySelectorAll('.cli-filter__chip'), function (c) {
+                var cv = c.getAttribute('data-cli-filter');
+                var on = (activeCliFilter == null && cv === '') || cv === activeCliFilter;
+                c.classList.toggle('cli-filter__chip--active', on);
+                c.setAttribute('aria-pressed', on ? 'true' : 'false');
+            });
+            applyCliFilter();
+        });
+    }
     function renderBoard(payload) {
         var machines = payload.machines || [];
         var flat = BR.flattenFleet(machines);
@@ -351,12 +396,14 @@
         if (machines.length === 0) {
             boardBody.innerHTML = '<li class="board-empty"><span class="eyebrow">NO MACHINES</span> 尚无机器注册到 hub</li>';
             renderFleetSummary(machines);
+            renderCliFilterBar([]);
             return;
         }
         if (!sorted.length) {
             // 有机器但无会话:区分于「无机器」,引导启动会话而非查 hub 注册
             boardBody.innerHTML = '<li class="board-empty"><span class="eyebrow">NO SESSIONS</span> 暂无运行中的会话。请在某台被控机上启动 cc-web-control 进程。</li>';
             renderFleetSummary(machines);
+            renderCliFilterBar([]);
             return;
         }
         // 全量重建:每次轮询无条件清空 boardBody.innerHTML。
@@ -404,6 +451,8 @@
         }
         reapplySelected();           // Task 4:重建后重标选中卡片
         renderFleetSummary(machines);
+        renderCliFilterBar(machines); // hub:按 CLI 工具过滤 chip 行(≥2 种工具才显示)
+        applyCliFilter();            // 重建后恢复过滤态(隐藏不匹配卡片 + 空组)
     }
     // Fix 6:hub 降级(5xx/格式异常)时把错误消息显式呈现到看板区,替代静默回退单机
     function showBoardError(msg) {

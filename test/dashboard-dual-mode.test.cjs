@@ -84,3 +84,32 @@ test('#board-body 非外层 grid(按机分节容器,非卡片网格)— 三页�
   assert.doesNotMatch(html, /id="board-body"[^>]*class="board-grid"/);
   assert.match(html, /id="board-body"[^>]*class="board-body"/);
 });
+
+// ---- CLI 工具过滤(hub 多 CLI 聚合分类:验收 #6 按工具过滤控件)----
+test('dashboard.html:hub 模式含 #cli-filter-bar 挂点(默认 hidden)', () => {
+  assert.match(html, /id="cli-filter-bar"/);
+  assert.match(html, /id="cli-filter-bar"[^>]*class="cli-filter-bar"/);
+});
+
+test('dashboard.js:cli 过滤状态 + 渲染 + 应用三件齐全', () => {
+  // activeCliFilter 状态(renderBoard 后保留过滤态)+ renderCliFilterBar + applyCliFilter
+  assert.match(js, /activeCliFilter/);
+  assert.match(js, /renderCliFilterBar/);
+  assert.match(js, /applyCliFilter/);
+  assert.match(js, /BR\.renderCliFilter/);
+});
+
+test('dashboard.js:cli 过滤按 data-cli-tool 隐藏不匹配卡片 + 空组连组隐藏', () => {
+  assert.match(js, /data-cli-tool/);
+  assert.match(js, /\.machine-group.*\.board-stale-group|\.board-stale-group.*\.machine-group/);
+});
+
+test('dashboard.js:renderBoard 末尾渲染过滤 chip 行 + 应用过滤', () => {
+  assert.match(js, /renderCliFilterBar\(machines\)/);
+  assert.match(js, /applyCliFilter\(\)/);
+});
+
+test('dashboard.js:filter chip 点击 → 更新 activeCliFilter + 重应用(全部=清空)', () => {
+  assert.match(js, /cli-filter-bar[^]*data-cli-filter/);
+  assert.match(js, /activeCliFilter\s*=\s*\(v\s*===\s*''\s*\|\|\s*v\s*==\s*null\)\s*\?\s*null\s*:\s*v/);
+});
