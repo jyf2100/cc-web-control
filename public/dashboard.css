@@ -394,3 +394,62 @@ html, body {
     opacity: 0; pointer-events: none; transition: opacity .18s; z-index: 50;
 }
 .toast--show { opacity: 1; }
+
+/* —— 受监督自主运行指标面板(hub 模式追加,不替换既有视图)—— */
+.autonomy-panel {
+    margin: 16px 0 0;
+    padding: 14px 16px;
+    border: 1px solid var(--border, rgba(0, 0, 0, 0.1));
+    border-radius: 10px;
+    background: var(--surface, rgba(0, 0, 0, 0.02));
+}
+.autonomy-panel[hidden] { display: none; }
+.autonomy-panel__head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap; margin-bottom: 10px;
+}
+.autonomy-panel__title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.autonomy-panel__name { font-weight: 600; font-size: 14px; }
+.autonomy-panel__hint { font-size: 12px; opacity: 0.62; }
+.autonomy-window { display: inline-flex; gap: 2px; background: var(--border, rgba(0,0,0,0.06)); border-radius: 7px; padding: 2px; }
+.autonomy-window__btn {
+    border: 0; background: transparent; color: inherit;
+    padding: 4px 10px; font-size: 12px; border-radius: 5px; cursor: pointer;
+    font-variant-numeric: tabular-nums;
+}
+.autonomy-window__btn[aria-pressed="true"] {
+    background: var(--surface-raised, #fff); box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    font-weight: 600;
+}
+.autonomy-body { min-height: 24px; }
+.autonomy-empty {
+    padding: 14px; text-align: center; font-size: 13px; opacity: 0.6;
+    border: 1px dashed var(--border, rgba(0,0,0,0.12)); border-radius: 8px;
+}
+.autonomy-empty .eyebrow { display: inline-block; margin-right: 6px; font-size: 11px; letter-spacing: 0.08em; opacity: 0.8; }
+.autonomy-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.autonomy-table th, .autonomy-table td {
+    text-align: left; padding: 7px 10px;
+    border-bottom: 1px solid var(--border, rgba(0,0,0,0.06));
+}
+.autonomy-table th { font-size: 11px; font-weight: 600; opacity: 0.6; text-transform: uppercase; letter-spacing: 0.04em; }
+.autonomy-table td { font-variant-numeric: tabular-nums; }
+.autonomy-row--stale { opacity: 0.55; }
+.autonomy-row__name { font-weight: 500; }
+.autonomy-metric { text-align: right; }
+.autonomy-metric--commit { color: var(--working, #2e7d32); font-weight: 600; }
+.autonomy-metric--rollback { color: var(--errored, #e5484d); font-weight: 600; }
+.autonomy-metric--intervention { color: var(--waiting, #b26a00); font-weight: 600; }
+.autonomy-stale {
+    display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 4px;
+    font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+    background: var(--border, rgba(0,0,0,0.08)); opacity: 0.8;
+}
+@media (max-width: 540px) {
+    .autonomy-panel__head { align-items: flex-start; }
+    .autonomy-table th, .autonomy-table td { padding: 6px 6px; }
+}
+@media (prefers-color-scheme: dark) {
+    .autonomy-panel { background: var(--surface, rgba(255,255,255,0.03)); }
+    .autonomy-window__btn[aria-pressed="true"] { background: var(--surface-raised, rgba(255,255,255,0.12)); }
+}

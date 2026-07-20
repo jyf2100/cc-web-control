@@ -18,6 +18,7 @@ const tmux = require('./tmux.cjs');
 const auth = require('./auth.cjs');
 const { buildClaudeLaunchCommand, shellEscapeForDoubleQuotes } = require('./claude_launch.cjs');
 const { getDashboardCache, buildDashboardPayload } = require('./dashboard_cache.cjs');
+const { AutonomyTracker } = require('./autonomy_counters.cjs');
 const { cwdToSlug } = require('./dashboard_slug.cjs');
 const { resolveDefaultSessionForCwd } = require('./session_default.cjs');
 const { isSessionInUse } = require('./session_in_use.cjs');
@@ -487,6 +488,10 @@ function startWebServer() {
   });
   dashboardCache.start();
 
+  // autonomy 指标跟踪器(单机维度:commit/rollback 来自 jsonl 尾扫,intervention 来自 WS 打断键)。
+  // 仅观测、不改 Claude 行为;经 /api/dashboard 的 session.autonomy 字段上报给 hub。
+  const autonomyTracker = new AutonomyTracker();
+
   let _tmuxOkCache = null;
   let _tmuxOkAt = 0;
   async function tmuxAvailable() {
@@ -502,8 +507,14 @@ function startWebServer() {
       const sessions = await listSessions();
       dashboardCache.setSessions(sessions);
       dashboardCache.refresh();
+      // autonomy:扫 jsonl 尾部计 commit/rollback,清理已消失会话,snapshot 仅含当前会话
+      autonomyTracker.tick(sessions);
+      autonomyTracker.retain(sessions.map((s) => s.name));
       const tmuxOk = await tmuxAvailable();
-      res.json(buildDashboardPayload(sessions, dashboardCache.getSnapshots(), tmuxOk));
+      res.json(buildDashboardPayload(
+        sessions, dashboardCache.getSnapshots(), tmuxOk,
+        autonomyTracker.snapshot(sessions.map((s) => s.name))
+      ));
     } catch (error) {
       // M3:绝不 500,降级返回空 payload
       res.json({ sessions: [], tmuxOk: false });
@@ -700,6 +711,12 @@ function startWebServer() {
 
         if (type === 'key') {
           await runKey(data);
+          // autonomy:用户主动打断 Claude(C-c / Esc 均为「停止当前回合」的同等信号)→ intervention +1。
+          // 仅观测、不改 Claude 行为;经 /api/dashboard 上报给 hub(与「自然结束」可区分:C-c/Esc 是人工打断,
+          // 任务跑完自然退出不会产生本路径的 key 事件)。
+          if (data === 'C-c' || data === 'Escape') {
+            try { autonomyTracker.recordIntervention(sessionName); } catch { /* 观测失败不影响输入 */ }
+          }
           return;
         }
 
