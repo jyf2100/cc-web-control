@@ -594,6 +594,12 @@ function startHub(opts) {
           registrar.cleanup();
           for (const ac of clients.values()) ac.close();
           wss.close();
+          // 强制终结存活连接:server.close(cb) 的 cb 要等所有连接自然 drain 才触发,
+          // 而 rc 的 WS + fetch 的 keep-alive 会一直挂着 → cb 永不触发 → 关停永久挂起
+          // (e2e「hub 重启」测试曾因此 hang 死整个 npm test)。terminate WS 后再
+          // closeAllConnections 清掉 keep-alive HTTP,server.close 即可立即回调。
+          wss.clients.forEach((c) => c.terminate());
+          if (typeof server.closeAllConnections === 'function') server.closeAllConnections();
           await new Promise((r) => server.close(r));
         },
         stop: async function () { await this.close(); },
