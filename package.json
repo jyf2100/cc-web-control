@@ -22,7 +22,7 @@
   },
   "scripts": {
     "start": "node server.cjs",
-    "dev": "nodemon server.js",
+    "dev": "node scripts/dev.cjs",
     "test": "node --test test/*.test.cjs"
   },
   "dependencies": {
