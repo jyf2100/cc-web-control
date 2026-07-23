@@ -1,55 +1,99 @@
 /**
  * cc-web-control 设计令牌(单一事实来源)
- * 方向:editorial 开发者工具风(暖灰米 + 暖橙)。三页共用。纯浅色。
- * 语义分工:--accent 仅填色/装饰;--accent-2 用于所有文字/图标/按钮底(达 WCAG AA)。
+ * 方向:Modern Mission Control —— 深色优先双主题(保留暖橙 DNA)。三页共用。
+ * 机制::root 放深色值(默认),[data-theme="light"] 覆盖为浅色值;
+ * <html data-theme> 由 anti-FOUC 内联脚本(localStorage 'cc-theme',默认 dark)+ theme.js 切换维护。
+ * 语义分工:--accent 仅填色/装饰;--accent-2 用于所有文字/图标/按钮底(达 WCAG AA);
+ * --on-accent 是 accent 底上的文字色(深主题深棕黑 / 浅主题白)。
  */
 :root {
-  /* 暖灰米底 */
+  /* 深色(默认):mission control 暖黑 */
+  --bg: #121110;
+  --bg-2: #0c0b0a;
+  /* surface 层级 */
+  --surface: #1b1916;
+  --surface-2: #242119;
+  --surface-3: #2e2a20;
+  /* 暖白前景 + alpha 派生层级 */
+  --fg: #ede8de;
+  --fg-2: rgba(237,232,222,0.68);   /* 次文字;承载真实信息 */
+  --fg-3: rgba(237,232,222,0.40);   /* 仅装饰:placeholder/分隔符;禁止承载需阅读文字 */
+  --fg-4: rgba(237,232,222,0.22);   /* 仅边框 */
+  /* 边框:alpha 低调分隔 */
+  --border: rgba(237,232,222,0.10);
+  --border-2: rgba(237,232,222,0.20);
+  /* 暖橙强调:双语义分工(达 WCAG AA) */
+  --accent: #e8853f;     /* 仅大面积填色/装饰图形,不用于小号文字/图标 */
+  --accent-2: #f2a35e;   /* 文字/图标/按钮底/focus outline 语义色(在 bg 上 ~9:1,达 AA) */
+  --on-accent: #241505;  /* accent 底上的文字(深色主题用深棕黑) */
+  --accent-bg: rgba(232,133,63,0.12);
+  --accent-dim: rgba(232,133,63,0.35);
+  /* 状态色谱:状态点用(与品牌暖橙拉开色相,避免与 CTA 语义混淆) */
+  --waiting: #d9a545;    /* 偏黄琥珀,区别于 accent 的 CTA 暖橙 */
+  --working: #3fb47f;
+  --errored: #e35d7c;    /* 偏紫玫红,增大与暖橙色相差 */
+  --idle: rgba(237,232,222,0.50);   /* 图形对比过 WCAG 3:1 */
+  --offline: rgba(237,232,222,0.35);   /* 离线:空心环 border 用;机名用 --fg-2 承载阅读 */
+  --success: #3fb47f;   /* 与 --working 同值:状态语义分离,色相统一,二者不并列出现 */
+  /* 遮罩(抽屉 backdrop) */
+  --scrim: rgba(0,0,0,0.55);
+  /* waiting 卡片浅底(看板) */
+  --waiting-bg: rgba(217,165,69,0.12);
+  /* 卡片阴影:控制台卡片容器 */
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.4), 0 12px 32px rgba(0,0,0,0.45);
+  /* 浮层阴影:命令面板/抽屉等 */
+  --shadow-pop: 0 8px 24px rgba(0,0,0,0.5);
+
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  /* 浅色:沿用 editorial 暖灰米体系 */
   --bg: #f2f1ed;
   --bg-2: #f7f7f4;
-  /* surface 层级 */
   --surface: #ebeae5;
   --surface-2: #e3e2dc;
   --surface-3: #d9d8d1;
-  /* 暖黑前景 + alpha 派生层级 */
   --fg: #26251e;
   --fg-2: rgba(38,37,30,0.70);   /* 次文字 ~5.4:1 达 AA;承载真实信息 */
   --fg-3: rgba(38,37,30,0.35);   /* 仅装饰:placeholder/分隔符;禁止承载需阅读文字 */
   --fg-4: rgba(38,37,30,0.18);   /* 仅边框 */
-  /* 边框:alpha 低调分隔 */
   --border: rgba(38,37,30,0.1);
   --border-2: rgba(38,37,30,0.2);
-  /* 暖橙强调:双语义分工(达 WCAG AA) */
   --accent: #d9651a;     /* 仅大面积填色/装饰图形,不用于小号文字/图标 */
   --accent-2: #b54e0e;   /* 文字/图标/按钮底/focus outline 语义色(白字 5.17:1、on bg 4.58:1 达 AA) */
+  --on-accent: #ffffff;  /* accent 底上的文字(浅色主题用白) */
   --accent-bg: rgba(217,101,26,0.08);
   --accent-dim: rgba(217,101,26,0.25);
-  /* 状态色谱:状态点用(与品牌暖橙拉开色相,避免与 CTA 语义混淆) */
   --waiting: #c08532;    /* 偏黄琥珀,区别于 accent 的 CTA 暖橙 */
   --working: #1f8a65;
   --idle: rgba(38,37,30,0.55);   /* 图形对比过 WCAG 3:1(原 0.3 不足;spec §8 决策11) */
-  --offline: rgba(38,37,30,0.6);   /* 离线:同暖灰系,alpha 2× 于 --idle(0.3→0.6),状态点可辨;机名用 --fg-2 承载阅读 */
+  --offline: rgba(38,37,30,0.6);   /* 离线:同暖灰系;形状区分(空心环),机名用 --fg-2 承载阅读 */
   --errored: #c01a4b;    /* 偏紫玫红,增大与暖橙色相差 */
   --success: #1f8a65;   /* 与 --working 同值:状态语义分离,色相统一,二者不并列出现 */
-  /* 字体三栈 */
+  --scrim: rgba(38,37,30,0.35);
+  --shadow-card: 0 1px 3px rgba(38, 37, 30, 0.06), 0 8px 24px rgba(38, 37, 30, 0.08);
+  --shadow-pop: 0 8px 24px rgba(0,0,0,0.18);
+  /* waiting 卡片浅底(看板) */
+  --waiting-bg: rgba(192,133,50,0.08);
+
+  color-scheme: light;
+}
+
+:root {
+  /* 字体三栈(两主题共用) */
   --sans: system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Helvetica, Arial, sans-serif;
   --mono: 'SF Mono', 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
   --serif: Georgia, 'Palatino Linotype', 'Book Antiqua', 'Iowan Old Style', 'Source Han Serif SC', 'Noto Serif SC', serif;
-  /* 圆角分层 */
+  /* 圆角分层(两主题共用) */
   --r-xs: 3px;     /* mono 小标签/eyebrow chip 近直角 */
   --r-sm: 6px;     /* 卡片 */
   --r: 10px;       /* 主容器 */
   --r-pill: 9999px;
-  /* 卡片阴影:控制台卡片容器(轻量 editorial 风,承载「包裹」视觉,不喧宾夺主) */
-  --shadow-card: 0 1px 3px rgba(38, 37, 30, 0.06), 0 8px 24px rgba(38, 37, 30, 0.08);
-
-  color-scheme: light;
 }
-/* 纯浅色:不提供深色 media 查询(见 spec §方向) */
 
 /* ============================================================
  * 组件区(三页共用,靠 style.css / dashboard.css 的 @import tokens.css 自动带载)
- * 设计依据:spec §6。零 HTML 改动。
  * ============================================================ */
 
 /* brand mark:◇ 旋转方块,::before 描边(--accent-2 达 AA)+ ::after 实心(--accent 装饰) */
@@ -72,7 +116,7 @@
 .btn-primary {
   min-height: 44px; padding: 0 16px;
   border: 1px solid var(--accent-2); border-radius: var(--r);
-  background: var(--accent-2); color: #ffffff;
+  background: var(--accent-2); color: var(--on-accent);
   font-family: var(--sans); font-size: 14px; cursor: pointer;
 }
 .btn-primary:hover { filter: brightness(1.05); }
@@ -86,13 +130,25 @@
 .btn-ghost:hover { background: var(--accent-bg); }
 .btn-ghost:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
 
-/* 状态点系统(spec §6 双编码):.s-dot 色点(冗余)+ .s-status 文字(主通道) */
+/* 图标按钮(主题切换等 header 动作,三页共用) */
+.icon-btn {
+  min-width: 44px; min-height: 44px; padding: 0 10px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: var(--r);
+  background: transparent; color: var(--fg-2);
+  font-family: var(--sans); font-size: 16px; line-height: 1; cursor: pointer;
+  transition: color .12s ease, border-color .12s ease, background .12s ease;
+}
+.icon-btn:hover { color: var(--accent-2); border-color: var(--accent-dim); background: var(--accent-bg); }
+.icon-btn:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+
+/* 状态点系统(双编码):.s-dot 色点(冗余)+ .s-status 文字(主通道);色点微光晕提升 glanceable */
 .s-dot {
   width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; background: var(--idle);
 }
-.s-dot--waiting { background: var(--waiting); }
-.s-dot--working { background: var(--working); }
-.s-dot--errored { background: var(--errored); }
+.s-dot--waiting { background: var(--waiting); box-shadow: 0 0 6px color-mix(in srgb, var(--waiting) 45%, transparent); }
+.s-dot--working { background: var(--working); box-shadow: 0 0 6px color-mix(in srgb, var(--working) 45%, transparent); }
+.s-dot--errored { background: var(--errored); box-shadow: 0 0 6px color-mix(in srgb, var(--errored) 45%, transparent); }
 .s-dot--idle    { background: var(--idle); }
 .s-dot--unknown { background: transparent; border: 1px dashed var(--fg-3); }
 .s-status {

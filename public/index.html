@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <script>(function(){try{document.documentElement.dataset.theme=localStorage.getItem('cc-theme')||'dark';}catch(e){document.documentElement.dataset.theme='dark';}})();</script>
     <title>Roc-CC Remote Control</title>
     <link rel="icon" href="icon-192.png">
     <link rel="stylesheet" href="style.css">
@@ -11,7 +12,8 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Roc-CC">
-    <meta name="theme-color" content="#f2f1ed">
+    <meta name="theme-color" content="#f2f1ed" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#121110" media="(prefers-color-scheme: dark)">
 </head>
 <body>
     <div id="app">
@@ -32,6 +34,7 @@
                         <span class="meta-label">s</span><span id="metaSession" class="meta-val">—</span>
                     </span>
                 </div>
+                <button class="icon-btn" id="themeToggle" type="button" aria-label="切换主题" aria-pressed="false">☀</button>
             </header>
             <!-- 主内容区 -->
             <main class="main">
@@ -68,6 +71,7 @@
         </nav>
     </div>
 
+    <script src="theme.js"></script>
     <script src="terminal_cleaner.cjs"></script>
     <script src="tmux_actions.cjs"></script>
     <script src="projectsView.cjs"></script>

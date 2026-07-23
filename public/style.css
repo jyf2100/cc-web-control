@@ -79,8 +79,11 @@ html, body {
 .live-dot { display: inline-flex; align-items: center; gap: 6px; font-family: var(--sans); font-size: 11px; color: var(--fg-2); }
 .live-dot-pulse {
     width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
-    box-shadow: 0 0 6px rgba(217, 101, 26, 0.5); animation: live-glow 2.4s ease-in-out infinite;
+    box-shadow: 0 0 6px var(--accent-dim); animation: live-glow 2.4s ease-in-out infinite;
 }
+
+/* header 内主题切换:纤细 status bar 不收 44px 撑高(装饰增强按钮,与 .btn 28px 同级) */
+.header .icon-btn { min-height: 32px; min-width: 32px; padding: 0 6px; font-size: 14px; }
 
 .status { font-size: 12px; color: var(--fg-2); padding: 4px 10px; background-color: var(--surface-2); border-radius: var(--r-pill); border: 1px solid var(--border); }
 .status.connected { color: var(--working); border-color: var(--working); background-color: var(--surface-2); }
@@ -206,7 +209,7 @@ html, body {
     border: 1px solid var(--accent-dim); border-radius: var(--r-pill);
     background: var(--bg); color: var(--accent-2); font-size: 13px; cursor: pointer;
 }
-.quick-reply-btn--primary { background: var(--accent-2); color: #ffffff; border-color: var(--accent-2); }
+.quick-reply-btn--primary { background: var(--accent-2); color: var(--on-accent); border-color: var(--accent-2); }
 .quick-reply-btn:hover { background: var(--surface); }
 .quick-reply-btn--primary:hover { background: var(--accent-2); filter: brightness(1.05); }
 .quick-reply-btn:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
@@ -215,13 +218,19 @@ html, body {
     flex: 1;
     min-height: 0;
     margin: 0; padding: 12px 14px; overflow: auto; white-space: pre-wrap; word-break: break-word;
-    font-family: var(--mono); font-size: 12.5px; line-height: 1.65; color: var(--fg);
-    background-color: var(--surface);
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.7; color: var(--fg);
+    background-color: var(--bg-2);   /* 沉底:终端区比面板更暗一档,mission control 层次 */
 }
 .terminal-input-row {
     display: flex; align-items: center; gap: 10px; padding: 10px 14px;
     padding-bottom: max(10px, env(safe-area-inset-bottom));
     border-top: 1px solid var(--border); background: var(--surface-2);
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+/* 命令行聚焦:accent 微光晕(不抢焦,只提示输入已激活) */
+.terminal-input-row:focus-within {
+    border-top-color: var(--accent-dim);
+    box-shadow: 0 -8px 24px -16px var(--accent-dim);
 }
 .terminal-prompt {
     font-family: var(--mono); font-size: 14px; font-weight: 600;
@@ -252,7 +261,10 @@ html, body {
 
 .terminal-line {
     min-height: 1.5em;
+    border-radius: var(--r-xs);
 }
+/* 行间 hover 微反馈(不改几何,不影响虚拟滚动测量) */
+.terminal-line:hover { background: var(--surface); }
 
 ::-webkit-scrollbar {
     width: 8px;
@@ -287,12 +299,12 @@ html, body {
 @media (prefers-reduced-motion: reduce) { .live-dot-pulse { animation: none; } }
 .toast-info { background-color: #9c6a1f; color: #ffffff; }      /* --waiting 加深(对白字达 AA) */
 .toast-success { background-color: #4a7a3a; color: #ffffff; }   /* --success 加深(对白字达 AA) */
-.toast-error { background-color: var(--errored); color: #ffffff; }
+.toast-error { background-color: var(--errored); color: var(--on-accent); }
 
 .command-palette {
     position: absolute; top: 100%; left: 0; right: 0;
-    background: var(--bg); border: 1px solid var(--border); border-radius: var(--r);
-    overflow-y: auto; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r);
+    overflow-y: auto; box-shadow: var(--shadow-pop);
     z-index: 100; margin-top: 4px;
 }
 .command-palette[hidden] { display: none; }
@@ -331,11 +343,11 @@ html, body {
 }
 
 /* === 切换 sheet(spec §7.1 底部抽屉)=== */
-.switch-sheet-backdrop { position: fixed; inset: 0; background: rgba(38, 37, 30, 0.35); z-index: 1000; border: none; }
+.switch-sheet-backdrop { position: fixed; inset: 0; background: var(--scrim); z-index: 1000; border: none; }
 .switch-sheet {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 1001;
     background: var(--bg-2); border-top: 1px solid var(--border-2); border-radius: var(--r) var(--r) 0 0;
-    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.12);
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
     padding: 8px 16px calc(16px + env(safe-area-inset-bottom));
     max-height: 70vh; overflow-y: auto; animation: sheetUp 0.25s ease both;
 }

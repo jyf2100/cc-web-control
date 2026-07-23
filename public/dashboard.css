@@ -19,7 +19,7 @@ html, body {
 }
 .logo { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 600; color: var(--fg); }
 .logo .app-logo { width: 24px; height: 24px; border-radius: 6px; object-fit: cover; }
-.header-actions { display: flex; align-items: center; gap: 12px; }
+.header-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-shrink: 0; }
 
 /* nav 保留(单一来源在本文件,触摸 44pt + :focus-visible) */
 .nav { display: flex; gap: 2px; background: var(--surface-2); border-radius: var(--r-pill); padding: 3px; }
@@ -37,11 +37,13 @@ html, body {
 .session {
     position: relative; display: flex; align-items: center; gap: 11px; padding: 13px 14px;
     background-color: var(--surface); border: 1px solid var(--border); border-radius: var(--r);
-    min-height: 44px; cursor: pointer; transition: border-color 0.15s ease;
+    min-height: 44px; cursor: pointer;
+    transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
-.session:hover { border-color: var(--border-2); }
+.session:hover { border-color: var(--border-2); transform: translateY(-1px); box-shadow: var(--shadow-card); }
 .session:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
 .session:active { background-color: var(--surface-2); }
+@media (prefers-reduced-motion: reduce) { .session { transition: none; } .session:hover { transform: none; } }
 
 /* waiting 高亮:§7.2:212(--accent-bg 轻底 + inset 3px 左边框 var(--waiting)) */
 .session.waiting {
@@ -51,7 +53,7 @@ html, body {
 
 /* .s-dot 几何在 tokens.css 组件区;此处仅 waiting 脉冲(自带 reduced-motion 降级,§9:254) */
 .session.waiting .s-dot--waiting {
-    background: var(--waiting); box-shadow: 0 0 0 4px rgba(192, 133, 50, 0.15);
+    background: var(--waiting); box-shadow: 0 0 0 4px color-mix(in srgb, var(--waiting) 18%, transparent);
     animation: dash-dot-pulse 1.6s ease-in-out infinite;
 }
 @keyframes dash-dot-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
@@ -153,8 +155,10 @@ html, body {
 .card { position:relative; display:grid; grid-template-columns:auto auto 1fr auto; grid-template-rows:auto auto auto; align-items:stretch; gap:2px 8px; width:100%; min-height:72px; padding:8px 10px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r); cursor:pointer; text-align:left; font:inherit; color:var(--fg); box-shadow:inset 3px 0 0 transparent; transition:transform .15s ease, border-color .15s ease, box-shadow .15s ease; }
 @media (hover:hover){ .card:hover { transform:translateY(-1px); } }
 .card:focus-visible { outline:2px solid var(--accent-2); outline-offset:2px; }
+@media (hover:hover){ .card:hover { border-color:var(--border-2); } }
 .card.active { box-shadow:inset 3px 0 0 var(--accent-2); }
-.card.card--selected { border-color:var(--accent-2); box-shadow:inset 0 0 0 2px var(--accent-2); }
+/* 选中态:accent 描边 + 微光晕(mission control 聚焦感) */
+.card.card--selected { border-color:var(--accent-2); box-shadow:inset 0 0 0 2px var(--accent-2), 0 0 18px -6px var(--accent-dim); }
 .card.card--selected::after { content:''; position:absolute; top:0; right:0; width:0; height:0; border-style:solid; border-width:0 13px 13px 0; border-color:transparent var(--accent-2) transparent transparent; }
 .card[data-status="errored"] { box-shadow:inset 3px 0 0 var(--errored); }
 .card[data-status="errored"].active { box-shadow:inset 3px 0 0 var(--errored), inset 0 0 0 2px var(--accent-2); }
@@ -222,6 +226,9 @@ html, body {
 /* 状态点增强(demo L80–L84):working/errored 同色环(活跃更跳但克制);idle 实心;offline 空心环(形状区分,不靠 alpha)*/
 .s-dot--working { box-shadow: 0 0 0 3px rgba(31,138,101,0.18); }
 .s-dot--errored { box-shadow: 0 0 0 3px rgba(192,26,75,0.20); }
+/* 深色主题:状态环换成新色谱的更亮 alpha(旧环色在深底上太闷) */
+[data-theme="dark"] .s-dot--working { box-shadow: 0 0 0 3px rgba(63,180,127,0.22); }
+[data-theme="dark"] .s-dot--errored { box-shadow: 0 0 0 3px rgba(227,93,124,0.24); }
 .s-dot--idle { box-shadow: 0 0 0 1.5px var(--fg-2); }   /* idle 描边达非文本 3:1(保留原 P5 修正)*/
 .s-dot--offline { background: transparent; border: 1.5px solid var(--offline); box-sizing: border-box; }
 .s-icon[aria-hidden="true"] { color: var(--fg-2); }
@@ -244,7 +251,7 @@ html, body {
 #term-input:disabled { opacity:.5; }
 #term-input:focus-visible { outline:2px solid var(--accent-2); outline-offset:2px; }   /* P6:WCAG 2.4.7 */
 .term-prompt { color:var(--accent-2); font-weight:600; font-family:var(--mono); font-size:14px; user-select:none; flex-shrink:0; }
-.term-badge { font-size:.75em; background:var(--accent-2); color:#fff; padding:2px 8px; border-radius:var(--r-pill); }
+.term-badge { font-size:.75em; background:var(--accent-2); color:var(--on-accent); padding:2px 8px; border-radius:var(--r-pill); }
 #bc-result { font-size:.75em; color:var(--fg-2); }
 /* 折叠态:终端收为单行 header,卡片网格获更多空间(P1 §4.2 A6) */
 .console-term[data-collapsed="true"] { flex-basis:auto; min-height:0; }
@@ -333,7 +340,7 @@ html, body {
 .fanout-bar .term-input{flex:1;min-height:44px;padding:8px 12px;border:1px solid var(--border-2);
   border-radius:var(--r-sm);font:inherit;font-size:16px;background:var(--bg-2);color:var(--fg)}   /* P8:iOS <16px 聚焦放大整页,显式锁 16px */
 .fanout-bar .term-input:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px;border-color:var(--accent-2)}   /* P6::focus → :focus-visible,避免鼠标点击常驻 */
-.fanout-bar .term-badge{font-size:.75em;background:var(--accent-2);color:#fff;padding:3px 10px;
+.fanout-bar .term-badge{font-size:.75em;background:var(--accent-2);color:var(--on-accent);padding:3px 10px;
   border-radius:var(--r-pill);font-weight:600;flex-shrink:0}
 .fanout-bar .bc-result{font-size:.75em;color:var(--working);flex-shrink:0;font-family:var(--mono)}
 
@@ -370,7 +377,7 @@ html, body {
     padding: 4px 6px; font-size: 14px; line-height: 1;
     color: inherit; opacity: 0.45; border-radius: 4px;
 }
-.session__del:hover { opacity: 1; background: var(--errored, #e5484d); color: #fff; }
+.session__del:hover { opacity: 1; background: var(--errored, #e5484d); color: var(--on-accent); }
 .session__del:disabled { opacity: 0.22; cursor: not-allowed; }
 .session__del:disabled:hover { background: transparent; color: inherit; opacity: 0.22; }
 
@@ -385,7 +392,7 @@ html, body {
     border: 0; border-radius: 4px; padding: 4px 8px; font-size: 12px; cursor: pointer;
 }
 .s-cancel { background: transparent; color: inherit; opacity: 0.7; }
-.s-confirm-del { background: var(--errored, #e5484d); color: #fff; }
+.s-confirm-del { background: var(--errored, #e5484d); color: var(--on-accent); }
 
 .toast {
     position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);

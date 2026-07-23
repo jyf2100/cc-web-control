@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <script>(function(){try{document.documentElement.dataset.theme=localStorage.getItem('cc-theme')||'dark';}catch(e){document.documentElement.dataset.theme='dark';}})();</script>
   <title>Roc-CC Remote Control - Login</title>
   <link rel="icon" href="icon-192.png">
   <link rel="manifest" href="manifest.json">
@@ -10,7 +11,8 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Roc-CC">
-  <meta name="theme-color" content="#f2f1ed">
+  <meta name="theme-color" content="#f2f1ed" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121110" media="(prefers-color-scheme: dark)">
   <link rel="stylesheet" href="tokens.css">
   <style>
     * { box-sizing: border-box; }
@@ -24,6 +26,19 @@
       -webkit-font-smoothing: antialiased;
     }
     .login-card { width: 100%; max-width: 330px; text-align: left; }
+    /* 深色(默认):登录卡片给 surface 层级 + 边框 + 阴影,撑出质感 */
+    .login-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r); box-shadow: var(--shadow-card); padding: 26px 24px;
+    }
+    /* 浅色:沿用原 editorial 无卡片排版 */
+    [data-theme="light"] .login-card {
+      background: transparent; border-color: transparent; box-shadow: none; padding: 0;
+    }
+    .login-theme-toggle {
+      position: fixed; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right));
+      z-index: 10;
+    }
     .l-eyebrow { font-family: var(--mono); font-size: 11px; color: var(--accent-2); letter-spacing: 0.04em; margin: 0 0 14px; }
     .brand-row { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
     .brand-name { font-size: 16px; font-weight: 600; letter-spacing: -0.015em; color: var(--fg); }
@@ -48,6 +63,7 @@
   </style>
 </head>
 <body>
+  <button class="icon-btn login-theme-toggle" id="themeToggle" type="button" aria-label="切换主题" aria-pressed="false">☀</button>
   <main class="login-card">
     <p class="l-eyebrow">[ login ] · v2.4</p>
     <div class="brand-row">
@@ -73,6 +89,7 @@
       仅在可信设备与网络使用,妥善保管 token。
     </p>
   </main>
+  <script src="theme.js"></script>
   <script>
     (function () {
       try {

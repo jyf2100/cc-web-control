@@ -22,12 +22,18 @@ test('tokens.css 无深色 media + color-scheme: light', () => {
 test('无琥珀硬编码 rgba(212,165,116)', () => {
   assert.equal(grepCount('212,\\s*165,\\s*116'), 0);
 });
-test('theme-color/manifest 改浅色 #f2f1ed', () => {
+test('theme-color:HTML 双 meta(light/dark media 各一),manifest 深色默认 #121110', () => {
+  // Modern Mission Control 重构:深色为默认主题。HTML 用 media 属性各写一份
+  // theme-color(初始 hint),运行时由 theme.js 按 localStorage 'cc-theme' 同步内容。
   for (const f of ['index.html','dashboard.html','login.html']) {
-    assert.ok(fs.readFileSync(`${P}/${f}`,'utf8').includes('theme-color" content="#f2f1ed"'));
+    const h = fs.readFileSync(`${P}/${f}`,'utf8');
+    assert.ok(h.includes('theme-color" content="#f2f1ed"'), f + ' 缺浅色 theme-color meta');
+    assert.ok(h.includes('theme-color" content="#121110"'), f + ' 缺深色 theme-color meta');
+    assert.ok(h.includes("localStorage.getItem('cc-theme')"), f + ' 缺 anti-FOUC 主题脚本');
   }
   const m = fs.readFileSync(`${P}/manifest.json`,'utf8');
-  assert.ok(m.includes('"theme_color": "#f2f1ed"') && m.includes('"background_color": "#f2f1ed"'));
+  assert.ok(m.includes('"theme_color": "#121110"') && m.includes('"background_color": "#121110"'),
+    'manifest 应同步深色默认 #121110');
 });
 test('关键新令牌齐全', () => {
   const css = fs.readFileSync(`${P}/tokens.css`, 'utf8');

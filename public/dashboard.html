@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <script>(function(){try{document.documentElement.dataset.theme=localStorage.getItem('cc-theme')||'dark';}catch(e){document.documentElement.dataset.theme='dark';}})();</script>
     <title>CC 看板</title>
     <link rel="icon" href="icon-192.png">
     <link rel="stylesheet" href="dashboard.css">
@@ -11,7 +12,8 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Roc-CC">
-    <meta name="theme-color" content="#f2f1ed">
+    <meta name="theme-color" content="#f2f1ed" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#121110" media="(prefers-color-scheme: dark)">
 </head>
 <body>
     <div id="app">
@@ -22,9 +24,12 @@
             </div>
             <div id="fleet-summary" class="fleet-summary" aria-live="polite" hidden></div>
             <span id="board-stale" class="board-stale" aria-live="polite" hidden></span>
-            <form class="topbar-logout-form" method="post" action="/logout">
-                <button class="topbar-logout-btn" type="submit">登出</button>
-            </form>
+            <div class="header-actions">
+                <button class="icon-btn" id="themeToggle" type="button" aria-label="切换主题" aria-pressed="false">☀</button>
+                <form class="topbar-logout-form" method="post" action="/logout">
+                    <button class="topbar-logout-btn" type="submit">登出</button>
+                </form>
+            </div>
         </header>
         <main class="main">
             <h1 class="visually-hidden">CC 看板</h1>
@@ -45,6 +50,7 @@
         </form>
 
     </div>
+    <script src="theme.js"></script>
     <script src="terminal_cleaner.cjs"></script>
     <script src="board_render.cjs"></script>
     <script src="dashboard_render.cjs"></script>
