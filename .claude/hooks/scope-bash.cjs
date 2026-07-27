@@ -11,10 +11,12 @@ const ALLOW = [
   /^git (status|diff|log|show|branch|ls-files|blame|rev-parse|describe)\b/,
   /^(ls|ll|cat|head|tail|less|more|pwd|grep|egrep|fgrep|rg|wc|sort|uniq|cut|tr|file|stat|which|basename|dirname|echo|printf|du|df)\b/,
   /^(mkdir|touch|cp|mv)\b/,
+  // rm 仅限 scripts/ 下 dev 临时测试文件（cjs/js/mjs/ts/tmp/log/out），禁 -r/-rf 递归，防 rm -rf 式破坏
+  /^rm\s+(-[fw]+\s+)?(scripts\/[\w./-]+\.(cjs|js|mjs|ts|tmp|log|out)(\s+|$))+/,
 ];
 
-// 禁止重定向 / 命令替换 / 后台等绕过手段
-const FORBIDDEN = /[<>`]|\$\(/;
+// 禁止写文件重定向 / 命令替换 / 后台等绕过手段；允许 fd 重定向（2>&1, >&2）做只读观察
+const FORBIDDEN = />(?!&)|<|`|\$\(/;
 
 let raw = "";
 process.stdin.on("data", (d) => (raw += d));
@@ -33,12 +35,13 @@ process.stdin.on("end", () => {
     process.exit(2);
   }
   // 按 shell 控制符拆段，每段首词都必须命中白名单（防 npm test && rm -rf 式拼接）
-  const parts = cmd.split(/[;&|]/).map((s) => s.trim()).filter(Boolean);
+  // & 后非数字才拆（后台/&&）；&数字（如 2>&1 的 fd 重定向）不拆，避免误伤只读观察
+  const parts = cmd.split(/[;|]|&(?!\d)/).map((s) => s.trim()).filter(Boolean);
   const pass = parts.length > 0 && parts.every((p) => ALLOW.some((re) => re.test(p)));
   if (pass) process.exit(0);
   process.stderr.write(
     `[scope-bash] 拒绝: ${cmd.slice(0, 100)}\n` +
-      `  允许: npm(test/ci/install/run) / npx / node / git(只读) / 常规读命令 / mkdir,touch,cp,mv\n`
+      `  允许: npm(test/ci/install/run) / npx / node / git(只读) / 常规读命令 / mkdir,touch,cp,mv / rm(仅 scripts/ 临时文件) / 2>&1 fd 重定向(只读观察)\n`
   );
   process.exit(2);
 });
