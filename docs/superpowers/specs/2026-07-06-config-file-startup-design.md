@@ -98,6 +98,22 @@ loader 读文件返回 `cfg`;各字段读取处:`process.env.X !== undefined ? p
 | loginWindowMs | number | CC_WEB_LOGIN_WINDOW_MS | 900000 | >0 |
 | dashboardIntervalMs | number | CC_WEB_DASHBOARD_INTERVAL_MS | 2000 | >0 |
 | wsPingInterval | number | CC_WEB_WS_PING_INTERVAL | 30000 | >0 |
+| hubUrl | string | CC_WEB_HUB_URL | '' | — |
+| hubToken | string | CC_WEB_HUB_TOKEN | '' | — |
+| hubRegisterToken | string | CC_WEB_HUB_REGISTER_TOKEN | '' | — |
+| machineId | string | CC_WEB_MACHINE_ID | '' | — |
+| machineName | string | CC_WEB_MACHINE_NAME | '' | — |
+| publicUrl | string | CC_WEB_PUBLIC_URL | '' | — |
+| anthropic_api_key | string | ANTHROPIC_API_KEY | '' | 鉴权引用:`keychain://...` 或明文;明文→keychain 迁移见 secret_migrate.cjs |
+| providerEndpoint | string | ANTHROPIC_BASE_URL | '' | 供应商 API endpoint;与 providerModel「同时给或同时不给」(见下) |
+| providerModel | string | ANTHROPIC_MODEL | '' | 模型标识;与 providerEndpoint「同时给或同时不给」(见下) |
+
+**模型供应商可切换(provider-agnostic)**:`providerEndpoint` / `providerModel` / `anthropic_api_key` 三字段把供应商
+endpoint / 模型标识 / 鉴权引用外置为配置项,值取自配置(非源码字面量),经 `provider_config.cjs` 的 `providerEnv()`
+转成子进程 env,由 `server.cjs` 的 `claudeSessionEnv()` 合并后经 `tmux new-session -e` 注入 claude。一致性约束:
+`providerEndpoint` 与 `providerModel` **同时给或同时不给**(`provider_config.validateProviderConfig` fail-fast);
+两者皆空 = 默认模式(claude 走自带 endpoint/模型,向后兼容);只给其一 = 启动报错退出,不回退硬编码默认。
+鉴权(`anthropic_api_key`)独立、可选,与 endpoint/model 校验解耦。
 
 bool 约定:文件里 `true`/`false`;env 里 `'1'` = true(对齐现有 `CC_WEB_* === '1'` 口径)。
 
@@ -149,6 +165,7 @@ bool 约定:文件里 `true`/`false`;env 里 `'1'` = true(对齐现有 `CC_WEB_*
 | machinesFile 路径不存在 | 委托 `loadMachines` 报错(config 层不重复校验) |
 | 权限过松(含 token 且 group/other 可读) | warnings(不阻断),启动日志打印建议 `chmod 600` |
 | mainAgent 数值字段 ≤0 / 非法(settleMs 等) | `resolveMainAgentConfig` clamp 到默认值,**不阻断**(见 §5.2) |
+| 供应商配置不一致(providerEndpoint / providerModel 只给其一) | `bootstrap()` 首步 `validateProviderConfig` fail-fast:`console.error` + `process.exit(1)`,**绝不静默回退硬编码供应商默认**(PRD 验收 #5) |
 
 ## 7. 安全
 

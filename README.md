@@ -192,7 +192,7 @@ cc-web-control hub --config /path/to/my-hub-config.json
 
 字段名、类型、默认值的权威清单见仓库根的两份模板（避免本节与 schema 漂移）：
 
-- 单机 21 字段（含 6 个 hub 注册字段 `hubUrl` / `hubToken` / `hubRegisterToken` / `machineId` / `machineName` / `publicUrl`）：[`config.example.json`](./config.example.json)
+- 单机 24 字段（含 6 个 hub 注册字段 `hubUrl` / `hubToken` / `hubRegisterToken` / `machineId` / `machineName` / `publicUrl`，及供应商字段 `providerEndpoint` / `providerModel` / `anthropic_api_key`）：[`config.example.json`](./config.example.json)
 - hub 12 顶层字段（含 `hubRegisterToken`，及 `mainAgent` 子对象）：[`hub-config.example.json`](./hub-config.example.json)
 
 复制模板作起点：
@@ -211,6 +211,24 @@ cp hub-config.example.json ~/.cc-web-control/hub-config.json    # hub
 - **projectRoots**：文件里是 JSON 数组（环境变量则逗号分隔）。
 - **路径字段写绝对路径**：`projectRoots`、`mainAgent.dataDir` 等路径字段在 JSON 里写**绝对路径**，不要写 `~/`。JSON 中 `~` 是字面字符串，loader 不展开 homedir。
 - **mainAgent 数值非法**：`mainAgent.settleMs` 等数值字段若 ≤0 或非数字，hub 启动逻辑会自动 clamp 回默认值，不阻断启动。
+
+### 模型供应商切换（provider-agnostic，不硬编码单家）
+
+cc-web-control 不把模型供应商写死在代码里。三个供应商相关字段外置为配置项，**切换 / 并存多家供应商是「改配置」而非「改代码」**：
+
+| 字段 | env | 含义 |
+|---|---|---|
+| `providerEndpoint` | `ANTHROPIC_BASE_URL` | API endpoint（claude CLI 经此 env 定位供应商） |
+| `providerModel` | `ANTHROPIC_MODEL` | 模型标识（claude CLI 经此 env 选模型） |
+| `anthropic_api_key` | `ANTHROPIC_API_KEY` | 鉴权引用（`keychain://...` 或明文；详见上节 keychain 说明） |
+
+启动时这三个字段的值（取自配置，**非源码字面量**）经 `tmux new-session -e` 注入 claude 子进程。规则与向后兼容：
+
+- **两者皆空（默认）**：`providerEndpoint` 与 `providerModel` 都不配 → claude 走自带 endpoint / 模型（现状行为不变）。
+- **自定义供应商**：同时配 `providerEndpoint` + `providerModel`（+ 可选 `anthropic_api_key`）→ 注入新供应商，例如指向一个兼容网关或自建代理。
+- **只配其一 → 启动报错退出**（fail-fast）：`endpoint` 与 `model` 必须同时给，缺一即以非零退出码报错，**绝不静默回退到任何硬编码默认供应商**。
+
+> 这是 hub 作为聚合控制面的中立性基础：每台单机可各自指向不同供应商，hub 只聚合、不预设单一厂商——避免「模型 + 上下文 + 记忆全绑定单家供应商」的单点依赖。
 
 ### token 安全
 

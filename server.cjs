@@ -32,6 +32,7 @@ const { RegisterClient } = require('./register_client.cjs');
 const { createSecretStore, resolveApiKey, maskSecret } = require('./secret_store.cjs');
 const { migrateConfigKeyToKeychain } = require('./secret_migrate.cjs');
 const { SubprocessAudit } = require('./subprocess_audit.cjs');
+const { validateProviderConfig, providerEnv } = require('./provider_config.cjs');
 
 // 配置文件(~/.cc-web-control/config.json,--config 覆盖)+ env 覆盖(env > file > default)。
 // 无文件 = 纯 env/默认 = 现状行为(向后兼容)。warnings:未知字段 / token 权限过松。
@@ -101,7 +102,12 @@ const INSTANCE_ID = MACHINE_ID || HOSTNAME;
 const secretStore = createSecretStore();
 let CLAUDE_API_KEY = null; // bootstrap() 里解析(空=未配置,claude 走自己的登录)
 function claudeSessionEnv() {
-  return CLAUDE_API_KEY ? { ANTHROPIC_API_KEY: CLAUDE_API_KEY } : undefined;
+  const env = {};
+  if (CLAUDE_API_KEY) env.ANTHROPIC_API_KEY = CLAUDE_API_KEY;
+  // 供应商 endpoint/model 取自配置(provider_config),经 tmux -e 注入 claude 子进程。
+  // 值来自 CFG(配置),非硬编码字面量;空=不注入(claude 走自带 endpoint/模型,向后兼容)。
+  Object.assign(env, providerEnv({ endpoint: CFG.providerEndpoint, model: CFG.providerModel }));
+  return Object.keys(env).length ? env : undefined;
 }
 // spawn 级审计:<state-dir>/audit/cc-subprocess.jsonl,字段/校验见 subprocess_audit.cjs。
 const AUDIT_DIR = path.join(CONFIG_DIR, 'audit');
@@ -911,6 +917,13 @@ function startWebServer() {
 // startClaudeInSession 事前 writeBinding,运行期仍可能产生孤儿(claude 未落 jsonl / 文件名映射破裂);
 // 此处仅在启动时清一次残留,运行期孤儿由 _compute 绑定缺失时降级 mtime 兜底。与 tmux 无关,两种模式都跑。
 async function bootstrap() {
+  // 0) 供应商配置一致性 fail-fast(验收 #5):providerEndpoint / providerModel 必须「同时给或
+  //    同时不给」,只给其一 → 显式报错退出,绝不静默回退到硬编码供应商默认值。在校验通过前不起服务。
+  const providerCheck = validateProviderConfig({ endpoint: CFG.providerEndpoint, model: CFG.providerModel });
+  if (!providerCheck.ok) {
+    console.error(`[config] ${providerCheck.error}`);
+    process.exit(1);
+  }
   // 1) 明文 anthropic_api_key → keychain 迁移(验收 A3);失败绝不回退明文、不阻断启动(验收 A5)
   try {
     const r = await migrateConfigKeyToKeychain({ configPath: CONFIG_FILE, store: secretStore });

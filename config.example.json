@@ -22,5 +22,8 @@
   "machineName": "",
   "publicUrl": "",
 
-  "anthropic_api_key": "keychain://cc-web-control/anthropic-api-key"
+  "anthropic_api_key": "keychain://cc-web-control/anthropic-api-key",
+
+  "providerEndpoint": "",
+  "providerModel": ""
 }

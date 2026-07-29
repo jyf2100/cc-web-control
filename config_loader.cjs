@@ -162,7 +162,7 @@ function loadConfig({ schema, defaultFilePath, argv = process.argv, env = proces
   return { config, warnings, filePath };
 }
 
-// 7684(单机)全字段 schema:env / default / type 对齐 spec §5.1(15 字段)
+// 7684(单机)全字段 schema:env / default / type 对齐 spec §5.1(24 字段)
 const SINGLE_SCHEMA = {
   port:                { type: 'port',    env: 'CC_WEB_PORT',                  default: 7684 },
   host:                { type: 'string',  env: 'CC_WEB_HOST',                  default: '127.0.0.1', nonEmpty: true },
@@ -189,6 +189,13 @@ const SINGLE_SCHEMA = {
   // PRD 验收对 config 文件字面值的 grep 断言;env 沿用标准 ANTHROPIC_API_KEY(env 非落盘,
   // 不违反「零明文落盘」)。明文→keychain 迁移见 secret_migrate.cjs。
   anthropic_api_key:   { type: 'string',  env: 'ANTHROPIC_API_KEY',            default: '' },
+  // 模型供应商可切换(provider-agnostic):endpoint/model 外置为配置项,切换 / 并存多家供应商
+  // 仅需改配置,源码无任何单一供应商硬编码绑定。值经 provider_config.cjs 注入 claude 子进程 env。
+  // 鉴权引用 = 上面的 anthropic_api_key(三个供应商字段:providerEndpoint / providerModel / anthropic_api_key)。
+  // 一致性约束:providerEndpoint 与 providerModel「同时给或同时不给」(provider_config.validateProviderConfig
+  // fail-fast);两者皆空 = 默认模式(claude 走自带 endpoint/模型,向后兼容)。
+  providerEndpoint:    { type: 'string',  env: 'ANTHROPIC_BASE_URL',           default: '' },
+  providerModel:       { type: 'string',  env: 'ANTHROPIC_MODEL',              default: '' },
 };
 
 // 7685(hub)全字段 schema:env / default / type 对齐 spec §5.2(11 字段,mainAgent 为 passthrough 对象)
