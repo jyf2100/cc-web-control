@@ -173,11 +173,13 @@
     var fleetSummary = document.getElementById('fleet-summary');
     var boardStale = document.getElementById('board-stale');
     var cliFilterBar = document.getElementById('cli-filter-bar'); // hub:按 CLI 工具过滤控件
+    var statusFilterBar = document.getElementById('status-filter-bar'); // hub:按结构化状态过滤控件(AC4)
     var pollFailCount = 0;
     var lastPollOkTs = 0;
     var hubModeActive = false;            // Fix 7:visibilitychange 据 hubModeActive 决定是否重启 hubLoop
     var hubPolling = false;
     var activeCliFilter = null;           // 当前 CLI 工具过滤(null/'' = 全部;否则为某枚举值)。跨 2s 重建存活。
+    var activeStatusFilter = null;        // 当前结构化状态过滤(null/'' = 全部;否则为某规范状态 idle/running/awaiting-input/error)。跨 2s 重建存活。
 
     function renderFleetSummary(machines) {
         var msum = BR.summarizeFleet(machines);            // 机器维度 online/total
@@ -351,15 +353,28 @@
         cliFilterBar.innerHTML = html;
         cliFilterBar.hidden = !html;
     }
-    // 应用 activeCliFilter:隐藏不匹配的 .card-row;整组卡片都被隐藏时连机组一起隐藏。
+    // ---- hub:按结构化状态过滤(AC4:≥2 种规范状态时显示 chip 行;点 chip 仅显示对应状态会话)----
+    function renderStatusFilterBar(machines) {
+        if (!statusFilterBar) return;
+        var html = BR.renderStatusFilter(machines, activeStatusFilter);
+        statusFilterBar.innerHTML = html;
+        statusFilterBar.hidden = !html;
+    }
+    // 应用全部卡片过滤(CLI 工具 + 结构化状态 取交集):隐藏不匹配的 .card-row;整组卡片都被隐藏时连机组一起隐藏。
+    // 单一函数同时处理两个维度,避免两个独立 setDisplay 互相覆盖(否则后执行的过滤会撤销先执行的)。
     // 全量重建(renderBoard)后调用,确保过滤态在 2s 轮询刷新后仍然成立。
-    function applyCliFilter() {
+    function applyCardFilters() {
         if (!boardBody) return;
-        var any = activeCliFilter != null && activeCliFilter !== '';
+        var cliAny = activeCliFilter != null && activeCliFilter !== '';
+        var stAny = activeStatusFilter != null && activeStatusFilter !== '';
+        var any = cliAny || stAny;
         var rows = boardBody.querySelectorAll('.card-row');
         Array.prototype.forEach.call(rows, function (row) {
-            var t = row.getAttribute('data-cli-tool') || 'unknown';
-            row.style.display = (any && t !== activeCliFilter) ? 'none' : '';
+            var cli = row.getAttribute('data-cli-tool') || 'unknown';
+            var st = row.getAttribute('data-state') || 'idle';
+            var cliOk = !cliAny || cli === activeCliFilter;
+            var stOk = !stAny || st === activeStatusFilter;
+            row.style.display = (any && !(cliOk && stOk)) ? 'none' : '';
         });
         // 整组(机组 / 陈旧组)无可见卡片 → 连组一起隐藏,避免空标题占位
         var groups = boardBody.querySelectorAll('.machine-group, .board-stale-group');
@@ -383,7 +398,22 @@
                 c.classList.toggle('cli-filter__chip--active', on);
                 c.setAttribute('aria-pressed', on ? 'true' : 'false');
             });
-            applyCliFilter();
+            applyCardFilters();
+        });
+    }
+    if (statusFilterBar) {
+        statusFilterBar.addEventListener('click', function (e) {
+            var chip = e.target.closest ? e.target.closest('[data-status-filter]') : null;
+            if (!chip) return;
+            var v = chip.getAttribute('data-status-filter');
+            activeStatusFilter = (v === '' || v == null) ? null : v;
+            Array.prototype.forEach.call(statusFilterBar.querySelectorAll('.cli-filter__chip'), function (c) {
+                var cv = c.getAttribute('data-status-filter');
+                var on = (activeStatusFilter == null && cv === '') || cv === activeStatusFilter;
+                c.classList.toggle('cli-filter__chip--active', on);
+                c.setAttribute('aria-pressed', on ? 'true' : 'false');
+            });
+            applyCardFilters();
         });
     }
     function renderBoard(payload) {
@@ -397,6 +427,7 @@
             boardBody.innerHTML = '<li class="board-empty"><span class="eyebrow">NO MACHINES</span> 尚无机器注册到 hub</li>';
             renderFleetSummary(machines);
             renderCliFilterBar([]);
+            renderStatusFilterBar([]);
             return;
         }
         if (!sorted.length) {
@@ -404,6 +435,7 @@
             boardBody.innerHTML = '<li class="board-empty"><span class="eyebrow">NO SESSIONS</span> 暂无运行中的会话。请在某台被控机上启动 cc-web-control 进程。</li>';
             renderFleetSummary(machines);
             renderCliFilterBar([]);
+            renderStatusFilterBar([]);
             return;
         }
         // 全量重建:每次轮询无条件清空 boardBody.innerHTML。
@@ -452,7 +484,8 @@
         reapplySelected();           // Task 4:重建后重标选中卡片
         renderFleetSummary(machines);
         renderCliFilterBar(machines); // hub:按 CLI 工具过滤 chip 行(≥2 种工具才显示)
-        applyCliFilter();            // 重建后恢复过滤态(隐藏不匹配卡片 + 空组)
+        renderStatusFilterBar(machines); // hub:按结构化状态过滤 chip 行(AC4,≥2 种状态才显示)
+        applyCardFilters();            // 重建后恢复过滤态(CLI + 状态 取交集,隐藏不匹配卡片 + 空组)
     }
     // Fix 6:hub 降级(5xx/格式异常)时把错误消息显式呈现到看板区,替代静默回退单机
     function showBoardError(msg) {

@@ -11,7 +11,7 @@ const auth = require('../auth.cjs');
 const { existsSync } = require('node:fs');
 const { loadMachines } = require('./config.cjs');
 const { MachineRegistry } = require('./registry.cjs');
-const { querySessions, CLI_TOOLS } = require('./sessions_query.cjs');
+const { querySessions, CLI_TOOLS, SESSION_STATES, findSessionStatus, InvalidStatusError } = require('./sessions_query.cjs');
 const { AgentRegistrar } = require('./register_server.cjs');
 const { DashboardAggregator } = require('./dashboard_aggregator.cjs');
 const { AutonomyStore } = require('./autonomy_store.cjs');
@@ -413,21 +413,35 @@ function startHub(opts) {
     res.json({ ok });
   });
 
-  // 多 CLI 工具会话查询(聚合 latest):
-  //  GET /api/sessions                      → 全部会话(每条带 cli_tool/machine/machineName)
+  // 多 CLI 工具会话查询 + 结构化状态机查询(聚合 latest):
+  //  GET /api/sessions                      → 全部会话(每条带 cli_tool/machine/machineName/state/changed_at)
   //  GET /api/sessions?group_by=cli_tool    → { groups: {每个枚举:count}, total }
+  //  GET /api/sessions?group_by=status      → { groups: {state→count}, total }(结构化状态计数,AC4)
   //  GET /api/sessions?cli_tool=<enum>      → 过滤后 { sessions: [...] };非法枚举 → 400
+  //  GET /api/sessions?status=<enum>        → 按规范状态过滤(idle/running/awaiting-input/error);非法 → 400
   //  GET /api/sessions/:machine             → 该机 { machine, machineName, cli_tool, online, sessions }
   app.get('/api/sessions', (req, res) => {
     const groupBy = req.query.group_by ? String(req.query.group_by) : '';
     const cliTool = req.query.cli_tool != null ? String(req.query.cli_tool) : '';
+    const status = req.query.status != null ? String(req.query.status) : '';
     try {
-      const result = querySessions(aggregator.getLatest(), { groupBy, cliTool });
+      const result = querySessions(aggregator.getLatest(), { groupBy, cliTool, status });
       res.json(result);
     } catch (e) {
-      // 非法 cli_tool 枚举值:400 + 合法枚举清单(供调用方提示)
-      res.status(400).json({ error: e.message, allowed: e.allowed || CLI_TOOLS });
+      // 非法枚举值(cli_tool / status):400 + 合法枚举清单(供调用方提示)
+      const allowed = e.code === 'INVALID_STATUS' ? SESSION_STATES : (e.allowed || CLI_TOOLS);
+      res.status(400).json({ error: e.message, allowed });
     }
+  });
+
+  // 结构化状态查询(AC5):取某节点某会话的当前结构化状态。
+  //   GET /api/sessions/:machine/:session/status → { node_id, session, status, changed_at }
+  //   status 恒为 4 枚举之一(AC1);会话不存在 → 404;机器未知 → 404。
+  //   不依赖 tmux 文本:status 来自单机 jsonl 推断经聚合透传(AC5)。
+  app.get('/api/sessions/:machine/:session/status', (req, res) => {
+    const r = findSessionStatus(aggregator.getLatest(), req.params.machine, req.params.session);
+    if (!r) { res.status(404).json({ error: 'session not found' }); return; }
+    res.json(r);
   });
 
   app.get('/api/sessions/:machine', (req, res) => {

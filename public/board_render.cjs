@@ -39,6 +39,67 @@
     return meta || CLI_TOOL_META['unknown'];
   }
 
+  // —— 结构化会话状态机(PRD:hub 暴露 Claude Code 会话结构化状态机)——
+  // 规范 4 态(与后端 session_status.cjs 同源,浏览器侧独立持有,不 require 后端):
+  //   idle / running / awaiting-input / error。
+  // 把单机上报的推断 status(working/waiting/...)或已暴露的规范 state 归一为 4 枚举之一。
+  // stateMeta:dot 复用既有 s-dot--<raw> 色令牌(running→working 色、awaiting-input→waiting 色…),
+  // 避免新增 CSS;label/cn 供过滤 chip 与 sr-only 用。
+  var SESSION_STATES = ['idle', 'running', 'awaiting-input', 'error'];
+  var STATUS_TO_STATE = {
+    working: 'running', waiting: 'awaiting-input', errored: 'error', idle: 'idle', unknown: 'idle',
+  };
+  var STATE_META = {
+    'running':        { dot: 's-dot--working', label: 'running',        cn: '运行中' },
+    'awaiting-input': { dot: 's-dot--waiting', label: 'awaiting-input', cn: '等待输入' },
+    'error':          { dot: 's-dot--errored', label: 'error',          cn: '出错' },
+    'idle':           { dot: 's-dot--idle',    label: 'idle',           cn: '空闲' },
+  };
+  function normalizeState(v) {
+    if (v && STATUS_TO_STATE[v]) return STATUS_TO_STATE[v];
+    if (SESSION_STATES.indexOf(v) >= 0) return v;
+    return 'idle'; // AC1:未知/缺失 → idle(绝不 null/undefined)
+  }
+  function stateMeta(state) {
+    var s = normalizeState(state);
+    return STATE_META[s] || STATE_META['idle'];
+  }
+
+  // 收集 machines 中出现的规范状态(去重,按 SESSION_STATES 序;仅实际出现的)。
+  // 离线机会话在 flattenFleet 已被标 'offline',此处不计入 4 态(离线机不可调度,过滤无意义)。
+  function collectStates(machines) {
+    var present = new Set();
+    for (var i = 0; i < (machines || []).length; i++) {
+      var m = machines[i];
+      if (!m || m.online === false) continue;
+      var sessions = (m && m.sessions) || [];
+      for (var j = 0; j < sessions.length; j++) {
+        var s = sessions[j] || {};
+        // 优先取上游 state;缺失由 status 归一(防御老节点)
+        present.add(normalizeState(s.state != null ? s.state : s.status));
+      }
+    }
+    return SESSION_STATES.filter(function (k) { return present.has(k); });
+  }
+
+  // 「按状态过滤」控件 HTML:≥2 种状态才渲染(单状态无可区分性,省 UI)。
+  // active:null/'' = 全部;否则为某规范状态。每 chip 复用 cli-filter__chip 样式(通用 chip),
+  // 内嵌 s-dot(色令牌驱动)+ 中文 label;data-status-filter="" (全部) 或 = 规范状态。
+  function renderStatusFilter(machines, active) {
+    var states = collectStates(machines);
+    if (states.length <= 1) return '';
+    var allOn = active == null || active === '';
+    var parts = [];
+    parts.push('<button type="button" class="cli-filter__chip' + (allOn ? ' cli-filter__chip--active' : '') + '" data-status-filter="" aria-pressed="' + allOn + '"><span class="cli-filter__name">全部</span></button>');
+    for (var i = 0; i < states.length; i++) {
+      var st = states[i];
+      var meta = STATE_META[st];
+      var on = active === st;
+      parts.push('<button type="button" class="cli-filter__chip' + (on ? ' cli-filter__chip--active' : '') + '" data-status-filter="' + escapeHtml(st) + '" aria-pressed="' + on + '"><span class="s-dot ' + meta.dot + '" aria-hidden="true"></span><span class="cli-filter__name">' + escapeHtml(meta.cn) + '</span></button>');
+    }
+    return parts.join('');
+  }
+
   // 工具徽标 HTML:<span class="cli-badge cli-badge--<cls>" data-cli-tool="<cls>" title="<label>">short</span>
   // 文本 + 背景色(背景色由 dashboard.css 的 .cli-badge--<cls> → var(--cli-<cls>) 令牌驱动,非魔法色值)。
   function buildCliBadge(tool) {
@@ -207,10 +268,11 @@
     const sessRaw = String(s.name != null ? s.name : '');
     const key = `${midRaw}/${sessRaw}`;
     const st = escapeHtml(String(s.status || 'unknown'));
+    const stateCls = escapeHtml(normalizeState(s.state != null ? s.state : s.status)); // 规范状态(供过滤)
     const cliCls = escapeHtml(cliToolMeta(s.cli_tool || m.cli_tool).cls);
     const grpLabel = escapeHtml(`${m.name || m.id} / ${s.name}`);
     const togLabel = escapeHtml(`选择 ${m.name || m.id} / ${s.name}`);
-    return `<li class="card-row" data-machine="${escapeHtml(midRaw)}" data-session="${escapeHtml(sessRaw)}" data-status="${st}" data-key="${escapeHtml(key)}" data-cli-tool="${cliCls}" role="group" aria-label="${grpLabel}">` +
+    return `<li class="card-row" data-machine="${escapeHtml(midRaw)}" data-session="${escapeHtml(sessRaw)}" data-status="${st}" data-state="${stateCls}" data-key="${escapeHtml(key)}" data-cli-tool="${cliCls}" role="group" aria-label="${grpLabel}">` +
       `<button class="card__select" type="button" data-toggle="select" aria-pressed="false" aria-label="${togLabel}">☐</button>` +
       buildCardInner(machine, session, opts) +
       `</li>`;
@@ -229,10 +291,13 @@
       const online = m && m.online !== false;
       for (const s of (m && m.sessions) || []) {
         const status = online ? (s.status || 'unknown') : 'offline';
+        // 规范状态:在线会话由上游 state(优先)/status 归一;离线机 → 不参与状态过滤(留空)
+        const state = online ? normalizeState(s.state != null ? s.state : s.status) : '';
         out.push({
           machine: m,
-          session: { name: s.name, status, lastLine: s.lastLine || '', cwd: s.cwd || '' },
+          session: { name: s.name, status, state, lastLine: s.lastLine || '', cwd: s.cwd || '' },
           status,
+          state,
           key: `${m.id}/${s.name}`,
           name: m.name || m.id,
           lastTs: s.lastTs || 0,
@@ -341,5 +406,5 @@
     return parts.join('');
   }
 
-  return { statusMeta, escapeHtml, relativeTime, windowNameFor, buildCardHTML, buildCardRow, buildCardInner, flattenFleet, sortCardsByRelevance, summarizeFleet, summarizeMachine, renderStatusCounts, isStale, partitionStale, groupByMachine, cliToolMeta, buildCliBadge, collectCliTools, renderCliFilter, CLI_TOOL_META, CLI_TOOL_ORDER };
+  return { statusMeta, escapeHtml, relativeTime, windowNameFor, buildCardHTML, buildCardRow, buildCardInner, flattenFleet, sortCardsByRelevance, summarizeFleet, summarizeMachine, renderStatusCounts, isStale, partitionStale, groupByMachine, cliToolMeta, buildCliBadge, collectCliTools, renderCliFilter, CLI_TOOL_META, CLI_TOOL_ORDER, normalizeState, stateMeta, collectStates, renderStatusFilter, SESSION_STATES };
 });

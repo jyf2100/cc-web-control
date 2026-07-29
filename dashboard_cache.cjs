@@ -13,6 +13,7 @@ const path = require('path');
 const { readTailEvents } = require('./dashboard_tail.cjs');
 const { resolveProjectDir, listProjectJsonls } = require('./dashboard_slug.cjs');
 const { parseStatus } = require('./dashboard_parse.cjs');
+const { normalizeState, StateTracker } = require('./session_status.cjs');
 
 const DEFAULT_INTERVAL_MS = 2000;
 const IDLE_THRESHOLD_S = 30;
@@ -39,7 +40,11 @@ class DashboardCache {
     this.intervalMs = opts.intervalMs || DEFAULT_INTERVAL_MS;
     this.idleThresholdS = opts.idleThresholdS != null ? opts.idleThresholdS : IDLE_THRESHOLD_S;
     this.projectsDir = opts.projectsDir; // undefined → slug 用默认 ~/.claude/projects
-    this.snapshots = new Map(); // sessionName → { status, lastLine, lastTs, cachedAt }
+    this._now = opts.nowFn || Date.now; // 注入确定性时钟(测试)
+    // 结构化会话状态机(PRD):跟踪每会话规范状态(idle/running/awaiting-input/error)
+    // + 最近变更时间 changedAt。状态从 jsonl 推断结果归一,与 tmux 文本无关(AC5)。
+    this._stateTracker = opts.stateTracker || new StateTracker({ nowFn: this._now });
+    this.snapshots = new Map(); // sessionName → { status, state, lastLine, lastTs, cachedAt, changedAt }
     this.sessions = [];
     this.timer = null;
   }
@@ -64,18 +69,28 @@ class DashboardCache {
   }
 
   refresh() {
-    const nowMs = Date.now();
+    const nowMs = this._now();
+    const names = [];
     for (const s of this.sessions) {
-      this.snapshots.set(s.name, this._compute(s, nowMs));
+      if (!s || !s.name) continue;
+      const snap = this._compute(s, nowMs);
+      // 结构化状态机:把 jsonl 推断 status 归一为规范 state,跟踪 changedAt(AC1/AC5)。
+      // 每个会话(含 unknown)都 observe → changedAt 恒为有效数字(AC1:绝不 null)。
+      const { changedAt } = this._stateTracker.observe(s.name, snap.status, nowMs);
+      snap.changedAt = changedAt;
+      this.snapshots.set(s.name, snap);
+      names.push(s.name);
     }
-    const names = new Set(this.sessions.map((s) => s.name));
+    const keep = new Set(names);
     for (const key of [...this.snapshots.keys()]) {
-      if (!names.has(key)) this.snapshots.delete(key);
+      if (!keep.has(key)) this.snapshots.delete(key);
     }
+    // 同步清理已消失会话的状态跟踪记录(防内存泄漏 + 复活误判)
+    this._stateTracker.retain(names);
   }
 
   _compute(session, nowMs) {
-    const unknown = { status: 'unknown', lastLine: '', lastTs: null, cachedAt: nowMs };
+    const unknown = { status: 'unknown', state: 'idle', lastLine: '', lastTs: null, cachedAt: nowMs };
     try {
       const dir = this.projectsDir
         ? resolveProjectDir(session.cwd, this.projectsDir)
@@ -113,7 +128,7 @@ class DashboardCache {
         if (!latest) return unknown;
       }
       const parsed = parseStatus(readTailEvents(latest), nowMs, this.idleThresholdS);
-      return { ...parsed, cachedAt: nowMs };
+      return { ...parsed, state: normalizeState(parsed.status), cachedAt: nowMs };
     } catch {
       return unknown;
     }
@@ -134,6 +149,9 @@ function getDashboardCache(opts) {
 // autonomyBySession(可选,第 4 参):{name → {commit,rollback,interventions}} —— 单机 autonomy 指标。
 //   提供时给每个 session 挂 autonomy 字段(供 hub 聚合);不提供(undefined)→ 完全向后兼容,
 //   payload 形状与无该参数时一致(既有调用方/测试不受影响)。
+// 结构化状态机(PRD):每条 session 额外暴露规范 state(idle/running/awaiting-input/error)
+//   + changed_at(最近变更 ms)。state 由 jsonl 推断 status 归一,不依赖 tmux 文本(AC1/AC5)。
+//   normalizeState 已在文件顶部从 ./session_status.cjs 引入。
 function buildDashboardPayload(sessions, snapshots, tmuxOk, autonomyBySession) {
   const snapMap = new Map((snapshots || []).map((s) => [s.name, s]));
   const hasAuto = autonomyBySession && typeof autonomyBySession === 'object';
@@ -145,6 +163,9 @@ function buildDashboardPayload(sessions, snapshots, tmuxOk, autonomyBySession) {
         name: s.name,
         cwd: s.cwd || null,
         status: snap.status,
+        // 规范状态:即便 snapshot 缺失也归一为 idle(AC1:绝不 null/undefined)
+        state: normalizeState(snap.state != null ? snap.state : snap.status),
+        changed_at: typeof snap.changedAt === 'number' ? snap.changedAt : (snap.cachedAt || 0),
         lastLine: snap.lastLine,
         lastTs: snap.lastTs,
         attached: !!s.attached,

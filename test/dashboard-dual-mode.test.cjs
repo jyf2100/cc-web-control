@@ -92,10 +92,11 @@ test('dashboard.html:hub 模式含 #cli-filter-bar 挂点(默认 hidden)', () =>
 });
 
 test('dashboard.js:cli 过滤状态 + 渲染 + 应用三件齐全', () => {
-  // activeCliFilter 状态(renderBoard 后保留过滤态)+ renderCliFilterBar + applyCliFilter
+  // activeCliFilter 状态(renderBoard 后保留过滤态)+ renderCliFilterBar + applyCardFilters
+  // (applyCliFilter 已与状态过滤合并为 applyCardFilters:两维度取交集,避免互相覆盖)
   assert.match(js, /activeCliFilter/);
   assert.match(js, /renderCliFilterBar/);
-  assert.match(js, /applyCliFilter/);
+  assert.match(js, /applyCardFilters/);
   assert.match(js, /BR\.renderCliFilter/);
 });
 
@@ -106,10 +107,33 @@ test('dashboard.js:cli 过滤按 data-cli-tool 隐藏不匹配卡片 + 空组连
 
 test('dashboard.js:renderBoard 末尾渲染过滤 chip 行 + 应用过滤', () => {
   assert.match(js, /renderCliFilterBar\(machines\)/);
-  assert.match(js, /applyCliFilter\(\)/);
+  assert.match(js, /applyCardFilters\(\)/);
 });
 
 test('dashboard.js:filter chip 点击 → 更新 activeCliFilter + 重应用(全部=清空)', () => {
   assert.match(js, /cli-filter-bar[^]*data-cli-filter/);
   assert.match(js, /activeCliFilter\s*=\s*\(v\s*===\s*''\s*\|\|\s*v\s*==\s*null\)\s*\?\s*null\s*:\s*v/);
+});
+
+// ---- 结构化状态过滤(AC4:看板按会话状态过滤)----
+test('dashboard.html:hub 模式含 #status-filter-bar 挂点(默认 hidden)', () => {
+  assert.match(html, /id="status-filter-bar"/);
+  assert.match(html, /id="status-filter-bar"[^>]*class="cli-filter-bar"/);
+});
+
+test('dashboard.js:状态过滤状态 + 渲染 + 应用三件齐全', () => {
+  assert.match(js, /activeStatusFilter/);
+  assert.match(js, /renderStatusFilterBar/);
+  assert.match(js, /BR\.renderStatusFilter/);
+  // applyCardFilters 同时处理 cli 与状态(data-state 维度)
+  assert.match(js, /data-state/);
+});
+
+test('dashboard.js:renderBoard 末尾渲染状态过滤 chip 行', () => {
+  assert.match(js, /renderStatusFilterBar\(machines\)/);
+});
+
+test('dashboard.js:状态 filter chip 点击 → 更新 activeStatusFilter', () => {
+  assert.match(js, /status-filter-bar[^]*data-status-filter/);
+  assert.match(js, /activeStatusFilter\s*=\s*\(v\s*===\s*''\s*\|\|\s*v\s*==\s*null\)\s*\?\s*null\s*:\s*v/);
 });
