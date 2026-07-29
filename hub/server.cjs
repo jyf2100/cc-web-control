@@ -28,6 +28,13 @@ const { AuditLog } = require('./audit_log.cjs');
 const rootTmux = require('../tmux.cjs');
 const { writeMainAgentFiles } = require('./main_agent_config.cjs');
 const { AgentStateStore } = require('./agent_state_store.cjs');
+const {
+  broadcastCommand,
+  interveneCommand,
+  resolveBroadcastTargets,
+  BROADCAST_MAX_TARGETS,
+} = require('./broadcast.cjs');
+const { DeliveryStore } = require('./delivery_store.cjs');
 
 function startHub(opts) {
   const {
@@ -114,6 +121,16 @@ function startHub(opts) {
       return r.ok ? { ok: true, entries: r.entries } : { ok: false, error: r.error };
     },
   });
+
+  // 广播 / 介入投递结果存储(内存环形缓冲,供 GET /api/delivery-results 查询)
+  const deliveryStore = new DeliveryStore({ maxEntries: 100 });
+
+  // 广播 / 介入 getClient 适配器:从 clients Map 取 AgentClient,包成 { sendOneShot } 形状
+  const getBroadcastClient = (mid) => {
+    const ac = clients.get(mid);
+    if (!ac) return null;
+    return { sendOneShot: (session, msg) => ac.sendOneShot(session, msg) };
+  };
 
   const app = express();
   app.use(express.json());
@@ -465,6 +482,77 @@ function startHub(opts) {
     }
     const r = await ac.deleteSession(req.params.name);
     res.status(r.status).json({ ok: r.ok });
+  });
+
+  // —— 跨设备广播 + 细粒度介入(双向控制面)——
+
+  // POST /api/broadcast:向所有/选定在线节点并行投递一条 prompt 或 shell 命令。
+  //   body: { data: string, enter?: boolean, targets?: [{machine, session}], machines?: [id] }
+  //   targets 显式指定时优先;否则从 registry + dashboard 自动解析(含离线机占位,不静默跳过)。
+  //   → 200 { ok, results: [{machine, session, status, ok, error?}], summary }
+  //   离线节点 → status:'offline';投递失败(如会话不存在)→ status:'failed' + error。
+  app.post('/api/broadcast', async (req, res) => {
+    if (!requireSameOriginForUnsafeMethods(req, res)) return;
+    const { data, enter, targets, machines } = req.body || {};
+    if (typeof data !== 'string' || !data.trim()) {
+      res.status(400).json({ error: 'data must be a non-empty string' });
+      return;
+    }
+    const resolved = resolveBroadcastTargets({
+      targets, machines,
+      latestDashboard: aggregator.getLatest(),
+      registrySnapshot: registry.snapshot(),
+    });
+    if (resolved.length === 0) {
+      res.status(400).json({ error: 'no targets resolved (no registered machines or sessions)' });
+      return;
+    }
+    if (resolved.length > BROADCAST_MAX_TARGETS) {
+      res.status(400).json({ error: `too many targets (max ${BROADCAST_MAX_TARGETS})` });
+      return;
+    }
+    const result = await broadcastCommand({
+      targets: resolved,
+      data,
+      enter: enter !== false,
+      getClient: getBroadcastClient,
+      getLatest: () => aggregator.getLatest(),
+    });
+    deliveryStore.record({ kind: 'broadcast', data, results: result.results, summary: result.summary });
+    res.json({ ok: true, results: result.results, summary: result.summary });
+  });
+
+  // POST /api/intervene:对单个在线节点注入一条单行编辑/修正指令到其 tmux 会话。
+  //   body: { machine: string, session: string, data: string, enter?: boolean }
+  //   data 禁止换行(防 tmux send-keys 命令分隔注入)。
+  //   → 200 { ok, result: {machine, session, status, ok, error?}, summary }
+  //   校验失败(缺字段/换行)→ 400;投递失败 → 200 + status:'failed'(结构化,非吞异常)。
+  app.post('/api/intervene', async (req, res) => {
+    if (!requireSameOriginForUnsafeMethods(req, res)) return;
+    const { machine, session, data, enter } = req.body || {};
+    const r = await interveneCommand({
+      machine, session, data,
+      enter: enter !== false,
+      getClient: getBroadcastClient,
+      getLatest: () => aggregator.getLatest(),
+    });
+    if (!r.ok && r.code === 'bad_request') {
+      res.status(400).json({ ok: false, error: r.error });
+      return;
+    }
+    deliveryStore.record({
+      kind: 'intervene', data,
+      results: [r.result], summary: r.summary,
+    });
+    res.json({ ok: r.ok, result: r.result, summary: r.summary });
+  });
+
+  // GET /api/delivery-results:最近广播 / 介入投递记录(环形缓冲,默认 50 条)。
+  //   ?limit=N(上限 200)。每条含 kind/data/ts/results/summary。
+  //   供看板聚合区展示投递结果(成功/失败/超时/离线)。
+  app.get('/api/delivery-results', (req, res) => {
+    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+    res.json({ results: deliveryStore.recent(limit) });
   });
 
   const ma = mainAgent;
