@@ -493,3 +493,64 @@ html, body {
     .autonomy-panel { background: var(--surface, rgba(255,255,255,0.03)); }
     .autonomy-window__btn[aria-pressed="true"] { background: var(--surface-raised, rgba(255,255,255,0.12)); }
 }
+
+/* —— 配置健康分区(hub 模式:CLAUDE.md/Skills 规模 + /doctor 触发;对齐 autonomy-panel 视觉)—— */
+.config-health-panel {
+    margin: 16px 0 0;
+    padding: 14px 16px;
+    border: 1px solid var(--border, rgba(0, 0, 0, 0.1));
+    border-radius: 10px;
+    background: var(--surface, rgba(0, 0, 0, 0.02));
+}
+.config-health-panel[hidden] { display: none; }
+.config-health-panel__head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap; margin-bottom: 10px;
+}
+.config-health-panel__title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.config-health-panel__name { font-weight: 600; font-size: 14px; }
+.config-health-panel__hint { font-size: 12px; opacity: 0.62; }
+.config-health-body { min-height: 24px; }
+.config-health-empty {
+    padding: 14px; text-align: center; font-size: 13px; opacity: 0.6;
+    border: 1px dashed var(--border, rgba(0,0,0,0.12)); border-radius: 8px;
+}
+.config-health-empty .eyebrow { display: inline-block; margin-right: 6px; font-size: 11px; letter-spacing: 0.08em; opacity: 0.8; }
+.config-health-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.config-health-table th, .config-health-table td {
+    text-align: left; padding: 7px 10px;
+    border-bottom: 1px solid var(--border, rgba(0,0,0,0.06));
+}
+.config-health-table th { font-size: 11px; font-weight: 600; opacity: 0.6; text-transform: uppercase; letter-spacing: 0.04em; }
+.config-health-table td { font-variant-numeric: tabular-nums; }
+.ch-row__name { font-weight: 500; }
+.ch-row__lines { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ch-lines { font-variant-numeric: tabular-nums; }
+.ch-lines--ok { color: var(--working, #2e7d32); font-weight: 600; }
+.ch-lines--warn { color: var(--waiting, #b26a00); font-weight: 600; }
+.ch-lines--over { color: var(--errored, #e5484d); font-weight: 600; }
+.ch-lines--unreadable { color: var(--errored, #e5484d); font-style: italic; }
+.ch-lines--empty, .ch-lines--unreported { opacity: 0.5; }
+/* 告警标记徽标(AC2:warn/over 才渲染,ok 无) */
+.ch-badge {
+    display: inline-block; padding: 1px 7px; border-radius: 4px;
+    font-size: 10px; font-weight: 600; letter-spacing: 0.04em;
+    color: #fff;
+}
+.ch-badge--warn { background: var(--waiting, #b26a00); }
+.ch-badge--over { background: var(--errored, #e5484d); }
+.ch-doctor {
+    border: 1px solid var(--border, rgba(0,0,0,0.15)); background: var(--surface-raised, transparent);
+    color: inherit; padding: 4px 10px; font-size: 12px; border-radius: 6px; cursor: pointer;
+    white-space: nowrap;
+}
+.ch-doctor:hover:not(:disabled) { border-color: var(--accent-2, #5a8); }
+.ch-doctor:disabled { opacity: 0.55; cursor: default; }
+@media (max-width: 540px) {
+    .config-health-panel__head { align-items: flex-start; }
+    .config-health-table th, .config-health-table td { padding: 6px 6px; }
+}
+@media (prefers-color-scheme: dark) {
+    .config-health-panel { background: var(--surface, rgba(255,255,255,0.03)); }
+}
+

@@ -453,6 +453,7 @@
         renderFleetSummary(machines);
         renderCliFilterBar(machines); // hub:按 CLI 工具过滤 chip 行(≥2 种工具才显示)
         applyCliFilter();            // 重建后恢复过滤态(隐藏不匹配卡片 + 空组)
+        renderConfigHealth(machines); // hub:配置健康分区(每机一行,piggyback 同一 2s 轮询)
     }
     // Fix 6:hub 降级(5xx/格式异常)时把错误消息显式呈现到看板区,替代静默回退单机
     function showBoardError(msg) {
@@ -502,6 +503,9 @@
     // ---- hub 模式:受监督自主运行指标面板(commit / rollback / 人工干预)----
     var autonomyPanel = document.getElementById('autonomy-panel');
     var autonomyBody = document.getElementById('autonomy-body');
+    // ---- hub 模式:配置健康分区(CLAUDE.md/Skills 规模 + /doctor 触发)----
+    var configHealthPanel = document.getElementById('config-health-panel');
+    var configHealthBody = document.getElementById('config-health-body');
     var autonomyWindow = '24h';                 // 当前窗口(1h/24h/7d)
     var autonomyVisible = false;                // 是否已探测到 hub 提供 /api/autonomy
     function esc(s) {
@@ -567,6 +571,43 @@
         });
     }
 
+    // ---- hub 模式:配置健康分区渲染 + /doctor 触发 ----
+    // 渲染:每机一行(machine.configHealth,缺失 → unreported)。hub 轮询 payload 已携带,无需额外请求(AC1/AC5)。
+    function renderConfigHealth(machines) {
+        if (!configHealthBody) return;
+        configHealthBody.innerHTML = BR.renderConfigHealthSection(machines || []);
+    }
+    // /doctor 触发:事件委托 [data-act="doctor"] → POST /api/config-health/:machine/doctor
+    //   经现有 Web→tmux 通道送达,服务端 per-target 去重(AC7 exactly-once)。结果写 aria-live toast。
+    if (configHealthBody) {
+        configHealthBody.addEventListener('click', function (e) {
+            var btn = e.target.closest ? e.target.closest('[data-act="doctor"]') : null;
+            if (!btn) return;
+            e.preventDefault();
+            var machine = btn.getAttribute('data-machine');
+            if (!machine) return;
+            btn.disabled = true;
+            var prev = btn.textContent;
+            btn.textContent = '发送中…';
+            fetch('/api/config-health/' + encodeURIComponent(machine) + '/doctor', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Origin: location.origin },
+                body: '{}',
+            }).then(function (res) { return res.json().then(function (b) { return { status: res.status, body: b }; }); })
+              .then(function (r) {
+                  if (r.status >= 400) {
+                      toast('/doctor 触发失败:' + ((r.body && r.body.error) || r.status));
+                  } else if (r.body && r.body.deduped) {
+                      toast('/doctor 已在发送(去重)');
+                  } else {
+                      toast('/doctor 已触发 → ' + machine + (r.body && r.body.session ? ' / ' + r.body.session : ''));
+                  }
+              })
+              .catch(function () { toast('/doctor 触发失败:网络错误'); })
+              .finally(function () { btn.disabled = false; btn.textContent = prev; });
+        });
+    }
+
     async function detectMode() {
         var probe;
         try {
@@ -590,6 +631,7 @@
         hubPolling = true;
         renderBoard(data);
         if (autonomyPanel) autonomyPanel.hidden = false;   // 揭示自主指标面板(hub 模式);pollAutonomy 首帧填充
+        if (configHealthPanel) configHealthPanel.hidden = false; // 揭示配置健康分区(hub 模式);renderBoard 已首帧填充
         pollAutonomy();
         hubLoop();
     }

@@ -2,13 +2,15 @@
 
 // 纯函数:合并各机抓取结果。每个结果: { machine:{id,name,cli_tool}, online, payload?, error? }
 // cli_tool 透传到 machine 记录 + 打到每条 session(供 UI 徽标/过滤、API 分类查询)。
+// payload.configHealth(可选):单机上报的 CLAUDE.md/Skills 规模指标 → 透传到 machine(供「配置健康」分区)。
+//   离线机 / 无上报 → 不挂该字段(向后兼容:既有的无 configHealth 调用方不受影响)。
 function mergeDashboards(results) {
   const machines = (results || []).map((r) => {
     const cliTool = (r.machine && r.machine.cli_tool) || 'unknown';
     const sessions = (r.online && r.payload && Array.isArray(r.payload.sessions))
       ? r.payload.sessions.map((s) => ({ ...s, machine: r.machine.id, cli_tool: cliTool }))
       : [];
-    return {
+    const m = {
       id: r.machine.id,
       name: r.machine.name,
       cli_tool: cliTool,
@@ -16,6 +18,10 @@ function mergeDashboards(results) {
       sessions,
       lastError: r.online ? null : (r.error || 'offline'),
     };
+    if (r.online && r.payload && r.payload.configHealth && typeof r.payload.configHealth === 'object') {
+      m.configHealth = r.payload.configHealth;
+    }
+    return m;
   });
   return { machines };
 }

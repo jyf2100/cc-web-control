@@ -134,10 +134,12 @@ function getDashboardCache(opts) {
 // autonomyBySession(可选,第 4 参):{name → {commit,rollback,interventions}} —— 单机 autonomy 指标。
 //   提供时给每个 session 挂 autonomy 字段(供 hub 聚合);不提供(undefined)→ 完全向后兼容,
 //   payload 形状与无该参数时一致(既有调用方/测试不受影响)。
-function buildDashboardPayload(sessions, snapshots, tmuxOk, autonomyBySession) {
+// configHealth(可选,第 5 参):机器级 CLAUDE.md/Skills 规模指标对象(供 hub「配置健康」分区聚合)。
+//   提供时挂到 payload 顶层 configHealth;不提供(undefined)→ 完全向后兼容。
+function buildDashboardPayload(sessions, snapshots, tmuxOk, autonomyBySession, configHealth) {
   const snapMap = new Map((snapshots || []).map((s) => [s.name, s]));
   const hasAuto = autonomyBySession && typeof autonomyBySession === 'object';
-  return {
+  const payload = {
     tmuxOk: !!tmuxOk,
     sessions: (sessions || []).map((s) => {
       const snap = snapMap.get(s.name) || { status: 'unknown', lastLine: '', lastTs: null };
@@ -161,6 +163,8 @@ function buildDashboardPayload(sessions, snapshots, tmuxOk, autonomyBySession) {
       return out;
     }),
   };
+  if (configHealth && typeof configHealth === 'object') payload.configHealth = configHealth;
+  return payload;
 }
 
 module.exports = {

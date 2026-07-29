@@ -32,6 +32,7 @@ const { RegisterClient } = require('./register_client.cjs');
 const { createSecretStore, resolveApiKey, maskSecret } = require('./secret_store.cjs');
 const { migrateConfigKeyToKeychain } = require('./secret_migrate.cjs');
 const { SubprocessAudit } = require('./subprocess_audit.cjs');
+const { computeConfigHealth } = require('./config_health.cjs');
 
 // 配置文件(~/.cc-web-control/config.json,--config 覆盖)+ env 覆盖(env > file > default)。
 // 无文件 = 纯 env/默认 = 现状行为(向后兼容)。warnings:未知字段 / token 权限过松。
@@ -543,9 +544,14 @@ function startWebServer() {
       autonomyTracker.tick(sessions);
       autonomyTracker.retain(sessions.map((s) => s.name));
       const tmuxOk = await tmuxAvailable();
+      // 配置健康:扫描 projectRoots 下各项目 CLAUDE.md / Skills 规模(供 hub「配置健康」分区聚合)。
+      // 纯读不改;任何异常降级为空(绝不 500 / 不阻断看板)。
+      let configHealth = undefined;
+      try { configHealth = computeConfigHealth({ projectRoots: PROJECT_ROOTS }); } catch { /* 降级:不上报 */ }
       res.json(buildDashboardPayload(
         sessions, dashboardCache.getSnapshots(), tmuxOk,
-        autonomyTracker.snapshot(sessions.map((s) => s.name))
+        autonomyTracker.snapshot(sessions.map((s) => s.name)),
+        configHealth
       ));
     } catch (error) {
       // M3:绝不 500,降级返回空 payload

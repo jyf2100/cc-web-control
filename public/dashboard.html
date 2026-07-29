@@ -53,6 +53,17 @@
             <div id="autonomy-body" class="autonomy-body" aria-live="polite"></div>
         </section>
 
+        <!-- hub 模式:配置健康分区(CLAUDE.md / Skills 规模精简监控 + /doctor 触发)-->
+        <section id="config-health-panel" class="config-health-panel" hidden aria-label="配置健康">
+            <div class="config-health-panel__head">
+                <div class="config-health-panel__title">
+                    <span class="config-health-panel__name">配置健康</span>
+                    <span class="config-health-panel__hint">CLAUDE.md / Skills 规模 · ≤60 行健康,>60 建议精简,>300 超限 · 一键 /doctor 分析</span>
+                </div>
+            </div>
+            <div id="config-health-body" class="config-health-body" aria-live="polite"></div>
+        </section>
+
         <!-- 三页面:扇出 bar(选中卡片后显示,Enter 广播,不跳控制台)-->
         <form id="fanout-bar" class="fanout-bar" hidden>
             已选 <span class="sel-count" id="sel-count">0</span>

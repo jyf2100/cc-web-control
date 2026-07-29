@@ -341,5 +341,88 @@
     return parts.join('');
   }
 
-  return { statusMeta, escapeHtml, relativeTime, windowNameFor, buildCardHTML, buildCardRow, buildCardInner, flattenFleet, sortCardsByRelevance, summarizeFleet, summarizeMachine, renderStatusCounts, isStale, partitionStale, groupByMachine, cliToolMeta, buildCliBadge, collectCliTools, renderCliFilter, CLI_TOOL_META, CLI_TOOL_ORDER };
+  // —— 配置健康:CLAUDE.md / Skills 规模精简监控(信号:Anthropic 删 80% 系统提示;/doctor 可调规模;
+  //    高绩效团队 CLAUDE.md ≤ 60 行,绝不超过 300 行)。纯渲染,无 DOM 依赖,供 node --test 单测。 ——
+  // status 元数据:cls(CSS 后缀)+ cn(中文标记)。阈值由后端 config_health.cjs classifyConfigHealth 判定。
+  var CONFIG_HEALTH_META = {
+    ok:         { cls: 'ok',         cn: '' },           // ≤60:不展示告警标记(AC2)
+    warn:       { cls: 'warn',       cn: '建议精简' },   // >60
+    over:       { cls: 'over',       cn: '超限' },       // >300
+    unreadable: { cls: 'unreadable', cn: '无法读取' },   // AC6 降级
+    empty:      { cls: 'empty',      cn: '无项目' },
+    unreported: { cls: 'unreported', cn: '未上报' },     // 旧版单机/无 projectRoots
+  };
+  function configHealthMeta(status) { return CONFIG_HEALTH_META[status] || CONFIG_HEALTH_META['unreported']; }
+
+  // hub fleet(machines)→ 配置健康行数组,每个已注册机器一行(AC1:每个已注册机器各一行)。
+  // 返回 [{ machineId, machineName, online, status, claudeMdLines, skillsFiles, skillsLines, projects }]。
+  // machine.configHealth 缺失 → status 'unreported'(向后兼容旧版单机)。纯函数。
+  function flattenConfigHealth(machines) {
+    const out = [];
+    for (const m of machines || []) {
+      if (!m) continue;
+      const ch = m.configHealth;
+      const totals = (ch && ch.totals) || {};
+      out.push({
+        machineId: m.id,
+        machineName: m.name || m.id,
+        online: m.online !== false,
+        status: (ch && ch.status) ? ch.status : 'unreported',
+        claudeMdLines: typeof totals.claudeMdLines === 'number' ? totals.claudeMdLines : null,
+        skillsFiles: typeof totals.skillsFiles === 'number' ? totals.skillsFiles : 0,
+        skillsLines: typeof totals.skillsLines === 'number' ? totals.skillsLines : 0,
+        projects: (ch && Array.isArray(ch.projects)) ? ch.projects : [],
+      });
+    }
+    return out;
+  }
+
+  // 单行 HTML:<tr data-machine="<mid>">。CLAUDE.md 行数 + 阈值标记(AC2)+ skills 计数 + /doctor 按钮(AC4)。
+  function renderConfigHealthRow(row) {
+    const r = row || {};
+    const meta = configHealthMeta(r.status);
+    const mid = escapeHtml(String(r.machineId == null ? '' : r.machineId));
+    const name = escapeHtml(String(r.machineName == null ? '' : r.machineName));
+    // 行数展示:ok/warn/over → 数字;unreadable → 「无法读取」;empty/unreported → 「—」
+    var linesCell;
+    if (r.status === 'ok' || r.status === 'warn' || r.status === 'over') {
+      linesCell = '<span class="ch-lines ch-lines--' + meta.cls + '">' + (r.claudeMdLines == null ? '—' : r.claudeMdLines) + '</span>';
+    } else if (r.status === 'unreadable') {
+      linesCell = '<span class="ch-lines ch-lines--unreadable">无法读取</span>';
+    } else {
+      linesCell = '<span class="ch-lines ch-lines--' + meta.cls + '">—</span>';
+    }
+    // 告警标记:warn/over 才渲染徽标(ok 无标记 —— AC2「≤60 不展示告警标记」)
+    var badge = '';
+    if (meta.cn) {
+      badge = '<span class="ch-badge ch-badge--' + meta.cls + '" title="' + escapeHtml(meta.cn) + '">' + escapeHtml(meta.cn) + '</span>';
+    }
+    return '<tr class="ch-row ch-row--' + meta.cls + '" data-machine="' + mid + '">' +
+      '<td class="ch-row__name">' + name + '</td>' +
+      '<td class="ch-row__lines">' + linesCell + badge + '</td>' +
+      '<td class="ch-row__skills-files">' + (r.skillsFiles || 0) + '</td>' +
+      '<td class="ch-row__skills-lines">' + (r.skillsLines || 0) + '</td>' +
+      '<td class="ch-row__action"><button type="button" class="ch-doctor" data-act="doctor" data-machine="' + mid + '" aria-label="触发 /doctor 分析 ' + name + '">触发 /doctor 分析</button></td>' +
+      '</tr>';
+  }
+
+  // 整段配置健康分区 HTML:无机器 → 空态占位;否则表头 + 各机一行。
+  function renderConfigHealthSection(machines) {
+    const rows = flattenConfigHealth(machines);
+    if (!rows.length) {
+      return '<div class="config-health-empty"><span class="eyebrow">NO DATA</span> 尚无机器注册,暂无配置健康数据</div>';
+    }
+    const body = rows.map(renderConfigHealthRow).join('');
+    return '<table class="config-health-table">' +
+      '<thead><tr><th>机器</th><th>CLAUDE.md 行数</th><th>Skills 文件数</th><th>Skills 累计行数</th><th>操作</th></tr></thead>' +
+      '<tbody>' + body + '</tbody>' +
+      '</table>';
+  }
+
+  // 向后兼容别名:renderConfigHealthRows = 表体各行 HTML(flatMap join)。
+  function renderConfigHealthRows(machines) {
+    return flattenConfigHealth(machines).map(renderConfigHealthRow).join('');
+  }
+
+  return { statusMeta, escapeHtml, relativeTime, windowNameFor, buildCardHTML, buildCardRow, buildCardInner, flattenFleet, sortCardsByRelevance, summarizeFleet, summarizeMachine, renderStatusCounts, isStale, partitionStale, groupByMachine, cliToolMeta, buildCliBadge, collectCliTools, renderCliFilter, CLI_TOOL_META, CLI_TOOL_ORDER, CONFIG_HEALTH_META, configHealthMeta, flattenConfigHealth, renderConfigHealthSection, renderConfigHealthRows, renderConfigHealthRow };
 });

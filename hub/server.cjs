@@ -143,6 +143,16 @@ function startHub(opts) {
     filePath: path.join(process.env.HOME || '/tmp', '.cc-web-control', 'jump-audit.jsonl'),
   });
 
+  // 配置健康 /doctor 触发:每 (machine,session) 目标一个 debounce 窗口,窗口内重复点击去重(AC7 exactly-once)。
+  const DOCTOR_DEBOUNCE_MS = 2000;
+  const doctorInFlight = new Map(); // key `${machine}:${session}` → lastSendTs
+  // 定时清扫过期窗口项(30s,unref 不挂测试进程);键空间 = 机×会话,天然有界,清扫仅为卫生。
+  const doctorSweepTimer = setInterval(() => {
+    const now = Date.now();
+    for (const [k, ts] of doctorInFlight) if (now - ts > DOCTOR_DEBOUNCE_MS * 4) doctorInFlight.delete(k);
+  }, 30_000);
+  doctorSweepTimer.unref();
+
   const expectedOriginForHttp = (req) => ({
     protocol: req.protocol,
     host: req.get('host'),
@@ -467,6 +477,49 @@ function startHub(opts) {
     res.status(r.status).json({ ok: r.ok });
   });
 
+  // —— 配置健康:/doctor 触发(经现有 Web→tmux 双向同步通道,不引入新控制通道;AC4/AC7)——
+  // POST /api/config-health/:machine/doctor  body 可选 { session }
+  // 解析目标 session(body.session 优先 → 否则该机首个会话 → 无则 409),经 AgentClient.sendOneShot
+  // 发送字面 /doctor + Enter。同一 (machine,session) 在 DOCTOR_DEBOUNCE_MS 内去重(exactly-once)。
+  app.post('/api/config-health/:machine/doctor', async (req, res) => {
+    if (!requireSameOriginForUnsafeMethods(req, res)) return;
+    const mid = req.params.machine;
+    const ac = clients.get(mid);
+    if (!ac) { res.status(404).json({ error: `unknown machine: ${mid}` }); return; }
+
+    // 解析目标 session:body.session 优先(须过白名单,防注入);否则取该机首个会话;无会话 → 409。
+    const latest = aggregator.getLatest();
+    const m = (latest && Array.isArray(latest.machines) ? latest.machines : []).find((x) => x && x.id === mid);
+    const machineSessions = (m && Array.isArray(m.sessions)) ? m.sessions : [];
+    let session = (req.body && typeof req.body.session === 'string') ? req.body.session : '';
+    if (session) {
+      if (!SESSION_RE.test(session)) { res.status(400).json({ error: 'bad session' }); return; }
+    } else {
+      if (!machineSessions.length) { res.status(409).json({ error: 'no session on machine', code: 'no_session' }); return; }
+      session = machineSessions[0].name;
+    }
+
+    // exactly-once:通过检查后立即占用窗口(在 await 前),防并发请求在 await 间隙穿透去重。
+    const dedupeKey = `${mid}:${session}`;
+    const now = Date.now();
+    const last = doctorInFlight.get(dedupeKey) || 0;
+    if (now - last < DOCTOR_DEBOUNCE_MS) {
+      res.json({ ok: true, deduped: true, machine: mid, session });
+      return;
+    }
+    doctorInFlight.set(dedupeKey, now);
+
+    // 复用单机 ws message 协议:{type:'input', data:'/doctor', enter:true} → tmux send-keys '/doctor' + Enter。
+    // 无新增控制通道(沿用 AgentClient → 单机 WS → tmux 既有路径)。
+    const r = await ac.sendOneShot(session, { type: 'input', data: '/doctor', enter: true });
+    if (!r.ok) {
+      doctorInFlight.delete(dedupeKey); // 发送失败:回退窗口,允许后续重试
+      res.status(502).json({ error: r.error || 'send failed' });
+      return;
+    }
+    res.json({ ok: true, machine: mid, session });
+  });
+
   const ma = mainAgent;
   let mainAgentHandles = null;
   // M3:主控 agent 起停操作串行化(start/stop 互斥,防 close 中途 start 留孤儿)。Task 6 端点经此包装。
@@ -669,6 +722,7 @@ function startHub(opts) {
           });
           aggregator.stop();
           clearInterval(autonomyCompactTimer);
+          clearInterval(doctorSweepTimer);
           try { autonomyStore.compact(); } catch {} // 关闭时整表重写,裁掉过期事件
           auditAggregator.stop();
           registrar.cleanup();
