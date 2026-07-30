@@ -62,6 +62,20 @@
       }));
   }
 
+  // buildEffortSelectModel:effort 档位列表 → <option> 渲染模型。默认档标注「(默认)」(AC6 可见标注)。
+  // 与 effort.cjs 解耦:levels/defaultEffort/currentEffort 全部由调用方传入(本模块只管渲染)。
+  function buildEffortSelectModel(levels, defaultEffort, currentEffort) {
+    const lv = Array.isArray(levels) ? levels.filter((x) => typeof x === 'string') : [];
+    const def = (typeof defaultEffort === 'string' && defaultEffort) ? defaultEffort : (lv[0] || '');
+    const cur = (typeof currentEffort === 'string' && currentEffort) ? currentEffort : def;
+    return lv.map((level) => ({
+      value: level,
+      label: level === def ? level + ' (默认)' : level,
+      isDefault: level === def,
+      isCurrent: level === cur,
+    }));
+  }
+
   function createSwitchSheet(opts) {
     const doc = (typeof document !== 'undefined') ? document : null;
     if (!doc) return null;
@@ -75,6 +89,25 @@
     // ariaLabel 可注入(hub 抽屉语义「切换被控 agent」,单机客户端默认「启动项目」向后兼容)。
     const hideProjects = !!(opts && opts.hideProjects);
     const ariaLabel = (opts && typeof opts.ariaLabel === 'string' && opts.ariaLabel) ? opts.ariaLabel : '启动项目';
+    // effort 档位控制面(AC1 启动选择 / AC2-3 切换警告 / AC5 状态可见)。
+    //   effortCfg.levels/defaultEffort/currentEffort:渲染下拉框(默认档标「(默认)」)。
+    //   onLaunch 已带 effort;onChangeEffort(requestedEffort) → Promise<boolean>(true=已应用,false=取消)。
+    //   仅单机模式渲染(hideProjects:true 的 hub 跳过,effort 切换是单机 PATCH 端点)。
+    const effortCfg = (opts && opts.effort && typeof opts.effort === 'object') ? opts.effort : null;
+    const onChangeEffort = (opts && typeof opts.onChangeEffort === 'function') ? opts.onChangeEffort : null;
+    // 构造 effort <select>:className + 选中 currentEffort。复用于「启动」与「当前会话」两处。
+    function buildEffortSelect(className, levels, defaultEffort, currentEffort) {
+      const sel = doc.createElement('select');
+      sel.className = className;
+      const model = buildEffortSelectModel(levels, defaultEffort, currentEffort);
+      for (const m of model) {
+        const o = doc.createElement('option');
+        o.value = m.value; o.textContent = m.label;
+        if (m.isCurrent) o.selected = true;
+        sel.appendChild(o);
+      }
+      return sel;
+    }
 
     const backdrop = doc.createElement('div');
     backdrop.className = 'switch-sheet-backdrop'; backdrop.hidden = true; backdrop.setAttribute('aria-hidden', 'true');
@@ -97,6 +130,8 @@
     }
 
     // 第 2 段:项目启动区(hideProjects:true 跳过 —— hub 无 /api/projects 数据源,只留机器/会话单选 attach)
+    // 单机模式下,项目区末尾带「启动 effort」选择器(AC1):所选档位随 onLaunch 下发。
+    let launchEffortSel = null;
     if (!hideProjects) {
     const projWrap = doc.createElement('div');
     projWrap.className = 'switch-sheet-projects';
@@ -117,7 +152,10 @@
         btn.setAttribute('aria-current', pj.isCurrent ? 'true' : 'false');
         btn.textContent = pj.label;
         if (pj.isCurrent) btn.disabled = true;
-        btn.addEventListener('click', () => { onLaunch(pj.path); });
+        // AC1:点击项目启动时,携带当前选择的 effort 档位作为该会话启动参数。
+        btn.addEventListener('click', () => {
+          onLaunch(pj.path, launchEffortSel ? launchEffortSel.value : undefined);
+        });
         li.appendChild(btn);
         projList.appendChild(li);
       });
@@ -128,8 +166,49 @@
       empty.textContent = '暂无可启动项目';
       projWrap.appendChild(empty);
     }
+    // 启动 effort 选择器(AC1/AC6):默认档标「(默认)」,未显式选择即用文档化默认。
+    if (effortCfg && Array.isArray(effortCfg.levels) && effortCfg.levels.length) {
+      const effRow = doc.createElement('div');
+      effRow.className = 'switch-sheet-effort switch-sheet-effort--launch';
+      const lbl = doc.createElement('span');
+      lbl.className = 'switch-sheet-effort-label';
+      lbl.textContent = '启动 effort';
+      launchEffortSel = buildEffortSelect('switch-sheet-effort-select',
+        effortCfg.levels, effortCfg.defaultEffort, effortCfg.defaultEffort);
+      effRow.appendChild(lbl); effRow.appendChild(launchEffortSel);
+      projWrap.appendChild(effRow);
+    }
     sheet.appendChild(projWrap);
     } // end if (!hideProjects)
+
+    // 第 3 段:当前会话 effort(AC2/AC3/AC5)。单机模式下展示当前生效档位,并提供切换入口;
+    // 切换走 onChangeEffort(client.js 内做「清空上下文缓存」二次确认 + PATCH dispatch)。
+    if (!hideProjects && effortCfg && Array.isArray(effortCfg.levels) && effortCfg.levels.length) {
+      const effWrap = doc.createElement('div');
+      effWrap.className = 'switch-sheet-effort switch-sheet-effort--current';
+      const title = doc.createElement('p');
+      title.className = 'switch-sheet-section-title';
+      title.textContent = '当前会话 effort(切换将清空上下文缓存)';
+      effWrap.appendChild(title);
+      const curEff = (typeof effortCfg.currentEffort === 'string' && effortCfg.currentEffort)
+        ? effortCfg.currentEffort : effortCfg.defaultEffort;
+      const curSel = buildEffortSelect('switch-sheet-effort-select',
+        effortCfg.levels, effortCfg.defaultEffort, curEff);
+      curSel.setAttribute('aria-label', '切换当前会话 effort 档位');
+      if (onChangeEffort) {
+        // 切换决策与回退:createSwitchSheet 只管「取值 + 通知 + 回退」,确认/下发交由 client.js。
+        curSel.addEventListener('change', async () => {
+          const requested = curSel.value;
+          if (requested === curEff) return; // 防御:未变化不触发
+          let applied = false;
+          try { applied = await onChangeEffort(requested); } catch { applied = false; }
+          // 取消/失败 → 回退到当前生效档位(AC2:未确认前实际档位不变)。
+          if (!applied) curSel.value = curEff;
+        });
+      }
+      effWrap.appendChild(curSel);
+      sheet.appendChild(effWrap);
+    }
     doc.body.appendChild(backdrop); doc.body.appendChild(sheet);
 
     let openState = false, savedOverflow = '', lastFocused = null;
@@ -171,5 +250,5 @@
     return { open, close, isOpen, destroy };
   }
 
-  return { handleTabTrap, shouldCloseOnKey, buildSessionItems, buildProjectItems, createSwitchSheet };
+  return { handleTabTrap, shouldCloseOnKey, buildSessionItems, buildProjectItems, buildEffortSelectModel, createSwitchSheet };
 });

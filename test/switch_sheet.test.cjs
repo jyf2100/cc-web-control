@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
-const { handleTabTrap, shouldCloseOnKey, buildSessionItems, buildProjectItems } = require('../public/switch_sheet.cjs');
+const { handleTabTrap, shouldCloseOnKey, buildSessionItems, buildProjectItems, buildEffortSelectModel } = require('../public/switch_sheet.cjs');
 
 test('handleTabTrap 末项 Tab 跳首', () => {
   const r = handleTabTrap({ key: 'Tab', shiftKey: false }, ['a','b','c'], 2);
@@ -145,4 +145,44 @@ test('switch-sheet 焦点陷阱 + Esc/Ctrl-C 关闭 + focus return(迁自 consol
   assert.match(src, /handleTabTrap/);
   assert.match(src, /shouldCloseOnKey/);
   assert.match(src, /lastFocused\.focus/);
+});
+
+// ============================================================
+// effort 档位控制面(AC1 启动选择 / AC2-3 切换 / AC5 状态 / AC6 默认标注)
+// ============================================================
+
+test('buildEffortSelectModel:每档一项,默认档标「(默认)」(AC6 可见标注)', () => {
+  const model = buildEffortSelectModel(['low', 'medium', 'high', 'max'], 'medium', 'high');
+  assert.equal(model.length, 4);
+  const def = model.find((m) => m.isDefault);
+  assert.equal(def.value, 'medium');
+  assert.equal(def.label, 'medium (默认)', '默认档 label 应带「(默认)」');
+});
+
+test('buildEffortSelectModel:currentEffort 标记 isCurrent', () => {
+  const model = buildEffortSelectModel(['low', 'medium', 'high', 'max'], 'medium', 'high');
+  const cur = model.find((m) => m.isCurrent);
+  assert.equal(cur.value, 'high');
+  assert.ok(!cur.label.includes('默认'), '非默认档 label 不带「(默认)」');
+});
+
+test('buildEffortSelectModel:currentEffort 缺省 → 回退 defaultEffort', () => {
+  const model = buildEffortSelectModel(['low', 'medium', 'high', 'max'], 'medium');
+  assert.equal(model.find((m) => m.isCurrent).value, 'medium');
+});
+
+test('buildEffortSelectModel:非法 levels/defaultEffort 降级(不抛)', () => {
+  assert.deepEqual(buildEffortSelectModel(null, 'medium', 'medium'), []);
+  const model = buildEffortSelectModel(['low', 'medium'], null, 'low');
+  assert.equal(model[0].label, 'low (默认)', 'defaultEffort 缺省 → 首项为默认');
+});
+
+test('createSwitchSheet 源码契约:effort 启动选择器 + 当前会话切换 + onLaunch 带 effort', () => {
+  const src = fs.readFileSync('public/switch_sheet.cjs', 'utf8');
+  assert.match(src, /opts\.effort/, '应解析 opts.effort');
+  assert.match(src, /switch-sheet-effort--launch/, '应渲染启动 effort 选择器');
+  assert.match(src, /switch-sheet-effort--current/, '应渲染当前会话 effort 切换区');
+  assert.match(src, /onLaunch\(pj\.path,\s*launchEffortSel/, 'onLaunch 应携带 effort');
+  assert.match(src, /onChangeEffort/, '应支持 onChangeEffort 切换回调');
+  assert.match(src, /上下文缓存/, '当前 effort 区应提示「上下文缓存」清空风险');
 });

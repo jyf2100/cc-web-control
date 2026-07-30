@@ -388,3 +388,14 @@ html, body {
     letter-spacing: 0.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .switch-sheet-projects-empty { margin: 4px 0 0; font-family: var(--sans); font-size: 12px; color: var(--fg-2); }
+
+/* effort 档位控制面(AC1 启动选择 / AC2-3 切换 / AC5 状态 / AC6 默认标注) */
+.switch-sheet-effort { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.switch-sheet-effort--launch { display: flex; align-items: center; gap: 8px; }
+.switch-sheet-effort--current .switch-sheet-section-title { color: var(--fg-2); }
+.switch-sheet-effort-label { font-family: var(--sans); font-size: 12px; color: var(--fg-2); white-space: nowrap; }
+.switch-sheet-effort-select {
+  font-family: var(--sans); font-size: 13px; padding: 4px 8px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--bg, #fff); color: var(--fg, #1a1a1a);
+  flex: 1; min-width: 0;
+}

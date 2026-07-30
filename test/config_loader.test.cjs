@@ -265,11 +265,11 @@ test('权限 warning 的 mode 显示为八进制(防 chmod 420 误用 — chmod 
   );
 });
 
-// ---- Task 4:SINGLE_SCHEMA(7684 全 22 字段)+ object passthrough ----
+// ---- Task 4:SINGLE_SCHEMA(7684 全 23 字段)+ object passthrough ----
 
-test('SINGLE_SCHEMA:22 字段全齐,env/default/type 对齐 spec §5.1', () => {
+test('SINGLE_SCHEMA:23 字段全齐,env/default/type 对齐 spec §5.1', () => {
   const fields = Object.keys(SINGLE_SCHEMA);
-  assert.equal(fields.length, 22, `应有 22 字段,实际 ${fields.length}: ${fields.join(',')}`);
+  assert.equal(fields.length, 23, `应有 23 字段,实际 ${fields.length}: ${fields.join(',')}`);
   assert.equal(SINGLE_SCHEMA.port.env, 'CC_WEB_PORT');
   assert.equal(SINGLE_SCHEMA.port.default, 7684);
   assert.equal(SINGLE_SCHEMA.port.type, 'port');
@@ -286,6 +286,10 @@ test('SINGLE_SCHEMA:22 字段全齐,env/default/type 对齐 spec §5.1', () => {
   assert.equal(SINGLE_SCHEMA.anthropic_api_key.type, 'string');
   assert.equal(SINGLE_SCHEMA.anthropic_api_key.env, 'ANTHROPIC_API_KEY');
   assert.equal(SINGLE_SCHEMA.anthropic_api_key.default, '');
+  // defaultEffort:Opus 5 effort 档位默认值(AC6),env 可覆盖,默认 medium(来自 effort.cjs)
+  assert.equal(SINGLE_SCHEMA.defaultEffort.type, 'string');
+  assert.equal(SINGLE_SCHEMA.defaultEffort.env, 'CC_WEB_DEFAULT_EFFORT');
+  assert.equal(SINGLE_SCHEMA.defaultEffort.default, 'medium');
 });
 
 test('SINGLE_SCHEMA 全字段从文件加载(端到端)', () => {
