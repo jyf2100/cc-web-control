@@ -25,6 +25,9 @@ const { resolveDefaultSessionForCwd } = require('./session_default.cjs');
 const { isSessionInUse } = require('./session_in_use.cjs');
 const { readBinding, writeBinding, deleteBinding, migrateStaleBindings } = require('./dashboard_binding.cjs');
 const { shouldContinue, pickResumableSessionUuid } = require('./claude_session.cjs');
+// effort 档位(Opus 5 缓存匹配标识):会话级配置,启动锁定 + 进行中切换须警告清空上下文缓存。
+const { normalizeEffort, isValidEffort, DEFAULT_EFFORT, buildEffortSlashCommand } = require('./public/effort.cjs');
+const { getEffort, setEffort, deleteEffort } = require('./session_effort.cjs');
 const crypto = require('node:crypto');
 const { createRateLimiter } = require('./rate_limit.cjs');
 const { loadConfig, SINGLE_SCHEMA, SINGLE_CONFIG_PATH, CONFIG_DIR } = require('./config_loader.cjs');
@@ -91,6 +94,11 @@ const CLAUDE_CONTINUE = CFG.claudeContinue;
 const PROJECT_ROOTS = CFG.projectRoots;
 // 启动 cwd 命中某项目根 → 'claude-<项目名>'(与项目启动区 client.js:845 同名,避免双会话);否则回退 CFG.session。
 const RESOLVED_DEFAULT_SESSION = resolveDefaultSessionForCwd(process.cwd(), PROJECT_ROOTS, DEFAULT_SESSION);
+// 文档化默认 effort 档位(AC6):CFG.defaultEffort 经 normalizeEffort 校验,非法值降级 medium 并告警。
+const RESOLVED_DEFAULT_EFFORT = normalizeEffort(CFG.defaultEffort, DEFAULT_EFFORT);
+if (CFG.defaultEffort && !isValidEffort(CFG.defaultEffort)) {
+  console.error(`[config] defaultEffort "${CFG.defaultEffort}" 非合法档位,降级为 ${RESOLVED_DEFAULT_EFFORT}`);
+}
 
 // —— keychain + 子进程审计(本 PR:secret 不落盘明文 + spawn 级可观测)——
 // secret 唯一落盘点:OS keychain;启动时迁移明文 → keychain 引用,解析后内存持有,
@@ -194,6 +202,8 @@ function normalizeProjectCwd(cwdInput) {
  * @param {object} [opts]
  * @param {boolean} [opts.useClaudeContinue] 服务启动 DEFAULT_SESSION 沿用 CLAUDE_CONTINUE;
  *   web 路径不传 → 走 shouldContinue(cwd) 续接优先(范围限定)。
+ * @param {string} [opts.effort] Opus 5 effort 档位(会话级配置,启动时锁定)。
+ *   须为合法枚举(low/medium/high/max);拼进 launch 命令 --effort <level>,wrapper 消费导出 env。
  */
 async function startClaudeInSession(sessionName, cwd, opts = {}) {
   // realpath 统一口径:claude 内部按 realpath(cwd) 算 slug 写 jsonl(gate 实证),
@@ -227,7 +237,10 @@ async function startClaudeInSession(sessionName, cwd, opts = {}) {
     if (slug) writeBinding(slug, sessionName, sessionId);
   }
   // cd 与 claude 启动合并为单条命令,消除慢盘 / direnv hook 下 cd 未生效就发 claude 的时序竞态
-  const launch = buildClaudeLaunchCommand({ wrapperPath: CLAUDE_WRAPPER, sessionId, resumeId });
+  // effort(已校验枚举)作为 --effort <level> 拼进 launch:wrapper 消费并导出 CC_WEB_CLAUDE_EFFORT,
+  // 不透传 claude(防拒未知参数)。档位是缓存匹配标识,启动即锁定。
+  const validEffort = isValidEffort(opts.effort) ? opts.effort : null;
+  const launch = buildClaudeLaunchCommand({ wrapperPath: CLAUDE_WRAPPER, sessionId, resumeId, effort: validEffort });
   const cmd = `cd "${escapedCwd}" && ${launch}`;
   await tmux.sendKeys(sessionName, cmd);
   // spawn 级审计(best-effort:审计失败不阻断 claude 启动)。cmd 为传给 tmux 的精确命令串。
@@ -260,6 +273,9 @@ async function listSessions() {
         // name 经 isValidSessionName 守卫:非法名绝不下沉到 readBinding 的文件路径(评审团 4 号 D)。
         const slug = cwd ? cwdToSlug(cwd) : null;
         const claudeSessionId = (slug && isValidSessionName(name)) ? (readBinding(slug, name) || undefined) : undefined;
+        // effort:会话级锁定档位(AC5 状态可见)。读不到记录 → 降级文档化默认档位(AC6)。
+        // name 经 isValidSessionName 守卫:getEffort 内部对非法名返回 null,安全。
+        const effort = (isValidSessionName(name) ? getEffort(name) : null) || RESOLVED_DEFAULT_EFFORT;
         return {
           name,
           attached: Number.parseInt(attached, 10) > 0,
@@ -267,6 +283,7 @@ async function listSessions() {
           created: Number.isFinite(createdEpoch) ? new Date(createdEpoch * 1000).toLocaleString() : null,
           cwd: cwd || null, // pane_current_path,供看板解析会话状态
           claudeSessionId,
+          effort,
         };
       });
   } catch (error) {
@@ -609,9 +626,11 @@ function startWebServer() {
         return;
       }
 
-      const { name, cwd } = req.body || {};
+      const { name, cwd, effort } = req.body || {};
       if (!name) return res.status(400).json({ error: 'Session name required' });
       if (!isValidSessionName(name)) return res.status(400).json({ error: 'Invalid session name' });
+      // effort 档位(AC1/AC6):未显式选择或非法 → 文档化默认档位;合法枚举原样用。
+      const chosenEffort = normalizeEffort(effort, RESOLVED_DEFAULT_EFFORT);
 
       await tmux.createSession(name, null, { env: claudeSessionEnv() });
       if (cwd) {
@@ -623,9 +642,12 @@ function startWebServer() {
         }
         // web 选项目创建会话:startClaudeInSession 内部走 shouldContinue 续接优先
         // (有历史 → claude -c;无历史 → claude 新建)。不再 forceNew 预生成 UUID。
-        await startClaudeInSession(name, normalizedCwd);
+        // effort 作为启动参数锁定下发(AC1)。
+        await startClaudeInSession(name, normalizedCwd, { effort: chosenEffort });
       }
-      res.status(201).json({ success: true });
+      // 落盘会话级 effort(AC5 状态可见),供 GET /api/sessions 回填。
+      setEffort(name, chosenEffort);
+      res.status(201).json({ success: true, effort: chosenEffort });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
     }
@@ -663,7 +685,43 @@ function startWebServer() {
         const slug = cwdToSlug(target.cwd);
         if (slug) deleteBinding(slug, name);
       }
+      // 清理会话级 effort 记录(与绑定同生命周期清理)。
+      deleteEffort(name);
       res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // 会话进行中切换 effort 档位(AC2/AC3)。档位是缓存匹配标识,切换会清空全部上下文缓存——
+  // 故前端须先弹「将清空上下文缓存」警告并经用户二次确认,确认后才调本端点下发(dispatch)。
+  // 本端点:校验档位 → 向 tmux 会话下发 effort slash 命令(终端镜像通道)→ 更新会话级记录。
+  app.patch('/api/sessions/:name/effort', async (req, res) => {
+    try {
+      if (!requireSameOriginForUnsafeMethods(req, res)) return;
+      const name = req.params.name;
+      if (!isValidSessionName(name)) {
+        return res.status(400).json({ success: false, error: 'Invalid session name' });
+      }
+      const { effort } = req.body || {};
+      if (!isValidEffort(effort)) {
+        return res.status(400).json({ success: false, error: 'Invalid effort level (low/medium/high/max)' });
+      }
+      const hasTmux = await isCommandAvailable('tmux');
+      if (!hasTmux) {
+        return res.status(503).json({ success: false, error: 'tmux is not available on PATH' });
+      }
+      const exists = await tmux.checkSession(name);
+      if (!exists) {
+        return res.status(404).json({ success: false, error: 'Session not found' });
+      }
+      // 下发切换命令到 claude 会话(AC3 dispatch)。具体命令以 Claude Code 实际支持为准(风险 C4),
+      // buildEffortSlashCommand 为文档化常量。sendKeys 走终端镜像的 send-keys -l + Enter 通道。
+      const cmd = buildEffortSlashCommand(effort);
+      await tmux.sendKeys(name, cmd, { enter: true });
+      // 更新会话级记录(AC5:切换确认后 UI 显示 = 新档位)。
+      setEffort(name, effort);
+      res.json({ success: true, effort, dispatched: cmd });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
     }

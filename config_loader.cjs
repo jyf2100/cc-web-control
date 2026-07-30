@@ -6,6 +6,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 
+// effort 档位默认值与 effort.cjs 共享(避免 magic-string 漂移)。effort.cjs 是纯 UMD 叶子模块,
+// require 无副作用,前后端共享同一份档位定义。
+const { DEFAULT_EFFORT } = require('./public/effort.cjs');
+
 const CONFIG_DIR = path.join(os.homedir(), '.cc-web-control');
 const SINGLE_CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
 const HUB_CONFIG_PATH = path.join(CONFIG_DIR, 'hub-config.json');
@@ -189,6 +193,9 @@ const SINGLE_SCHEMA = {
   // PRD 验收对 config 文件字面值的 grep 断言;env 沿用标准 ANTHROPIC_API_KEY(env 非落盘,
   // 不违反「零明文落盘」)。明文→keychain 迁移见 secret_migrate.cjs。
   anthropic_api_key:   { type: 'string',  env: 'ANTHROPIC_API_KEY',            default: '' },
+  // 默认 effort 档位(Opus 5 缓存匹配标识):未显式选择时用此值(AC6 文档化默认)。
+  // 消费方(server.cjs)经 normalizeEffort 校验,非法值降级为 effort.cjs 的 DEFAULT_EFFORT。
+  defaultEffort:       { type: 'string',  env: 'CC_WEB_DEFAULT_EFFORT',         default: DEFAULT_EFFORT },
 };
 
 // 7685(hub)全字段 schema:env / default / type 对齐 spec §5.2(11 字段,mainAgent 为 passthrough 对象)

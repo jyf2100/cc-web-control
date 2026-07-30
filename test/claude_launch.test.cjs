@@ -48,6 +48,38 @@ test('buildClaudeLaunchCommand wrapperPath 空/空白/缺省 → throw', () => {
   assert.throws(() => buildClaudeLaunchCommand({}));
 });
 
+// --- effort 档位(Opus 5 缓存匹配标识,会话级启动参数)---
+
+test('buildClaudeLaunchCommand 带 effort → 追加 --effort <level> token', () => {
+  const cmd = buildClaudeLaunchCommand({ wrapperPath: '/tmp/w.sh', sessionId: '11111111-2222-3333-4444-555555555555', effort: 'medium' });
+  assert.equal(cmd, 'bash "/tmp/w.sh" --session-id "11111111-2222-3333-4444-555555555555" --effort medium');
+});
+
+test('buildClaudeLaunchCommand effort 与 resumeId 共存', () => {
+  const cmd = buildClaudeLaunchCommand({ wrapperPath: '/tmp/w.sh', resumeId: '22222222-3333-4444-5555-666666666666', effort: 'high' });
+  assert.equal(cmd, 'bash "/tmp/w.sh" --resume "22222222-3333-4444-5555-666666666666" --effort high');
+});
+
+test('buildClaudeLaunchCommand 仅 effort(裸 claude + 档位)', () => {
+  const cmd = buildClaudeLaunchCommand({ wrapperPath: '/tmp/w.sh', effort: 'low' });
+  assert.equal(cmd, 'bash "/tmp/w.sh" --effort low');
+});
+
+test('buildClaudeLaunchCommand effort 缺省/null/空串 → 不追加 --effort(向后兼容)', () => {
+  assert.equal(buildClaudeLaunchCommand({ wrapperPath: '/tmp/w.sh' }), 'bash "/tmp/w.sh"');
+  assert.equal(buildClaudeLaunchCommand({ wrapperPath: '/tmp/w.sh', effort: null }), 'bash "/tmp/w.sh"');
+  assert.equal(buildClaudeLaunchCommand({ wrapperPath: '/tmp/w.sh', effort: '' }), 'bash "/tmp/w.sh"');
+  assert.equal(buildClaudeLaunchCommand({ wrapperPath: '/tmp/w.sh', effort: undefined }), 'bash "/tmp/w.sh"');
+});
+
+test('buildClaudeLaunchCommand effort 非小写字母 token → throw(防裸 token 注入)', () => {
+  // effort 作为裸 token(无引号)拼进 tmux send-keys 命令,必须严格限定字符集。
+  assert.throws(() => buildClaudeLaunchCommand({ wrapperPath: '/tmp/w.sh', effort: 'medium;rm -rf' }), /effort/i);
+  assert.throws(() => buildClaudeLaunchCommand({ wrapperPath: '/tmp/w.sh', effort: 'a$b' }), /effort/i);
+  assert.throws(() => buildClaudeLaunchCommand({ wrapperPath: '/tmp/w.sh', effort: 'MEDIUM' }), /effort/i);
+  assert.throws(() => buildClaudeLaunchCommand({ wrapperPath: '/tmp/w.sh', effort: 'high ' }), /effort/i);
+});
+
 // --- 既有 shellEscapeForDoubleQuotes 纯函数测试保留 ---
 
 test('shellEscapeForDoubleQuotes escapes shell metacharacters in double-quote context', () => {

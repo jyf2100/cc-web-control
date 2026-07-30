@@ -25,6 +25,9 @@
     const projectControl = document.getElementById('projectControl');
     const projectSelect = document.getElementById('projectSelect');
     const startProjectBtn = document.getElementById('startProject');
+    // effort 档位控制面(AC1/AC5/AC6)。Effort 模块由 effort.cjs UMD 注入 window.Effort。
+    const metaEffortEl = document.getElementById('metaEffort');
+    const Effort_ = (typeof Effort !== 'undefined') ? Effort : (window.Effort || null);
 
     // 状态
     let ws = null;
@@ -41,6 +44,8 @@
     let cachedSessions = [];
     // 最近一次 /api/projects 的项目列表,供切换抽屉渲染项目区 + 启动入口
     let cachedProjects = [];
+    // 当前会话生效的 effort 档位(AC5 状态可见)。随 /api/sessions 回填,切换确认后更新。
+    let currentEffort = (Effort_ && Effort_.DEFAULT_EFFORT) || 'medium';
     let disconnectNoted = false;
     let lastWsErrorNoted = false;
     const STORAGE_KEY_LAST_SESSION = 'cc_web_last_session';
@@ -702,6 +707,8 @@
                 ? (currentSession.replace(/[^0-9]/g, '').padStart(2, '0') || '—') : '—';
         }
         if (sessionSelect && currentSession) sessionSelect.value = currentSession;
+        // AC5:header 始终显示当前生效 effort 档位。
+        if (metaEffortEl) metaEffortEl.textContent = currentEffort || '—';
     }
 
     /**
@@ -787,9 +794,83 @@
 
             updateSessionUi();
             syncProjectSelect();
+            // 回填当前会话已锁定的 effort 档位(AC5:跨刷新 / 切会话仍可见生效档位)。
+            syncCurrentEffort();
         } catch (e) {
             showSystemNote(`无法加载会话列表: ${e.message}`);
         }
+    }
+
+    /**
+     * 从 /api/sessions 缓存回填当前会话的 effort 档位。无记录 → 保留现有值(或默认)。
+     */
+    function syncCurrentEffort() {
+        if (!currentSession || !Array.isArray(cachedSessions)) return;
+        const entry = cachedSessions.find((s) => s && s.name === currentSession);
+        if (entry && entry.effort && Effort_ && Effort_.isValidEffort(entry.effort)) {
+            if (entry.effort !== currentEffort) {
+                currentEffort = entry.effort;
+                updateSessionUi();
+            }
+        }
+    }
+
+    /**
+     * effort 切换二次确认弹窗(AC2:必须含「清空上下文缓存」字样)。自建轻量模态(内联样式,
+     * 不依赖 CSS),返回 Promise<boolean>:true=确认切换,false=取消。
+     * @param {string} warning 警告文案(来自 effort.cjs buildEffortChangeWarning)
+     */
+    function showEffortConfirm(warning) {
+        return new Promise((resolve) => {
+            if (typeof document === 'undefined') { resolve(false); return; }
+            const doc = document;
+            const overlay = doc.createElement('div');
+            overlay.setAttribute('role', 'dialog');
+            overlay.setAttribute('aria-modal', 'true');
+            overlay.setAttribute('aria-label', '确认切换 effort 档位');
+            Object.assign(overlay.style, {
+                position: 'fixed', inset: '0', background: 'rgba(0,0,0,0.5)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                zIndex: '10000', padding: '16px',
+            });
+            const card = doc.createElement('div');
+            Object.assign(card.style, {
+                background: '#fff', borderRadius: '12px', padding: '18px',
+                maxWidth: '360px', width: '100%', boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
+                fontFamily: 'inherit',
+            });
+            const msg = doc.createElement('p');
+            msg.textContent = warning;
+            Object.assign(msg.style, { margin: '0 0 14px', fontSize: '14px', lineHeight: '1.5', color: '#1a1a1a' });
+            const btnRow = doc.createElement('div');
+            Object.assign(btnRow.style, { display: 'flex', gap: '8px', justifyContent: 'flex-end' });
+            const mkBtn = (text, primary) => {
+                const b = doc.createElement('button');
+                b.type = 'button';
+                b.textContent = text;
+                Object.assign(b.style, {
+                    border: 'none', borderRadius: '8px', padding: '8px 14px', fontSize: '14px',
+                    cursor: 'pointer',
+                    background: primary ? '#1a1a1a' : '#ececec',
+                    color: primary ? '#fff' : '#1a1a1a',
+                });
+                return b;
+            };
+            const cancel = mkBtn('取消', false);
+            const confirm = mkBtn('确认切换', true);
+            const done = (val) => { overlay.remove(); doc.removeEventListener('keydown', onKey, true); resolve(val); };
+            const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); done(false); } };
+            cancel.addEventListener('click', () => done(false));
+            confirm.addEventListener('click', () => done(true));
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) done(false); });
+            btnRow.appendChild(cancel); btnRow.appendChild(confirm);
+            card.appendChild(msg); card.appendChild(btnRow);
+            overlay.appendChild(card);
+            doc.body.appendChild(overlay);
+            doc.addEventListener('keydown', onKey, true);
+            // 进入即聚焦确认按钮,便于键盘确认;略延迟以等挂载。
+            setTimeout(() => { try { confirm.focus(); } catch {} }, 0);
+        });
     }
 
     async function loadProjects() {
@@ -838,7 +919,7 @@
         }
     }
 
-    async function startProjectSession() {
+    async function startProjectSession(effort) {
         if (!projectSelect) return;
         const cwd = projectSelect.value;
         if (!cwd) return;
@@ -846,6 +927,8 @@
         const selectedOption = projectSelect.options[projectSelect.selectedIndex];
         const projectName = selectedOption?.dataset?.projectName || selectedOption?.textContent || cwd;
         const sessionName = `claude-${slugifySessionName(projectName)}`;
+        // AC1:启动 effort 作为会话启动参数下发(未显式选择 → undefined,后端用文档化默认档位 AC6)。
+        const launchEffort = (Effort_ && Effort_.isValidEffort(effort)) ? effort : undefined;
 
         try {
             const sessions = await fetchJson('/api/sessions');
@@ -863,6 +946,11 @@
                 connect();
                 showSystemNote(`已切换到会话: ${sessionName}`);
                 const entry = Array.isArray(sessions) ? sessions.find((s) => s && s.name === sessionName) : null;
+                // 回填该会话已锁定的 effort 档位(AC5)。
+                if (entry && entry.effort && Effort_ && Effort_.isValidEffort(entry.effort)) {
+                    currentEffort = entry.effort;
+                    updateSessionUi();
+                }
                 const detect = (typeof DeadState !== 'undefined' && DeadState.detectDeadState) || null;
                 if (detect && entry) {
                     const dead = detect({ name: entry.name, claudeSessionId: entry.claudeSessionId });
@@ -874,12 +962,14 @@
             await fetchJson('/api/sessions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: sessionName, cwd })
+                body: JSON.stringify({ name: sessionName, cwd, effort: launchEffort })
             });
 
             currentSession = sessionName;
             setSessionInUrl(currentSession);
             storeSession(currentSession);
+            // 记录本次启动锁定的 effort 档位(后端已归一化;AC1/AC5)。
+            currentEffort = (Effort_ && Effort_.normalizeEffort) ? Effort_.normalizeEffort(launchEffort) : (launchEffort || currentEffort);
             updateSessionUi();
             lastOutput = null;
             hideQuickReply();
@@ -996,6 +1086,12 @@
                     trigger: switchTrigger, items,
                     projects: projectItems,
                     meta: buildMeta(),
+                    // effort 控制面:档位枚举 + 文档化默认 + 当前生效档位(供抽屉渲染选择器)。
+                    effort: Effort_ ? {
+                        levels: Effort_.EFFORT_LEVELS,
+                        defaultEffort: Effort_.DEFAULT_EFFORT,
+                        currentEffort,
+                    } : null,
                     onPick: (name) => {
                         const switchSession = (typeof SessionSwitch !== 'undefined' && SessionSwitch.switchSession) || null;
                         if (switchSession) {
@@ -1006,13 +1102,41 @@
                                   hideQuickReply, connect, note: showSystemNote }
                             );
                             currentSession = name;
+                            // 切到别的会话后回填其 effort 档位(AC5)。
+                            syncCurrentEffort();
                         }
                         if (sheetHandle) sheetHandle.close();
                     },
-                    onLaunch: (cwd) => {
+                    onLaunch: (cwd, effort) => {
                         if (sheetHandle) sheetHandle.close();
                         if (projectSelect) projectSelect.value = cwd;
-                        startProjectSession();
+                        startProjectSession(effort);
+                    },
+                    // AC2/AC3:切换 effort 须先弹「将清空上下文缓存」警告并二次确认,确认后才 PATCH 下发。
+                    // 返回 true=已应用,false=取消(createSwitchSheet 据此回退选择器到当前档位)。
+                    onChangeEffort: async (requested) => {
+                        if (!Effort_ || !currentSession) return false;
+                        const plan = Effort_.planEffortChange(currentEffort, requested);
+                        if (plan.action === 'noop') return false;
+                        const ok = await showEffortConfirm(plan.warning);
+                        if (!ok) return false;
+                        try {
+                            const r = await fetchJson(
+                                '/api/sessions/' + encodeURIComponent(currentSession) + '/effort',
+                                {
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ effort: plan.to }),
+                                }
+                            );
+                            currentEffort = (r && r.effort) ? r.effort : plan.to;
+                            updateSessionUi();
+                            showSystemNote(`effort 已切换为 ${currentEffort}(已清空上下文缓存)`);
+                            return true;
+                        } catch (e) {
+                            showSystemNote(`effort 切换失败: ${e.message || e}`);
+                            return false;
+                        }
                     },
                 });
             };
