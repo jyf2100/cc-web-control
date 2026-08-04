@@ -35,6 +35,10 @@ const { RegisterClient } = require('./register_client.cjs');
 const { createSecretStore, resolveApiKey, maskSecret } = require('./secret_store.cjs');
 const { migrateConfigKeyToKeychain } = require('./secret_migrate.cjs');
 const { SubprocessAudit } = require('./subprocess_audit.cjs');
+// 截图端点(render→look→fix 闭环):headless Chromium 把控制台/看板渲染成 PNG。
+// screenshot.cjs 为纯逻辑(可注入 render),screenshot_render.cjs 惰性 require puppeteer-core。
+const { createScreenshotHandler } = require('./screenshot.cjs');
+const { createPuppeteerRenderer } = require('./screenshot_render.cjs');
 
 // 配置文件(~/.cc-web-control/config.json,--config 覆盖)+ env 覆盖(env > file > default)。
 // 无文件 = 纯 env/默认 = 现状行为(向后兼容)。warnings:未知字段 / token 权限过松。
@@ -568,6 +572,39 @@ function startWebServer() {
       // M3:绝不 500,降级返回空 payload
       res.json({ sessions: [], tmuxOk: false });
     }
+  });
+
+  // 截图端点 GET /api/screenshot?panel=dialog|hub&width=&height=&format=png|json
+  //   headless Chromium 渲染本地控制台/看板页面 → PNG(直出)或 JSON(含 base64 元数据)。
+  //   - panel:dialog=对话框(index.html)/ hub=看板(dashboard.html);单机两者皆可。
+  //   - 视口可配(AC5),失败一律非 2xx + {error,detail}(AC7),不静默吞/不伪 200。
+  //   - 渲染器惰性创建(不在启动时探测浏览器),rate limit(60/min/IP)防浏览器 DoS。
+  const screenshotPanels = {
+    dialog: { id: 'dialog', path: '/', waitSelector: 'body' },
+    hub: { id: 'hub', path: '/dashboard.html', waitSelector: '#board-body, #sessionList, body' },
+  };
+  let _screenshotRenderer = null;
+  function getScreenshotRenderer() {
+    if (!_screenshotRenderer) _screenshotRenderer = createPuppeteerRenderer({ env: process.env });
+    return _screenshotRenderer;
+  }
+  const screenshotRateLimiter = createRateLimiter({ max: 60, windowMs: 60_000 });
+  const screenshotHandler = createScreenshotHandler({
+    panels: screenshotPanels,
+    baseUrl: `http://${HOST || '127.0.0.1'}:${PORT}`,
+    token: AUTH_TOKEN || '',
+    render: (ctx) => getScreenshotRenderer().render(ctx),
+  });
+  app.get('/api/screenshot', (req, res, next) => {
+    const { limited, retryAfterMs } = screenshotRateLimiter.check(req.ip);
+    if (limited) {
+      res.set('Retry-After', String(Math.ceil((retryAfterMs || 60000) / 1000)))
+        .status(429)
+        .type('application/json')
+        .json({ error: 'rate_limited', detail: 'screenshot endpoint rate limit exceeded' });
+      return;
+    }
+    return screenshotHandler(req, res, next);
   });
 
   // 子进程 spawn 级审计(供 hub 聚合 /api/global-audit)。cmd 字段脱敏(防 key 泄露)。

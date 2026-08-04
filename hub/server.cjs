@@ -28,6 +28,9 @@ const { AuditLog } = require('./audit_log.cjs');
 const rootTmux = require('../tmux.cjs');
 const { writeMainAgentFiles } = require('./main_agent_config.cjs');
 const { AgentStateStore } = require('./agent_state_store.cjs');
+// 截图端点(render→look→fix 闭环):headless Chromium 把 hub 聚合看板渲染成 PNG。
+const { createScreenshotHandler } = require('../screenshot.cjs');
+const { createPuppeteerRenderer } = require('../screenshot_render.cjs');
 
 function startHub(opts) {
   const {
@@ -320,6 +323,37 @@ function startHub(opts) {
   // 全局聚合 dashboard
   app.get('/api/global-dashboard', (req, res) => {
     res.json(aggregator.getLatest());
+  });
+
+  // 截图端点 GET /api/screenshot?panel=hub&width=&height=&format=png|json
+  //   headless Chromium 渲染 hub 聚合看板(dashboard.html)→ PNG/JSON。
+  //   hub 仅支持 panel=hub(无对话框面板);N 台单机已注册时截图即呈现 N 张卡片(AC3)。
+  //   渲染器惰性创建;rate limit(60/min/IP)防浏览器 DoS;失败一律非 2xx + {error,detail}(AC7)。
+  const hubScreenshotPanels = {
+    hub: { id: 'hub', path: '/dashboard.html', waitSelector: '#board-body, #sessionList, body' },
+  };
+  let _hubScreenshotRenderer = null;
+  function getHubScreenshotRenderer() {
+    if (!_hubScreenshotRenderer) _hubScreenshotRenderer = createPuppeteerRenderer({ env: process.env });
+    return _hubScreenshotRenderer;
+  }
+  const hubScreenshotRateLimiter = createRateLimiter({ max: 60, windowMs: 60_000 });
+  const hubScreenshotHandler = createScreenshotHandler({
+    panels: hubScreenshotPanels,
+    baseUrl: `http://${host || '127.0.0.1'}:${port}`,
+    token: hubToken || '',
+    render: (ctx) => getHubScreenshotRenderer().render(ctx),
+  });
+  app.get('/api/screenshot', (req, res, next) => {
+    const { limited, retryAfterMs } = hubScreenshotRateLimiter.check(req.ip);
+    if (limited) {
+      res.set('Retry-After', String(Math.ceil((retryAfterMs || 60000) / 1000)))
+        .status(429)
+        .type('application/json')
+        .json({ error: 'rate_limited', detail: 'screenshot endpoint rate limit exceeded' });
+      return;
+    }
+    return hubScreenshotHandler(req, res, next);
   });
 
   // —— Agent 任务生命周期(6 状态机聚合)——
