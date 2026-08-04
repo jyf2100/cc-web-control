@@ -24,7 +24,9 @@ function fakePuppeteerModule(opts = {}) {
     lastCookie: null,
     lastViewport: null,
     lastGoto: null,
+    goto: 0,
     lastWait: null,
+    waitForSelector: 0,
     lastScreenshot: null,
     closedBrowser: false,
     closedContexts: 0,
@@ -39,13 +41,14 @@ function fakePuppeteerModule(opts = {}) {
             async setCookie(c) { calls.lastCookie = c; },
             async setViewport(v) { calls.lastViewport = v; },
             async goto(u, o) {
+              calls.goto++;
               calls.lastGoto = { u, o };
               if (opts.gotoThrows) {
                 const e = new Error(opts.gotoThrows === true ? 'Navigation timeout exceeded' : opts.gotoThrows);
                 throw e;
               }
             },
-            async waitForSelector(s, o) { calls.lastWait = { s, o }; },
+            async waitForSelector(s, o) { calls.waitForSelector++; calls.lastWait = { s, o }; },
             async screenshot(o) { calls.lastScreenshot = o; return png; },
             async close() { calls.closedPages++; },
           };
@@ -174,6 +177,37 @@ test('render: close() 关闭 browser', async () => {
   // close 后再次 render 应重新 launch
   await r.render({ url: 'http://127.0.0.1:7684/', width: 10, height: 10, waitSelector: 'body' });
   assert.equal(calls.launch, 2);
+});
+
+// ============ AC3/AC6 sanity：fresh goto + waitSelector 透传 ============
+// AC3(N 张卡片)/AC6(实时状态)本质是视觉断言,需真浏览器/CI 读图核验;
+// 此处只做接线层 sanity:每张截图都发起一次全新 goto(非缓存快照,→ AC6),
+// 并把面板的 waitSelector 透给浏览器(等"内容已渲染"→ AC3 内容落屏的前提)。
+
+test('render: 每次截图都发起一次全新 goto(AC6 实时,非启动时静态快照)', async () => {
+  const { puppeteer, calls } = fakePuppeteerModule();
+  const r = createPuppeteerRenderer(baseRendererOpts(puppeteer));
+  const url = 'http://127.0.0.1:7684/dashboard.html';
+  for (let i = 0; i < 3; i++) {
+    await r.render({ url, width: 100, height: 100, waitSelector: '#board-body, body' });
+  }
+  // 3 次 render → 3 次 goto(browser 单例复用,但每次都重新导航到目标页)
+  assert.equal(calls.launch, 1, 'browser 单例只 launch 一次(AC8)');
+  assert.equal(calls.goto, 3, '每次 render 都 fresh goto → 截的是请求时刻的实时态(AC6)');
+  assert.equal(calls.lastGoto.u, url);
+});
+
+test('render: waitSelector 透传给浏览器(AC3 内容已渲染的前提)', async () => {
+  const { puppeteer, calls } = fakePuppeteerModule();
+  const r = createPuppeteerRenderer(baseRendererOpts(puppeteer));
+  const sel = '#board-body, #sessionList, body';
+  await r.render({
+    url: 'http://127.0.0.1:7685/dashboard.html',
+    width: 1280, height: 800,
+    waitSelector: sel,
+  });
+  assert.equal(calls.waitForSelector, 1);
+  assert.equal(calls.lastWait.s, sel, 'hub 面板 waitSelector 原样透传');
 });
 
 // ============ createPuppeteerRenderer: 失败路径(AC7) ============
