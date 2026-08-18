@@ -53,6 +53,26 @@
             <div id="autonomy-body" class="autonomy-body" aria-live="polite"></div>
         </section>
 
+        <!-- hub 模式:会话轨迹聚合面板(各机 .jsonl 清单,机器/UTC 日期过滤 + 详情 + 导出)-->
+        <section id="trajectories-panel" class="traj-panel" hidden aria-label="会话轨迹">
+            <div class="traj-panel__head">
+                <div class="traj-panel__title">
+                    <span class="traj-panel__name">会话轨迹</span>
+                    <span class="traj-panel__hint">各机 Claude Code .jsonl 轨迹清单 · 轻量 Evolve 数据底座</span>
+                </div>
+                <div class="traj-panel__tools" role="group" aria-label="轨迹过滤与导出">
+                    <select id="traj-machine-filter" class="traj-machine-filter" aria-label="按机器过滤">
+                        <option value="">全部机器</option>
+                    </select>
+                    <input type="date" id="traj-date-filter" class="traj-date-filter" aria-label="按 UTC 日期过滤">
+                    <button type="button" id="traj-filter-clear" class="traj-btn">清除</button>
+                    <button type="button" id="traj-export" class="traj-btn">导出清单</button>
+                </div>
+            </div>
+            <div id="traj-body" class="traj-body" aria-live="polite"></div>
+            <div id="traj-detail" class="traj-detail" hidden></div>
+        </section>
+
         <!-- 三页面:扇出 bar(选中卡片后显示,Enter 广播,不跳控制台)-->
         <form id="fanout-bar" class="fanout-bar" hidden>
             已选 <span class="sel-count" id="sel-count">0</span>
@@ -66,6 +86,7 @@
     <script src="terminal_cleaner.cjs"></script>
     <script src="board_render.cjs"></script>
     <script src="dashboard_render.cjs"></script>
+    <script src="trajectories_view.cjs"></script>
     <script src="dashboard.js"></script>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </body>

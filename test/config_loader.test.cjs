@@ -265,11 +265,11 @@ test('权限 warning 的 mode 显示为八进制(防 chmod 420 误用 — chmod 
   );
 });
 
-// ---- Task 4:SINGLE_SCHEMA(7684 全 23 字段)+ object passthrough ----
+// ---- Task 4:SINGLE_SCHEMA(7684 全 25 字段)+ object passthrough ----
 
-test('SINGLE_SCHEMA:23 字段全齐,env/default/type 对齐 spec §5.1', () => {
+test('SINGLE_SCHEMA:25 字段全齐,env/default/type 对齐 spec §5.1', () => {
   const fields = Object.keys(SINGLE_SCHEMA);
-  assert.equal(fields.length, 23, `应有 23 字段,实际 ${fields.length}: ${fields.join(',')}`);
+  assert.equal(fields.length, 25, `应有 25 字段,实际 ${fields.length}: ${fields.join(',')}`);
   assert.equal(SINGLE_SCHEMA.port.env, 'CC_WEB_PORT');
   assert.equal(SINGLE_SCHEMA.port.default, 7684);
   assert.equal(SINGLE_SCHEMA.port.type, 'port');
@@ -290,6 +290,13 @@ test('SINGLE_SCHEMA:23 字段全齐,env/default/type 对齐 spec §5.1', () => {
   assert.equal(SINGLE_SCHEMA.defaultEffort.type, 'string');
   assert.equal(SINGLE_SCHEMA.defaultEffort.env, 'CC_WEB_DEFAULT_EFFORT');
   assert.equal(SINGLE_SCHEMA.defaultEffort.default, 'medium');
+  // 会话轨迹(轻量 Evolve 数据底座):根路径默认空(= ~/.claude/projects),超限阈值默认 50MB
+  assert.equal(SINGLE_SCHEMA.trajectoryRoot.type, 'string');
+  assert.equal(SINGLE_SCHEMA.trajectoryRoot.env, 'CC_WEB_TRAJECTORY_ROOT');
+  assert.equal(SINGLE_SCHEMA.trajectoryRoot.default, '');
+  assert.equal(SINGLE_SCHEMA.trajectoryOversizeBytes.type, 'number');
+  assert.equal(SINGLE_SCHEMA.trajectoryOversizeBytes.env, 'CC_WEB_TRAJECTORY_OVERSIZE_BYTES');
+  assert.equal(SINGLE_SCHEMA.trajectoryOversizeBytes.default, 50 * 1024 * 1024);
 });
 
 test('SINGLE_SCHEMA 全字段从文件加载(端到端)', () => {

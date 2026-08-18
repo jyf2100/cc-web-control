@@ -17,6 +17,7 @@ const { DashboardAggregator } = require('./dashboard_aggregator.cjs');
 const { AutonomyStore } = require('./autonomy_store.cjs');
 const { AutonomyAggregator, summarizeResults } = require('./autonomy_aggregator.cjs');
 const { AuditAggregator } = require('./audit_aggregator.cjs');
+const { TrajectoryAggregator, queryTrajectories } = require('./trajectory_aggregator.cjs');
 const { AgentClient } = require('./agent_client.cjs');
 const { WsBridge } = require('./ws_bridge.cjs');
 const { createRateLimiter } = require('../rate_limit.cjs');
@@ -112,6 +113,18 @@ function startHub(opts) {
       const r = await ac.fetchAudit(limit);
       if (!r.ok) registrar.notifyUnreachable(sec.id, sec.url, r.error);
       return r.ok ? { ok: true, entries: r.entries } : { ok: false, error: r.error };
+    },
+  });
+
+  // 会话轨迹聚合(各机 /api/trajectories → /api/global-trajectories):轻量 Evolve 的
+  // 数据底座,只聚合元数据不搬文件本体;单机旧版本无该端点 → 该机贡献空清单。
+  const trajectoryAggregator = new TrajectoryAggregator({
+    registry,
+    intervalMs,
+    fetchOne: async (sec) => {
+      const ac = clients.get(sec.id);
+      if (!ac) return { ok: false, error: `unknown machine: ${sec.id}` };
+      return ac.fetchTrajectories();
     },
   });
 
@@ -377,6 +390,22 @@ function startHub(opts) {
   // 全局聚合子进程审计(Audit 面板):各单机 cc-subprocess.jsonl 合并,ts 倒序
   app.get('/api/global-audit', (req, res) => {
     res.json(auditAggregator.getLatest());
+  });
+
+  // 全局聚合会话轨迹(「会话轨迹」视图,轻量 Evolve 数据底座):
+  //   GET /api/global-trajectories                    → 全部轨迹(每条带 machine 标签)
+  //   GET /api/global-trajectories?machine=<id>       → 仅该机(验收 7)
+  //   GET /api/global-trajectories?date=YYYY-MM-DD    → mtime 落在该 UTC 日(含起点不含次日)
+  //   组合过滤均可;非法 date → 400。供前端看板与下游 Evolve 分析脚本消费(路径清单导出)。
+  app.get('/api/global-trajectories', (req, res) => {
+    const machine = req.query.machine != null ? String(req.query.machine) : '';
+    const date = req.query.date != null ? String(req.query.date) : '';
+    try {
+      res.json(queryTrajectories(trajectoryAggregator.getLatest(), { machine, date }));
+    } catch (e) {
+      // 非法 date 格式:400(不泄漏内部堆栈)
+      res.status(400).json({ error: e.code === 'INVALID_TRAJECTORY_DATE' ? e.message : 'bad request' });
+    }
   });
 
   // —— 主控 agent 内部端点(只读参谋 T1)——
@@ -646,6 +675,7 @@ function startHub(opts) {
     server.listen(port, host, () => {
       aggregator.start();
       auditAggregator.start();
+      trajectoryAggregator.start();
       const addr = server.address();
       // 0.0.0.0 归一为 127.0.0.1:浏览器/本机访问开不了 0.0.0.0(url 供 server_entry 自动开浏览器)
       const displayHost = (!host || host === '0.0.0.0') ? '127.0.0.1' : host;
@@ -671,6 +701,7 @@ function startHub(opts) {
           clearInterval(autonomyCompactTimer);
           try { autonomyStore.compact(); } catch {} // 关闭时整表重写,裁掉过期事件
           auditAggregator.stop();
+          trajectoryAggregator.stop();
           registrar.cleanup();
           for (const ac of clients.values()) ac.close();
           wss.close();
