@@ -35,6 +35,8 @@ const { RegisterClient } = require('./register_client.cjs');
 const { createSecretStore, resolveApiKey, maskSecret } = require('./secret_store.cjs');
 const { migrateConfigKeyToKeychain } = require('./secret_migrate.cjs');
 const { SubprocessAudit } = require('./subprocess_audit.cjs');
+// 会话轨迹(.jsonl)扫描:hub 聚合「会话轨迹」视图(轻量 Evolve 数据底座)的数据源
+const { scanTrajectories, DEFAULT_TRAJECTORY_ROOT } = require('./trajectory_scan.cjs');
 
 // 配置文件(~/.cc-web-control/config.json,--config 覆盖)+ env 覆盖(env > file > default)。
 // 无文件 = 纯 env/默认 = 现状行为(向后兼容)。warnings:未知字段 / token 权限过松。
@@ -579,6 +581,37 @@ function startWebServer() {
       res.json({ entries: masked });
     } catch (error) {
       res.json({ entries: [] }); // 审计端点绝不 500,降级空列表
+    }
+  });
+
+  // 会话轨迹清单(供 hub /api/global-trajectories 聚合):扫描本机 Claude Code .jsonl 元数据。
+  // 根路径/超限阈值可配置(CC_WEB_TRAJECTORY_ROOT / CC_WEB_TRAJECTORY_OVERSIZE_BYTES,
+  // 默认 ~/.claude/projects + 50MB);hub 每 intervalMs 轮询打到本端点,逐次全量扫盘代价高,
+  // 故 TTL 内复用上次结果(60s),?refresh=1 强制重扫。与审计端点同口径:绝不 500,降级空清单。
+  const TRAJECTORY_CACHE_TTL_MS = 60_000;
+  let trajectoryCache = null;
+  function scanTrajectoriesNow() {
+    trajectoryCache = scanTrajectories({
+      rootDir: CFG.trajectoryRoot || DEFAULT_TRAJECTORY_ROOT,
+      oversizeBytes: CFG.trajectoryOversizeBytes,
+      log: console,
+    });
+    return trajectoryCache;
+  }
+  app.get('/api/trajectories', (req, res) => {
+    try {
+      const stale = !trajectoryCache || Date.now() - trajectoryCache.scannedAt > TRAJECTORY_CACHE_TTL_MS;
+      const r = (req.query.refresh === '1' || stale) ? scanTrajectoriesNow() : trajectoryCache;
+      const body = {
+        root: r.root,
+        scannedAt: r.scannedAt,
+        trajectories: r.trajectories,
+        skipped: r.skipped,
+      };
+      if (r.warning) body.warning = r.warning; // 根目录不存在等:空清单 + warning(验收 3)
+      res.json(body);
+    } catch (error) {
+      res.json({ root: CFG.trajectoryRoot || DEFAULT_TRAJECTORY_ROOT, trajectories: [], skipped: 0, error: 'trajectory scan failed' });
     }
   });
 
