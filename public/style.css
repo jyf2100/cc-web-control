@@ -399,3 +399,13 @@ html, body {
   border: 1px solid var(--border); background: var(--bg, #fff); color: var(--fg, #1a1a1a);
   flex: 1; min-width: 0;
 }
+
+/* mods 风险横幅(本机 Claude Code mods/plugins 非空时常驻显示;client.js 控制显隐) */
+.mods-banner {
+    margin: 0; padding: 10px 16px;
+    font-family: var(--sans); font-size: 13px; line-height: 1.5;
+    color: var(--errored, #c01a4b);
+    background: rgba(192, 26, 75, 0.07);
+    border-bottom: 1px solid rgba(192, 26, 75, 0.25);
+}
+.mods-banner[hidden] { display: none; }

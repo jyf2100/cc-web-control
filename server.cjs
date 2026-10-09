@@ -35,6 +35,8 @@ const { RegisterClient } = require('./register_client.cjs');
 const { createSecretStore, resolveApiKey, maskSecret } = require('./secret_store.cjs');
 const { migrateConfigKeyToKeychain } = require('./secret_migrate.cjs');
 const { SubprocessAudit } = require('./subprocess_audit.cjs');
+// mods/plugins 环境巡检:Claude Code 2.1.287+ Mods 常驻进程内且无沙盒,对本控制台是风险面。
+const { inspectModsEnv, detectClaudeVersion, evaluateModsStatus } = require('./mods_inspect.cjs');
 
 // 配置文件(~/.cc-web-control/config.json,--config 覆盖)+ env 覆盖(env > file > default)。
 // 无文件 = 纯 env/默认 = 现状行为(向后兼容)。warnings:未知字段 / token 权限过松。
@@ -570,6 +572,34 @@ function startWebServer() {
     }
   });
 
+  // —— mods/plugins 环境巡检(Claude Code 2.1.287+ Mods 风险面)——
+  // cc 版本探测有 spawn 成本:进程内缓存 1h(版本运行期不变,升级后重启即刷新)。
+  const MODS_CC_VERSION_TTL_MS = 60 * 60 * 1000;
+  let ccVersionCache = { value: null, at: 0 };
+  async function getCcVersion() {
+    if (ccVersionCache.value && Date.now() - ccVersionCache.at < MODS_CC_VERSION_TTL_MS) {
+      return ccVersionCache.value;
+    }
+    const v = await detectClaudeVersion();
+    ccVersionCache = { value: v, at: Date.now() };
+    return v;
+  }
+  // 巡检 = 文件采集(同步、廉价,每次现算) + 缓存的 CC 版本 → 补齐 risk/state。
+  // 文件读失败时 mods_count 降级 0 且带 error(mods_inspect 降级约定,绝不静默吞错)。
+  async function getModsStatus() {
+    const ccVersion = await getCcVersion();
+    return evaluateModsStatus(inspectModsEnv({ ccVersion }));
+  }
+
+  // 供前端横幅(client.js 轮询)与诊断用;采集异常 → 降级 error 载荷,绝不 500。
+  app.get('/api/mods-status', async (req, res) => {
+    try {
+      res.json(await getModsStatus());
+    } catch (e) {
+      res.json({ cc_version: 'unknown', mods_count: 0, source: '', error: `mods 巡检异常: ${e.message}` });
+    }
+  });
+
   // 子进程 spawn 级审计(供 hub 聚合 /api/global-audit)。cmd 字段脱敏(防 key 泄露)。
   app.get('/api/audit/cc-subprocess', async (req, res) => {
     try {
@@ -958,6 +988,8 @@ function startWebServer() {
         publicUrl: PUBLIC_URL,
         bindHost: HOST,
         port: PORT,
+        // mods 巡检随注册/心跳上报(异步 provider,register_client 内部吞错并降级 error 帧)
+        getModsStatus,
       });
       registerClient.start();
     }

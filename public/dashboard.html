@@ -53,6 +53,18 @@
             <div id="autonomy-body" class="autonomy-body" aria-live="polite"></div>
         </section>
 
+        <!-- hub 模式:mods/plugins 环境巡检面板(每机一行:CC 版本 / mods 条目数 / 状态标记;默认 hidden,
+             有机器上报 mods 时由 dashboard.js 揭示)-->
+        <section id="mods-panel" class="mods-panel" hidden aria-label="mods/plugins 环境巡检">
+            <div class="mods-panel__head">
+                <div class="mods-panel__title">
+                    <span class="mods-panel__name">mods / plugins 巡检</span>
+                    <span class="mods-panel__hint">Claude Code 2.1.287+ Mods 常驻进程内、无沙盒 —— 可能改写经本看板批准的内容</span>
+                </div>
+            </div>
+            <div id="mods-body" class="mods-body" aria-live="polite"></div>
+        </section>
+
         <!-- 三页面:扇出 bar(选中卡片后显示,Enter 广播,不跳控制台)-->
         <form id="fanout-bar" class="fanout-bar" hidden>
             已选 <span class="sel-count" id="sel-count">0</span>

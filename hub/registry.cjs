@@ -36,6 +36,14 @@ class MachineRegistry {
     this._byId.set(id, { ...m, online: !!online, lastError: online ? null : lastError });
   }
 
+  // mods/plugin 巡检状态更新(注册帧携带 + 心跳 ping 刷新;不可变替换)。
+  // mods 已是 hub 侧清洗/评估后的对象(registrar 经 sanitizeModsStatus),此处只存。
+  setMods(id, mods) {
+    const m = this._byId.get(id);
+    if (!m) return;
+    this._byId.set(id, { ...m, mods });
+  }
+
   // 对外快照:all() 已剥离 token,此处仅作语义别名
   snapshot() {
     return this.all();

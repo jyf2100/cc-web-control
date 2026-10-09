@@ -3,6 +3,7 @@
 // hub 侧注册处理器:接受单机反向 WS(/api/hub/agent),鉴权 → 校验 → registry.add + 建 AgentClient。
 // 连接断开即 remove;回连失败经 notifyUnreachable 回送告警帧;空闲超时防假死;同 id 抢占告警。
 const { validateMachine } = require('./config.cjs');
+const { sanitizeModsStatus } = require('../mods_inspect.cjs');
 
 const IDLE_TIMEOUT_MS = 60000;
 const USURP_WINDOW_MS = 60000;
@@ -42,6 +43,12 @@ class AgentRegistrar {
       // (否则注册后 ping 被忽略,idle 不重置 → 60s 超时断连 → 终端每分钟死一次)
       if (m.type === 'ping') {
         this._resetIdle(ws);
+        // mods 巡检随心跳刷新(不可信输入 → 白名单清洗 + hub 侧重算 risk;垃圾载荷忽略不覆盖)
+        if (m.mods !== undefined) {
+          const id = this._idForConn(ws);
+          const mods = sanitizeModsStatus(m.mods);
+          if (id && mods) this._registry.setMods(id, mods);
+        }
         try { ws.send(JSON.stringify({ type: 'pong' })); } catch {}
         return;
       }
@@ -67,6 +74,9 @@ class AgentRegistrar {
       return;
     }
     this._recordUsurp(machine.id);
+    // mods 巡检状态(可选字段,旧版 agent 不带):清洗后随机器入 registry
+    const mods = sanitizeModsStatus(m.mods);
+    if (mods) machine = { ...machine, mods };
     // 后者覆盖前者:旧连接关闭
     const prev = this._connsById.get(machine.id);
     if (prev && prev !== ws) {
@@ -79,6 +89,14 @@ class AgentRegistrar {
     this._connsById.set(machine.id, ws);
     this._resetIdle(ws);
     try { ws.send(JSON.stringify({ type: 'registered' })); } catch {}
+  }
+
+  // 注册连接 → machine id(心跳 ping 刷新 mods 时反查;连接数小,线性查找足够)
+  _idForConn(ws) {
+    for (const [id, c] of this._connsById) {
+      if (c === ws) return id;
+    }
+    return null;
   }
 
   _removeByConn(ws, { keepRegistry = false } = {}) {

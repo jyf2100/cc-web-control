@@ -185,3 +185,73 @@ test('register 帧 cli_tool 非枚举值 → 回退 unknown(不报错)', async (
     ws.close(); await stop();
   });
 });
+
+// ---- mods 巡检上报(注册帧 + 心跳 ping;hub 侧清洗 + registry 持久) ----
+
+test('register 帧带 mods → registry 存储(含 hub 侧重算的 risk/state)', async () => {
+  await withRegistrar({ hubToken: 'ht' }, async ({ registry, port, stop }) => {
+    const ws = connect(port, 'ht');
+    await new Promise((r) => ws.on('open', r));
+    ws.send(JSON.stringify({
+      type: 'register', id: 'm1', name: 'M1', url: 'http://h:1', token: 't',
+      mods: { cc_version: '2.1.300', mods_count: 2, source: 'fixture', risk: false }, // 客户端伪造 risk:false 应被重算
+    }));
+    await new Promise((r) => setTimeout(r, 80));
+    const m = registry.getById('m1');
+    assert.ok(m.mods, 'mods 应存入 registry');
+    assert.equal(m.mods.mods_count, 2);
+    assert.equal(m.mods.risk, true, 'hub 依 cc_version=2.1.300 + count=2 重算 risk(不信任客户端自评)');
+    assert.equal(m.mods.state, 'risk');
+    // snapshot()/all() 剥离 token/conn,mods 数据保留
+    assert.ok(registry.snapshot().find((x) => x.id === 'm1').mods);
+    ws.close(); await stop();
+  });
+});
+
+test('心跳 ping 帧刷新 mods → registry 更新(验收 4:下一心跳周期内状态变化可见)', async () => {
+  await withRegistrar({ hubToken: 'ht' }, async ({ registry, port, stop }) => {
+    const ws = connect(port, 'ht');
+    await new Promise((r) => ws.on('open', r));
+    ws.send(JSON.stringify({ type: 'register', id: 'm1', url: 'http://h:1', token: 't',
+      mods: { cc_version: '2.1.300', mods_count: 2, source: 'fixture' } }));
+    await new Promise((r) => setTimeout(r, 60));
+    assert.equal(registry.getById('m1').mods.mods_count, 2);
+    assert.equal(registry.getById('m1').mods.risk, true);
+    // 模拟单机删除 mods 夹具:下一次心跳上报 count 0
+    ws.send(JSON.stringify({ type: 'ping', mods: { cc_version: '2.1.300', mods_count: 0, source: 'fixture' } }));
+    await new Promise((r) => setTimeout(r, 60));
+    assert.equal(registry.getById('m1').mods.mods_count, 0, '心跳应刷新 mods 计数');
+    assert.equal(registry.getById('m1').mods.risk, false, '风险标记随计数归零消失');
+    ws.close(); await stop();
+  });
+});
+
+test('mods 巡检异常帧(error)→ registry 记录 error 状态(验收 5)', async () => {
+  await withRegistrar({ hubToken: 'ht' }, async ({ registry, port, stop }) => {
+    const ws = connect(port, 'ht');
+    await new Promise((r) => ws.on('open', r));
+    ws.send(JSON.stringify({ type: 'register', id: 'm1', url: 'http://h:1', token: 't' }));
+    await new Promise((r) => setTimeout(r, 60));
+    ws.send(JSON.stringify({ type: 'ping', mods: { cc_version: 'unknown', mods_count: 0, source: '', error: 'EACCES' } }));
+    await new Promise((r) => setTimeout(r, 60));
+    const mods = registry.getById('m1').mods;
+    assert.equal(mods.state, 'error');
+    assert.equal(mods.error, 'EACCES');
+    ws.close(); await stop();
+  });
+});
+
+test('心跳携带垃圾 mods → 忽略不覆盖已有状态(不可信输入防御)', async () => {
+  await withRegistrar({ hubToken: 'ht' }, async ({ registry, port, stop }) => {
+    const ws = connect(port, 'ht');
+    await new Promise((r) => ws.on('open', r));
+    ws.send(JSON.stringify({ type: 'register', id: 'm1', url: 'http://h:1', token: 't',
+      mods: { cc_version: '2.1.300', mods_count: 1, source: 'x' } }));
+    await new Promise((r) => setTimeout(r, 60));
+    ws.send(JSON.stringify({ type: 'ping', mods: { cc_version: '2.1.300', mods_count: -5 } })); // 非法计数
+    ws.send(JSON.stringify({ type: 'ping', mods: 'garbage' })); // 非对象
+    await new Promise((r) => setTimeout(r, 60));
+    assert.equal(registry.getById('m1').mods.mods_count, 1, '垃圾载荷不应覆盖合法状态');
+    ws.close(); await stop();
+  });
+});

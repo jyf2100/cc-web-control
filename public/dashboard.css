@@ -493,3 +493,40 @@ html, body {
     .autonomy-panel { background: var(--surface, rgba(255,255,255,0.03)); }
     .autonomy-window__btn[aria-pressed="true"] { background: var(--surface-raised, rgba(255,255,255,0.12)); }
 }
+
+/* —— mods/plugins 环境巡检面板(hub 模式追加:每机一行 CC 版本/mods 数/状态标记)—— */
+.mods-panel {
+    margin: 16px 0 0;
+    padding: 14px 16px;
+    border: 1px solid var(--border, rgba(0, 0, 0, 0.1));
+    border-radius: 10px;
+    background: var(--surface, rgba(0, 0, 0, 0.02));
+}
+.mods-panel[hidden] { display: none; }
+.mods-panel__head { margin-bottom: 10px; }
+.mods-panel__title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mods-panel__name { font-weight: 600; font-size: 14px; }
+.mods-panel__hint { font-size: 12px; opacity: 0.62; }
+.mods-body { min-height: 24px; }
+.mods-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.mods-table th, .mods-table td {
+    text-align: left; padding: 7px 10px;
+    border-bottom: 1px solid var(--border, rgba(0,0,0,0.06));
+}
+.mods-table th { font-size: 11px; font-weight: 600; opacity: 0.6; text-transform: uppercase; letter-spacing: 0.04em; }
+.mods-table td { font-variant-numeric: tabular-nums; }
+.mods-row__name { font-weight: 500; }
+.mods-row__count, .mods-badge { text-align: right; }
+.mods-badge { font-weight: 600; white-space: nowrap; }
+.mods-badge--ok { color: var(--working, #1f8a65); }
+.mods-badge--risk { color: var(--errored, #c01a4b); }
+.mods-badge--error { color: var(--errored, #c01a4b); }
+.mods-badge--unknown { color: var(--waiting, #c08532); }
+.mods-badge--none { color: var(--idle, rgba(38,37,30,0.55)); font-weight: 400; }
+.mods-row--risk .mods-row__name { color: var(--errored, #c01a4b); }
+@media (max-width: 540px) {
+    .mods-table th, .mods-table td { padding: 6px 6px; }
+}
+@media (prefers-color-scheme: dark) {
+    .mods-panel { background: var(--surface, rgba(255,255,255,0.03)); }
+}
