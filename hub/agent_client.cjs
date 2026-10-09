@@ -42,6 +42,21 @@ class AgentClient {
     }
   }
 
+  // 拉单机会话轨迹清单(供 hub /api/global-trajectories 聚合)。旧版单机无此端点 →
+  // 404 → {ok:false},该机贡献空清单,不影响聚合整体(向后兼容)。
+  async fetchTrajectories() {
+    try {
+      const res = await fetch(`${this.url}/api/trajectories`, {
+        headers: { Authorization: `Bearer ${this.token}` },
+      });
+      if (!res.ok) return { ok: false, error: `${res.status}` };
+      const payload = await res.json();
+      return { ok: true, payload };
+    } catch (e) {
+      return { ok: false, error: e.code || e.message };
+    }
+  }
+
   async createSession({ name, cwd }) {
     try {
       const res = await fetch(`${this.url}/api/sessions`, {

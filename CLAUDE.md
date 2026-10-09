@@ -84,6 +84,8 @@ hub 模式:
 
 **registry 是纯内存 `Map`**,不落盘(`registry.cjs`),进程重启靠单机重新反向注册自愈。对外 `snapshot()`/`all()` **剥离 token 与连接**,只有 `getSecret()` 返回含 token 的回连凭证。静态 `hub-machines.json` 已 deprecated,改用单机运行时注册。校验拒云元数据地址 `169.254.169.254`(SSRF 防护,`hub/config.cjs`)。
 
+**会话轨迹聚合**(轻量 Evolve 数据底座):单机 `trajectory_scan.cjs` 扫描 `~/.claude/projects/**/*.jsonl` 元数据(根路径/超限阈值经 `trajectoryRoot`/`trajectoryOversizeBytes` 配置),经 `GET /api/trajectories`(60s TTL 缓存)供 hub `trajectory_aggregator.cjs` 每 2s 轮询,聚合为 `GET /api/global-trajectories`(?machine=/?date=YYYY-MM-DD UTC 日过滤)。只聚合元数据不搬文件本体;前端 `public/trajectories_view.cjs` 是 hub 看板「会话轨迹」面板的纯函数渲染源(过滤语义与 hub 侧副本须同步维护)。
+
 **mainAgent**(可选,hub 上常驻一个"值班" Claude,默认关):hub 在 `~/.cc-web-control/main-agent/` 生成 `.mcp.json`/`CLAUDE.md`/`mcp-trust.json`,起一个 tmux session 跑 `claude --mcp-config ...`。它通过 `hub/mcp/stdio.cjs`(stdio MCP server)暴露 **4 个只读工具**(`list_sessions`/`read_session`/`dequeue_event`/`ack_event`,经 HTTP 回调 hub)。`event_watcher.cjs` 对各机 session 的 `errored`/`idle` 状态做边沿检测(去抖 + 指数退避),`agent_dispatcher.cjs` poke 主控 agent 处理,ack 反馈调节退避(settle/backoff),全程落 `main-agent-audit.jsonl`(runId 贯穿)。**token 经 `tmux -e` env 注入,不落 mcp-config 文件**;LocalTmuxClient 对其输出 redact token 且只读。
 
 ## 配置体系(config_loader.cjs)

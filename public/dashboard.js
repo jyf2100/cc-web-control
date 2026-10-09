@@ -7,6 +7,7 @@
     'use strict';
 
     var R = window.CCDashboard;
+    var TV = window.TrajectoriesView;   // 会话轨迹纯函数模块(trajectories_view.cjs;面板逻辑在 hub 段)
     if (!R) { console.error('dashboard_render.cjs 未加载,看板无法渲染'); return; }
     var POLL_MS = 2000;
     var list = document.getElementById('sessionList');
@@ -496,6 +497,7 @@
         if (!hubPolling) return;
         await pollHub();
         pollAutonomy(); // 自主指标随 hub 轮询一起刷新(独立 try/catch,不阻塞 board)
+        pollTrajectories(); // 会话轨迹随 hub 轮询一起刷新(独立 try/catch,不阻塞 board)
         if (hubPolling) setTimeout(hubLoop, HUB_POLL_MS); // Fix 10:HUB_POLL_MS 命名常量
     }
 
@@ -567,6 +569,132 @@
         });
     }
 
+    // ---- hub 模式:会话轨迹聚合面板(轮询 /api/global-trajectories,过滤在前端做)----
+    // TV(TrajectoriesView)已在文件顶部声明,此处直接复用
+    var trajPanel = document.getElementById('trajectories-panel');
+    var trajBody = document.getElementById('traj-body');
+    var trajDetail = document.getElementById('traj-detail');
+    var trajMachineFilter = document.getElementById('traj-machine-filter');
+    var trajDateFilter = document.getElementById('traj-date-filter');
+    var trajFilterClear = document.getElementById('traj-filter-clear');
+    var trajExportBtn = document.getElementById('traj-export');
+    var trajVisible = false;             // 是否已探测到 hub 提供 /api/global-trajectories(404 后不再轮询)
+    var lastTrajData = null;             // 缓存最近 payload,供过滤变化即时重画(不发请求)
+    var trajFiltered = [];               // 当前过滤结果(行点击/导出都读它,与界面一致)
+    // populate 机器下拉:保留当前选中(机器消失时回落「全部机器」);选项含「全部机器」空值。
+    function populateTrajMachines(machines) {
+        if (!trajMachineFilter) return;
+        var prev = trajMachineFilter.value;
+        var opts = ['<option value="">全部机器</option>'];
+        for (var i = 0; i < machines.length; i++) {
+            var m = machines[i] || {};
+            var id = m.id != null ? m.id : '';
+            if (id === '') continue;
+            // 离线机无轨迹,但仍在下拉中列出(在线后即有产出);标注名称便于区分同名。
+            var label = esc(m.name || m.id) + (m.online === false ? '(离线)' : '');
+            opts.push('<option value="' + esc(id) + '">' + label + '</option>');
+        }
+        var html = opts.join('');
+        if (trajMachineFilter.innerHTML !== html) trajMachineFilter.innerHTML = html;
+        // 回选:原值仍存在 → 保留;否则回落全部(空值)
+        var has = false;
+        for (var j = 0; j < trajMachineFilter.options.length; j++) {
+            if (trajMachineFilter.options[j].value === prev) { has = true; break; }
+        }
+        trajMachineFilter.value = has ? prev : '';
+    }
+    function trajCurrentFilters() {
+        return {
+            machine: trajMachineFilter ? trajMachineFilter.value : '',
+            date: trajDateFilter ? trajDateFilter.value : '',
+        };
+    }
+    // 过滤 + 重画列表(纯本地,不发请求);标题区/组头带聚合条数,详情随数据刷新隐藏防陈旧。
+    function rerenderTrajectories() {
+        if (!trajBody || !TV) return;
+        if (!lastTrajData) {
+            trajBody.innerHTML = '<div class="traj-empty"><span class="eyebrow">NO DATA</span> 尚无轨迹上报</div>';
+            return;
+        }
+        var filters = trajCurrentFilters();
+        var flat = TV.flattenTrajectories(lastTrajData);
+        trajFiltered = TV.filterTrajectories(flat, filters);
+        trajBody.innerHTML = TV.renderTrajectoriesBody(trajFiltered, filters);
+        // 聚合条数(带机器标识)随过滤变化更新;空过滤=全量 N,有过滤=命中 n / 全量 N
+        var total = flat.length;
+        var head = document.querySelector('#trajectories-panel .traj-panel__name');
+        if (head) {
+            head.textContent = total > 0
+                ? '会话轨迹 · ' + trajFiltered.length + '/' + total
+                : '会话轨迹';
+        }
+        trajDetail.hidden = true;   // 列表重建后旧行索引失效,防串行;点行再展开
+    }
+    // 行点击/键盘(委托,参照 sessionList 写法):按 data-traj-index 从 trajFiltered 查 item → 详情
+    function trajRowFromEvent(e) {
+        return e.target.closest ? e.target.closest('.traj-row') : null;
+    }
+    function showTrajDetail(row) {
+        if (!trajDetail || !TV) return;
+        var idx = parseInt(row.getAttribute('data-traj-index'), 10);
+        var item = trajFiltered[idx];
+        if (!item) return;
+        trajDetail.innerHTML = TV.renderTrajectoryDetail(item);
+        trajDetail.hidden = false;
+    }
+    if (trajBody) {
+        trajBody.addEventListener('click', function (e) {
+            var row = trajRowFromEvent(e); if (!row) return;
+            showTrajDetail(row);
+        });
+        trajBody.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            var row = trajRowFromEvent(e); if (!row) return;
+            e.preventDefault(); showTrajDetail(row);
+        });
+    }
+    // 过滤控件 change → 即时重画(纯本地过滤,不发请求);清除按钮清空两个控件
+    if (trajMachineFilter) trajMachineFilter.addEventListener('change', rerenderTrajectories);
+    if (trajDateFilter) trajDateFilter.addEventListener('change', rerenderTrajectories);
+    if (trajFilterClear) trajFilterClear.addEventListener('click', function () {
+        if (trajMachineFilter) trajMachineFilter.value = '';
+        if (trajDateFilter) trajDateFilter.value = '';
+        rerenderTrajectories();
+    });
+    // 导出:当前过滤结果 → 路径清单 JSON(Blob + a[download] + revoke)
+    if (trajExportBtn) trajExportBtn.addEventListener('click', function () {
+        if (!TV) return;
+        if (!trajPanel || trajPanel.hidden) return;   // 面板隐藏(单机/旧 hub)→ 忽略
+        var payload = TV.buildExportPayload(trajFiltered, trajCurrentFilters(), Date.now());
+        var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'trajectories-export.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    });
+    async function pollTrajectories() {
+        if (!trajPanel || trajPanel.hidden || !trajVisible) return; // 单机模式 / 未揭示 / 旧 hub → 不轮询
+        try {
+            var res = await fetch('/api/global-trajectories', { headers: { 'Accept': 'application/json' } });
+            if (res.status === 401) { return; }              // 交给 pollHub 的 401 跳登录,这里不重复跳
+            if (res.status === 404) { trajPanel.hidden = true; trajVisible = false; return; } // 旧 hub 不提供 → 永久隐藏
+            if (res.ok) {
+                var ct = res.headers.get('content-type') || '';
+                if (ct.indexOf('application/json') !== -1) {
+                    var data; try { data = await res.json(); } catch (e) { return; }
+                    trajVisible = true;
+                    lastTrajData = data;
+                    populateTrajMachines((data && data.machines) || []);
+                    rerenderTrajectories();
+                }
+            }
+        } catch (e) { /* 网络抖动:静默,下轮重试(与 pollHub 一致的容错策略) */ }
+    }
+
     async function detectMode() {
         var probe;
         try {
@@ -591,6 +719,8 @@
         renderBoard(data);
         if (autonomyPanel) autonomyPanel.hidden = false;   // 揭示自主指标面板(hub 模式);pollAutonomy 首帧填充
         pollAutonomy();
+        if (trajPanel) { trajPanel.hidden = false; trajVisible = true; } // 揭示会话轨迹面板(hub 模式);置 trajVisible 才会真正轮询(404 后永久复位 false)
+        pollTrajectories();
         hubLoop();
     }
 
