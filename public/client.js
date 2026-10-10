@@ -119,6 +119,33 @@
         }
     }
 
+    // —— mods/plugin 风险横幅(Claude Code 2.1.287+ Mods 常驻进程内、无沙盒)——
+    // 本机 mods 非空 → 常驻横幅:用户在此控制台批准/输入的内容可能被宿主机 mods 改写,
+    // 「已批准」≠ 实际执行。为空或端点不可用(hub 部署无 /api/mods-status)→ 横幅不存在于 DOM 可见态。
+    function renderModsBanner(status) {
+        const el = document.getElementById('modsBanner');
+        if (!el) return;
+        const count = status && Number(status.mods_count) > 0 ? Math.floor(Number(status.mods_count)) : 0;
+        if (!count) {
+            el.hidden = true;
+            el.textContent = '';
+            return;
+        }
+        const ver = status && status.cc_version ? status.cc_version : 'unknown';
+        el.textContent = `⚠ 检测到本机 ${count} 个 Claude Code mods/plugins(CC ${ver}):mods 以你的全权运行且无沙盒,可能改写此控制台的输入与工具批准`;
+        el.hidden = false;
+    }
+
+    async function pollModsBanner() {
+        try {
+            renderModsBanner(await fetchJson('/api/mods-status'));
+        } catch {
+            // 端点不存在(hub)/网络失败 → 隐藏横幅,不打扰
+            const el = document.getElementById('modsBanner');
+            if (el) el.hidden = true;
+        }
+    }
+
     async function fetchJson(url, options) {
         const resp = await fetch(url, options);
         const text = await resp.text();
@@ -1028,6 +1055,9 @@
             await loadSessions();
             await loadProjects();
             connect();
+            // mods 风险横幅:启动即探测 + 每 30s 刷新(mods 增删 → 横幅随之显隐)
+            pollModsBanner();
+            setInterval(pollModsBanner, 30_000);
             // 跨页开抽屉:看板页「切换」tab 跳来时带 sessionStorage 标志 → 打开抽屉 → 立即清
             if (sessionStorage.getItem('openSwitchSheet') === '1') {
                 sessionStorage.removeItem('openSwitchSheet');

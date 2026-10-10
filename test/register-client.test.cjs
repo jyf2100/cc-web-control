@@ -145,3 +145,73 @@ test('registered / pong 帧 → _authRejectCount 归零(防偶发 1008 累积误
   assert.equal(rc._authRejectCount, 0, '收到 pong 后 _authRejectCount 应归零');
   rc.close(); await hub.stop();
 });
+
+// ---- mods 巡检上报(注册帧 + 心跳 ping 帧;验收 2/4 的单机侧) ----
+
+test('register 帧携带 mods 巡检状态(getModsStatus provider)', async () => {
+  const hub = await startFakeHub({ onRegister: (ws) => ws.send(JSON.stringify({ type: 'registered' })) });
+  const rc = new RegisterClient({
+    hubUrl: `http://127.0.0.1:${hub.port}`, registerToken: 't', authToken: 'x',
+    bindHost: '127.0.0.1', port: 1, machineId: 'm', machineName: '', publicUrl: '',
+    getModsStatus: async () => ({ cc_version: '2.1.300', mods_count: 2, source: 'fixture' }),
+  });
+  rc.start();
+  await new Promise((r) => setTimeout(r, 150));
+  const reg = hub.received.find((m) => m.type === 'register');
+  assert.ok(reg.mods, '注册帧应带 mods 字段');
+  assert.equal(reg.mods.cc_version, '2.1.300');
+  assert.equal(reg.mods.mods_count, 2);
+  assert.equal(reg.mods.risk, true, 'provider 原始输出经 sanitize 后已含 risk 判定');
+  rc.close(); await hub.stop();
+});
+
+test('未配 getModsStatus → 帧不带 mods(向后兼容,老配置不受影响)', async () => {
+  const hub = await startFakeHub({ onRegister: (ws) => ws.send(JSON.stringify({ type: 'registered' })) });
+  const rc = new RegisterClient({
+    hubUrl: `http://127.0.0.1:${hub.port}`, registerToken: 't', authToken: 'x',
+    bindHost: '127.0.0.1', port: 1, machineId: 'm', machineName: '', publicUrl: '',
+  });
+  rc.start();
+  await new Promise((r) => setTimeout(r, 150));
+  const reg = hub.received.find((m) => m.type === 'register');
+  assert.equal(reg.mods, undefined);
+  rc.close(); await hub.stop();
+});
+
+test('心跳 ping 帧携带最新 mods 状态(状态变化随心跳传播,验收 4)', async () => {
+  const hub = await startFakeHub({ onRegister: (ws) => ws.send(JSON.stringify({ type: 'registered' })) });
+  // provider 返回可变状态:首次 2 条,之后归 0(模拟删除测试夹具)
+  let count = 2;
+  const rc = new RegisterClient({
+    hubUrl: `http://127.0.0.1:${hub.port}`, registerToken: 't', authToken: 'x',
+    bindHost: '127.0.0.1', port: 1, machineId: 'm', machineName: '', publicUrl: '',
+    getModsStatus: () => ({ cc_version: '2.1.300', mods_count: count, source: 'fixture' }),
+    pingIntervalMs: 60,
+  });
+  rc.start();
+  await new Promise((r) => setTimeout(r, 150));
+  count = 0; // 模拟 mods 夹具被删除
+  await new Promise((r) => setTimeout(r, 200)); // 等下一个心跳周期
+  const pings = hub.received.filter((m) => m.type === 'ping' && m.mods);
+  assert.ok(pings.length >= 2, '至少两个心跳携带 mods');
+  assert.equal(pings[pings.length - 1].mods.mods_count, 0, '最后一次心跳反映最新状态 0');
+  assert.equal(pings[pings.length - 1].mods.risk, false, '风险标记随计数归零消失');
+  rc.close(); await hub.stop();
+});
+
+test('getModsStatus 抛错 → 降级 error 帧上报(不静默吞错,验收 5)', async () => {
+  const hub = await startFakeHub({ onRegister: (ws) => ws.send(JSON.stringify({ type: 'registered' })) });
+  const rc = new RegisterClient({
+    hubUrl: `http://127.0.0.1:${hub.port}`, registerToken: 't', authToken: 'x',
+    bindHost: '127.0.0.1', port: 1, machineId: 'm', machineName: '', publicUrl: '',
+    getModsStatus: async () => { throw new Error('disk exploded'); },
+    pingIntervalMs: 60,
+  });
+  rc.start();
+  await new Promise((r) => setTimeout(r, 150));
+  const reg = hub.received.find((m) => m.type === 'register');
+  assert.ok(reg.mods.error, '注册帧应带降级 error 说明');
+  assert.match(reg.mods.error, /disk exploded/);
+  assert.equal(reg.mods.mods_count, 0);
+  rc.close(); await hub.stop();
+});

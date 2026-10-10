@@ -68,6 +68,52 @@
     return CLI_TOOL_ORDER.filter(function (k) { return present.has(k); });
   }
 
+  // mods/plugins 巡检面板 HTML(hub):每机一行 —— 机器名 / CC 版本 / mods 条目数 / 状态标记。
+  // 数据来自 global-dashboard machines[].mods(单机经注册/心跳上报,hub 侧已清洗并算好 state/risk);
+  // 前端只渲染不判定。state 语义:error=巡检异常 / risk=mods 风险(非空 + CC≥2.1.287)/
+  // unknown=有 mods 但版本未知 / ok=正常。无任何机器上报 mods → ''(调用方隐藏面板)。
+  // mods_row title 带 source/error 明细,悬停可查采集来源。
+  var MODS_STATE_META = {
+    error:   { cls: 'error',   label: '巡检异常' },
+    risk:    { cls: 'risk',    label: '⚠ mods 风险' },
+    unknown: { cls: 'unknown', label: '版本未知' },
+    ok:      { cls: 'ok',      label: '正常' },
+    none:    { cls: 'none',    label: '未上报' },
+  };
+  function renderModsPanel(machines) {
+    var list = machines || [];
+    var anyReported = false;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && list[i].mods) { anyReported = true; break; }
+    }
+    if (!anyReported) return '';
+    var rows = [];
+    for (var j = 0; j < list.length; j++) {
+      var m = list[j] || {};
+      var name = escapeHtml(m.name || m.id);
+      var mods = m.mods;
+      if (!mods) {
+        rows.push('<tr class="mods-row mods-row--none" data-machine="' + escapeHtml(String(m.id != null ? m.id : '')) + '">' +
+          '<td class="mods-row__name">' + name + '</td>' +
+          '<td class="mods-row__ver">—</td><td class="mods-row__count">—</td>' +
+          '<td class="mods-badge mods-badge--none">未上报</td></tr>');
+        continue;
+      }
+      var state = MODS_STATE_META[mods.state] ? mods.state : 'none';
+      var meta = MODS_STATE_META[state];
+      var cnt = Number(mods.mods_count) || 0;
+      var detail = mods.error ? ('巡检失败: ' + mods.error) : ('采集来源: ' + (mods.source || 'unknown'));
+      rows.push('<tr class="mods-row mods-row--' + meta.cls + '" data-machine="' + escapeHtml(String(m.id != null ? m.id : '')) + '" title="' + escapeHtml(detail) + '">' +
+        '<td class="mods-row__name">' + name + '</td>' +
+        '<td class="mods-row__ver">CC ' + escapeHtml(mods.cc_version || 'unknown') + '</td>' +
+        '<td class="mods-row__count">' + cnt + '</td>' +
+        '<td class="mods-badge mods-badge--' + meta.cls + '">' + escapeHtml(meta.label) + '</td></tr>');
+    }
+    return '<table class="mods-table">' +
+      '<thead><tr><th>机器</th><th>CC 版本</th><th>mods</th><th>状态</th></tr></thead>' +
+      '<tbody>' + rows.join('') + '</tbody></table>';
+  }
+
   // 「按工具过滤」控件 HTML:≥2 种工具才渲染(单工具无可区分性,省 UI)。
   // active: null/'' = 全部;否则为某枚举值。每 chip data-cli-filter="" (全部) 或 = 枚举。
   // 工具 chip 内嵌 buildCliBadge(色由令牌驱动)+ 完整 label;全部 chip 用 accent 高亮态。
@@ -341,5 +387,5 @@
     return parts.join('');
   }
 
-  return { statusMeta, escapeHtml, relativeTime, windowNameFor, buildCardHTML, buildCardRow, buildCardInner, flattenFleet, sortCardsByRelevance, summarizeFleet, summarizeMachine, renderStatusCounts, isStale, partitionStale, groupByMachine, cliToolMeta, buildCliBadge, collectCliTools, renderCliFilter, CLI_TOOL_META, CLI_TOOL_ORDER };
+  return { statusMeta, escapeHtml, relativeTime, windowNameFor, buildCardHTML, buildCardRow, buildCardInner, flattenFleet, sortCardsByRelevance, summarizeFleet, summarizeMachine, renderStatusCounts, isStale, partitionStale, groupByMachine, cliToolMeta, buildCliBadge, collectCliTools, renderCliFilter, renderModsPanel, MODS_STATE_META, CLI_TOOL_META, CLI_TOOL_ORDER };
 });

@@ -141,3 +141,57 @@ test('DashboardAggregator onResult 抛错被吞,不影响聚合主流程', async
   await agg._tick(); // onResult 抛错被吞,_tick 正常 resolve
   assert.equal(agg.getLatest().machines[0].online, true);
 });
+
+// —— mods 巡检聚合(machines[].mods 透传 + hub 侧风险判定)——
+
+test('mergeDashboards: machine.mods 透传并重算 risk(空 mods 机器不标风险)', () => {
+  const merged = mergeDashboards([
+    { machine: { id: 'risky', name: 'R', mods: { cc_version: '2.1.300', mods_count: 2, source: 'fixture' } },
+      online: true, payload: { tmuxOk: true, sessions: [] } },
+    { machine: { id: 'clean', name: 'C', mods: { cc_version: '2.1.300', mods_count: 0, source: 'fixture' } },
+      online: true, payload: { tmuxOk: true, sessions: [] } },
+  ]);
+  const risky = merged.machines.find((m) => m.id === 'risky');
+  const clean = merged.machines.find((m) => m.id === 'clean');
+  assert.equal(risky.mods.mods_count, 2);
+  assert.equal(risky.mods.risk, true, '非空 mods + CC ≥ 2.1.287 → risk');
+  assert.equal(risky.mods.state, 'risk');
+  assert.equal(clean.mods.mods_count, 0);
+  assert.equal(clean.mods.risk, false, '空 mods 机器不标风险');
+  assert.equal(clean.mods.state, 'ok');
+});
+
+test('mergeDashboards: 无 mods 的机器 → mods:null(旧版 agent 兼容)', () => {
+  const merged = mergeDashboards([
+    { machine: { id: 'old', name: 'O' }, online: true, payload: { tmuxOk: true, sessions: [] } },
+  ]);
+  assert.equal(merged.machines[0].mods, null);
+});
+
+test('mergeDashboards: 离线机 mods 仍透传(风险提示不因离线消失)', () => {
+  const merged = mergeDashboards([
+    { machine: { id: 'risky', name: 'R', mods: { cc_version: '2.1.287', mods_count: 1, source: 'x' } },
+      online: false, error: 'ECONNREFUSED' },
+  ]);
+  assert.equal(merged.machines[0].online, false);
+  assert.equal(merged.machines[0].mods.risk, true);
+});
+
+test('DashboardAggregator _tick: registry 的 mods 进入聚合输出', async () => {
+  const reg = fakeRegistry([
+    { id: 'mc1', name: 'A', url: 'http://1', token: 't1', mods: { cc_version: '2.1.300', mods_count: 2, source: 'fixture' } },
+    { id: 'mc2', name: 'B', url: 'http://2', token: 't2' },
+  ]);
+  const agg = new DashboardAggregator({
+    registry: reg,
+    fetchOne: async () => ({ ok: true, payload: { tmuxOk: true, sessions: [] } }),
+    intervalMs: 999999,
+  });
+  await agg._tick();
+  const latest = agg.getLatest();
+  const mc1 = latest.machines.find((m) => m.id === 'mc1');
+  const mc2 = latest.machines.find((m) => m.id === 'mc2');
+  assert.equal(mc1.mods.mods_count, 2);
+  assert.equal(mc1.mods.risk, true);
+  assert.equal(mc2.mods, null, 'registry 无 mods → 输出 null');
+});

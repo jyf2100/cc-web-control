@@ -5,6 +5,7 @@
 const WebSocket = require('ws');
 const os = require('node:os');
 const { ID_RE, normalizeCliTool } = require('./hub/config.cjs');
+const { sanitizeModsStatus } = require('./mods_inspect.cjs');
 
 const PING_INTERVAL_MS = 20000;
 const RECONNECT_BASE_MS = 500;
@@ -23,6 +24,9 @@ class RegisterClient {
     machineId, machineName, publicUrl,
     bindHost, port,
     cliTool,
+    // mods/plugins 巡检 provider(可选,可异步):返回 mods_inspect 形状对象;
+    // 注册帧与每次心跳 ping 都会重新采集上报(hub 侧 ≤ 一个心跳周期内看到 mods 变化)。
+    getModsStatus,
     pingIntervalMs = PING_INTERVAL_MS,
     reconnectBaseMs = RECONNECT_BASE_MS,
     reconnectMaxMs = RECONNECT_MAX_MS,
@@ -41,6 +45,7 @@ class RegisterClient {
     // 上报的 CLI 工具类型(hub 聚合分类/徽标用)。cc-web-control 自身恒为 claude-code;
     // 未来若用本库注册非 claude-code 被控,可显式传入合法枚举值。非法值由 normalizeCliTool 回退 unknown。
     this._cliTool = normalizeCliTool(cliTool || 'claude-code');
+    this._getModsStatus = typeof getModsStatus === 'function' ? getModsStatus : null;
     this._pingIntervalMs = pingIntervalMs;
     this._reconnectBaseMs = reconnectBaseMs;
     this._reconnectMaxMs = reconnectMaxMs;
@@ -112,10 +117,8 @@ class RegisterClient {
     this._ws = ws;
 
     ws.on('open', () => {
-      this._sendRegister();
-      this._pingTimer = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ping' }));
-      }, this._pingIntervalMs);
+      void this._sendRegister();
+      this._pingTimer = setInterval(() => { void this._sendPing(ws); }, this._pingIntervalMs);
     });
 
     ws.on('message', (buf) => {
@@ -155,21 +158,50 @@ class RegisterClient {
     });
   }
 
-  _sendRegister() {
+  // 采集 mods 巡检状态(白名单清洗后上报);provider 抛错 → 降级 error 帧(不静默,hub 侧显示「巡检异常」)。
+  async _collectMods() {
+    if (!this._getModsStatus) return null;
+    try {
+      return sanitizeModsStatus(await this._getModsStatus());
+    } catch (e) {
+      return sanitizeModsStatus({
+        cc_version: 'unknown', mods_count: 0, source: '',
+        error: `mods 巡检异常: ${e && e.message ? e.message : e}`,
+      });
+    }
+  }
+
+  _sendOpen(ws, frame) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify(frame));
+  }
+
+  // 心跳 ping 携带最新 mods 状态:单机 plugins 增删 → hub 侧下一个心跳周期内更新(无重连需求)。
+  async _sendPing(ws) {
+    const mods = await this._collectMods();
+    const frame = { type: 'ping' };
+    if (mods) frame.mods = mods;
+    this._sendOpen(ws, frame);
+  }
+
+  async _sendRegister() {
     const id = this._machineId;
     if (!ID_RE.test(id)) {
       this._log.error?.(`[register] machineId 非法(须匹配 ${ID_RE}),断开`);
       this._ws?.close(1008);
       return;
     }
-    this._ws.send(JSON.stringify({
+    const mods = await this._collectMods();
+    const frame = {
       type: 'register',
       id,
       name: this._machineName || id,
       url: this._publicUrl,
       token: this._authToken,
       cli_tool: this._cliTool,
-    }));
+    };
+    if (mods) frame.mods = mods;
+    this._sendOpen(this._ws, frame);
   }
 
   _scheduleReconnect(reason) {

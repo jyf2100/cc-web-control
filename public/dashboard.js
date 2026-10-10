@@ -174,6 +174,8 @@
     var fleetSummary = document.getElementById('fleet-summary');
     var boardStale = document.getElementById('board-stale');
     var cliFilterBar = document.getElementById('cli-filter-bar'); // hub:按 CLI 工具过滤控件
+    var modsPanel = document.getElementById('mods-panel');        // hub:mods/plugins 巡检面板
+    var modsBody = document.getElementById('mods-body');
     var pollFailCount = 0;
     var lastPollOkTs = 0;
     var hubModeActive = false;            // Fix 7:visibilitychange 据 hubModeActive 决定是否重启 hubLoop
@@ -387,8 +389,18 @@
             applyCliFilter();
         });
     }
+    // hub:mods/plugins 巡检面板(每机一行,数据随 global-dashboard machines[].mods 到达)。
+    // 无任何机器上报 mods(旧版 agent)→ BR.renderModsPanel 返回 '' → 面板隐藏。
+    // 放在 renderBoard 最前:空机/无会话早退分支下机器清单仍可见(机器行不依赖会话)。
+    function renderModsPanel(machines) {
+        if (!modsPanel || !modsBody) return;
+        var html = BR.renderModsPanel(machines);
+        modsBody.innerHTML = html;
+        modsPanel.hidden = !html;
+    }
     function renderBoard(payload) {
         var machines = payload.machines || [];
+        renderModsPanel(machines);
         var flat = BR.flattenFleet(machines);
         // :7685 多机 hub:永远机器维度,不做 singleMachine 降级
         // (07-04 spec 错判 :7685 为单机,见 docs/superpowers/specs/2026-07-04-7685-hub-gap-audit.md §1)。
