@@ -196,6 +196,11 @@ const SINGLE_SCHEMA = {
   // 默认 effort 档位(Opus 5 缓存匹配标识):未显式选择时用此值(AC6 文档化默认)。
   // 消费方(server.cjs)经 normalizeEffort 校验,非法值降级为 effort.cjs 的 DEFAULT_EFFORT。
   defaultEffort:       { type: 'string',  env: 'CC_WEB_DEFAULT_EFFORT',         default: DEFAULT_EFFORT },
+  // 会话轨迹(.jsonl)聚合(轻量 Evolve 数据底座):扫描根目录与单文件超限阈值。
+  // trajectoryRoot 空 = 默认 ~/.claude/projects(trajectory_scan.cjs 的 DEFAULT_TRAJECTORY_ROOT);
+  // 指向不存在路径时扫描返回空清单 + warning,不 crash(消费方 server.cjs /api/trajectories)。
+  trajectoryRoot:          { type: 'string', env: 'CC_WEB_TRAJECTORY_ROOT',           default: '' },
+  trajectoryOversizeBytes: { type: 'number', env: 'CC_WEB_TRAJECTORY_OVERSIZE_BYTES', default: 50 * 1024 * 1024, min: 1 },
 };
 
 // 7685(hub)全字段 schema:env / default / type 对齐 spec §5.2(11 字段,mainAgent 为 passthrough 对象)

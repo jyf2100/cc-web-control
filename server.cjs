@@ -612,6 +612,37 @@ function startWebServer() {
     }
   });
 
+  // 会话轨迹清单(供 hub /api/global-trajectories 聚合):扫描本机 Claude Code .jsonl 元数据。
+  // 根路径/超限阈值可配置(CC_WEB_TRAJECTORY_ROOT / CC_WEB_TRAJECTORY_OVERSIZE_BYTES,
+  // 默认 ~/.claude/projects + 50MB);hub 每 intervalMs 轮询打到本端点,逐次全量扫盘代价高,
+  // 故 TTL 内复用上次结果(60s),?refresh=1 强制重扫。与审计端点同口径:绝不 500,降级空清单。
+  const TRAJECTORY_CACHE_TTL_MS = 60_000;
+  let trajectoryCache = null;
+  function scanTrajectoriesNow() {
+    trajectoryCache = scanTrajectories({
+      rootDir: CFG.trajectoryRoot || DEFAULT_TRAJECTORY_ROOT,
+      oversizeBytes: CFG.trajectoryOversizeBytes,
+      log: console,
+    });
+    return trajectoryCache;
+  }
+  app.get('/api/trajectories', (req, res) => {
+    try {
+      const stale = !trajectoryCache || Date.now() - trajectoryCache.scannedAt > TRAJECTORY_CACHE_TTL_MS;
+      const r = (req.query.refresh === '1' || stale) ? scanTrajectoriesNow() : trajectoryCache;
+      const body = {
+        root: r.root,
+        scannedAt: r.scannedAt,
+        trajectories: r.trajectories,
+        skipped: r.skipped,
+      };
+      if (r.warning) body.warning = r.warning; // 根目录不存在等:空清单 + warning(验收 3)
+      res.json(body);
+    } catch (error) {
+      res.json({ root: CFG.trajectoryRoot || DEFAULT_TRAJECTORY_ROOT, trajectories: [], skipped: 0, error: 'trajectory scan failed' });
+    }
+  });
+
   app.get('/api/projects', async (req, res) => {
     try {
       if (!PROJECT_ROOTS.length) {

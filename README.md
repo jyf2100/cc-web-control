@@ -192,7 +192,7 @@ cc-web-control hub --config /path/to/my-hub-config.json
 
 字段名、类型、默认值的权威清单见仓库根的两份模板（避免本节与 schema 漂移）：
 
-- 单机 21 字段（含 6 个 hub 注册字段 `hubUrl` / `hubToken` / `hubRegisterToken` / `machineId` / `machineName` / `publicUrl`）：[`config.example.json`](./config.example.json)
+- 单机 23 字段（含 6 个 hub 注册字段 `hubUrl` / `hubToken` / `hubRegisterToken` / `machineId` / `machineName` / `publicUrl`，及 2 个会话轨迹字段 `trajectoryRoot` / `trajectoryOversizeBytes`）：[`config.example.json`](./config.example.json)
 - hub 12 顶层字段（含 `hubRegisterToken`，及 `mainAgent` 子对象）：[`hub-config.example.json`](./hub-config.example.json)
 
 复制模板作起点：
@@ -301,6 +301,7 @@ hub 专用环境变量：
 - **看板**：顶部全局 dashboard 展示所有机器及其会话状态（每 2s 聚合一次）。
 - **点卡片新标签直达**：点任一会话卡片 → hub 颁一张 15s TTL 一次性 ticket 并 302 → 浏览器新标签打开该机 `:7684` 单机页（已登录态）。中键 / Cmd+点击 等浏览器原生行为均可用。
 - **批量广播**：多选若干会话 → 在广播栏输入 → 一次性扇出到所有选中会话。
+- **会话轨迹**：看板下方「会话轨迹」面板聚合各机的 Claude Code 会话 `.jsonl` 元数据（按机器分组、按机器/日期过滤、点行看摘要详情、导出当前过滤结果的路径清单 JSON）——轻量 Evolve（轨迹分析 → LESSONS.md/SKILL.md Diff → 人审核写回）的数据底座与人在回路入口。详见下节。
 
 > `http://<hub>/?token=<CC_WEB_HUB_TOKEN>` 直链可跳过登录页，**仅供本地测试**，勿用于日常/外网。
 
@@ -321,6 +322,24 @@ SSRF 面：单机注册上报的 `url` 会经 hub 主动请求（看板轮询）
 建议把 hub 部署在内网，如需外网访问请走安全隧道（见下节）并保留 `CC_WEB_HUB_TOKEN` 鉴权。
 
 反向代理部署时，登录限流按 socket 对端 IP 计数（未启用 `trust proxy`），内网单用户无影响；公网部署需自行配置 `trust proxy`。
+
+### 6) 会话轨迹聚合（轻量 Evolve 数据底座）
+
+各单机扫描本机 Claude Code 会话轨迹（`~/.claude/projects/<项目slug>/<sessionId>.jsonl`）的**元数据**（sessionId、绝对路径、大小、mtime、user/assistant 消息条数、首条用户消息摘要≤200 字符），hub 每 2s 聚合成「会话轨迹」视图。**只聚合元数据，不跨机搬运文件本体**；LLM 分析与 LESSONS.md Diff 生成是后续独立工作，本节是它们的数据底座与人在回路审核入口。
+
+单机侧配置（写入 `~/.cc-web-control/config.json` 或环境变量）：
+
+- `trajectoryRoot` / `CC_WEB_TRAJECTORY_ROOT` — 轨迹扫描根目录，默认 `~/.claude/projects`；指向不存在的路径时返回空清单并打一条 warning（不 crash）。
+- `trajectoryOversizeBytes` / `CC_WEB_TRAJECTORY_OVERSIZE_BYTES` — 单文件超限阈值（默认 52428800 = 50MB）：超限文件不逐行解析，仍入清单但标记 `oversize`、消息条数为 null。
+
+hub 侧 API（供前端看板与下游 Evolve 分析脚本消费）：
+
+- `GET /api/global-trajectories` — 全部轨迹（每条带 `machine` 归属）。
+- `GET /api/global-trajectories?machine=<id>` — 按机器过滤。
+- `GET /api/global-trajectories?date=YYYY-MM-DD` — 按 mtime 的 UTC 日过滤（含当日起点、不含次日起点）；可与 `machine` 组合；非法日期 → 400。
+- 单机原始端点：`GET /api/trajectories`（Bearer 单机 token；`?refresh=1` 强制重扫，默认 60s TTL 缓存）。
+
+看板「会话轨迹」面板：按机器分组展示聚合条数，支持机器/日期过滤；点任一条展示详情（首条用户消息摘要、消息条数、大小、路径；超限条目显示「未解析（超限）」）；「导出清单」按钮把**当前过滤结果**导出为路径清单 JSON（`{machine, sessionId, path}` 列表，与界面逐条一致）。
 
 ## 外网访问（安全隧道 / 手机访问）
 
