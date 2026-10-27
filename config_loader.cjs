@@ -9,6 +9,8 @@ const os = require('node:os');
 // effort 档位默认值与 effort.cjs 共享(避免 magic-string 漂移)。effort.cjs 是纯 UMD 叶子模块,
 // require 无副作用,前后端共享同一份档位定义。
 const { DEFAULT_EFFORT } = require('./public/effort.cjs');
+// 引擎合法值(engine 键)与命令/安装提示同源,防 magic-string 漂移。
+const { ENGINE_VALUES } = require('./engine.cjs');
 
 const CONFIG_DIR = path.join(os.homedir(), '.cc-web-control');
 const SINGLE_CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
@@ -36,7 +38,8 @@ function throwBad(field, msg) {
 }
 
 // 单字段解析:按 spec.type 强转 + 校验,返回最终值。source='env'|'file'|'default'
-function resolveField(field, spec, raw, source) {
+// warnings:可选收集数组(enum 非法值降级时写入;server 启动时打到 stderr)。
+function resolveField(field, spec, raw, source, warnings) {
   switch (spec.type) {
     case 'number': {
       const n = Number(raw);
@@ -93,10 +96,22 @@ function resolveField(field, spec, raw, source) {
       if (spec.fields) {
         for (const [k, subType] of Object.entries(spec.fields)) {
           if (!Object.prototype.hasOwnProperty.call(raw, k)) continue;
-          resolveField(`${field}.${k}`, { type: subType }, raw[k], 'file');
+          resolveField(`${field}.${k}`, { type: subType }, raw[k], 'file', warnings);
         }
       }
       return { ...raw };
+    }
+    case 'enum': {
+      // 枚举字段(engine):非法值不 throw(保持启动韧性)——降级 default + warning。
+      // 与 bool/number 的 fail-fast 不同:引擎值打错时宁可回退 claude 也不阻断整个服务。
+      const s = raw == null ? '' : String(raw).trim();
+      if (spec.values.includes(s)) return s;
+      if (warnings) {
+        warnings.push(
+          `字段 "${field}" 值 ${JSON.stringify(raw)} 非法(可选:${spec.values.join('/')}),已按缺省 "${spec.default}" 处理`
+        );
+      }
+      return spec.default;
     }
     case 'bool':
       // env '1'→true(对齐现有 === '1' 口径);file 须为字面 boolean(防引号 footgun)
@@ -160,7 +175,7 @@ function loadConfig({ schema, defaultFilePath, argv = process.argv, env = proces
     if (spec.env && env[spec.env] !== undefined) { raw = env[spec.env]; source = 'env'; }
     else if (Object.prototype.hasOwnProperty.call(fileValues, field)) { raw = fileValues[field]; source = 'file'; }
     else { raw = spec.default; source = 'default'; }
-    config[field] = resolveField(field, spec, raw, source);
+    config[field] = resolveField(field, spec, raw, source, warnings);
   }
 
   return { config, warnings, filePath };
@@ -171,6 +186,10 @@ const SINGLE_SCHEMA = {
   port:                { type: 'port',    env: 'CC_WEB_PORT',                  default: 7684 },
   host:                { type: 'string',  env: 'CC_WEB_HOST',                  default: '127.0.0.1', nonEmpty: true },
   session:             { type: 'session', env: 'CC_WEB_SESSION',               default: 'claude-web-session' },
+  // 会话引擎:claude(缺省,Claude Code CLI)/ codex(OpenAI Codex CLI)。未配置 → claude,
+  // 现有用户零感知;非法值 → 降级 claude + warning(enum 分支,不 throw)。
+  // 合法值集中 engine.cjs(ENGINE_VALUES),命令名/安装提示同源。
+  engine:              { type: 'enum',    env: 'CC_WEB_ENGINE',                default: 'claude', values: ENGINE_VALUES },
   authToken:           { type: 'string',  env: 'CC_WEB_AUTH_TOKEN',            default: '' },
   projectRoots:        { type: 'array',   env: 'CC_WEB_PROJECT_ROOTS',         default: [] },
   captureHistory:      { type: 'string',  env: 'CC_WEB_CAPTURE_HISTORY',       default: '' },

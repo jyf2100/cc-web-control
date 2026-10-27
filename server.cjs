@@ -17,7 +17,9 @@ const { spawn, exec } = require('child_process');
 const { WebSocketServer } = require('ws');
 const tmux = require('./tmux.cjs');
 const auth = require('./auth.cjs');
-const { buildClaudeLaunchCommand, shellEscapeForDoubleQuotes } = require('./claude_launch.cjs');
+const { buildSessionStartCommand } = require('./claude_launch.cjs');
+// 引擎元数据(命令名/安装提示):engine=codex 时依赖检查与提示按 codex 口径。
+const { engineCommand, engineInstallHint } = require('./engine.cjs');
 const { getDashboardCache, buildDashboardPayload } = require('./dashboard_cache.cjs');
 const { AutonomyTracker } = require('./autonomy_counters.cjs');
 const { cwdToSlug } = require('./dashboard_slug.cjs');
@@ -37,6 +39,10 @@ const { migrateConfigKeyToKeychain } = require('./secret_migrate.cjs');
 const { SubprocessAudit } = require('./subprocess_audit.cjs');
 // mods/plugins 环境巡检:Claude Code 2.1.287+ Mods 常驻进程内且无沙盒,对本控制台是风险面。
 const { inspectModsEnv, detectClaudeVersion, evaluateModsStatus } = require('./mods_inspect.cjs');
+// 会话轨迹扫描(~/.claude/projects .jsonl 元数据):/api/trajectories + hub 聚合轮询的数据源。
+// 此前缺失本 import,scanTrajectories/DEFAULT_TRAJECTORY_ROOT 未定义,端点恒降级
+// "trajectory scan failed"(main 上 4 条端到端测试红的根因)。
+const { scanTrajectories, DEFAULT_TRAJECTORY_ROOT } = require('./trajectory_scan.cjs');
 
 // 配置文件(~/.cc-web-control/config.json,--config 覆盖)+ env 覆盖(env > file > default)。
 // 无文件 = 纯 env/默认 = 现状行为(向后兼容)。warnings:未知字段 / token 权限过松。
@@ -85,6 +91,11 @@ const NO_OPEN = CFG.noOpen || hasFlag('--no-open');
 const NO_ATTACH = CFG.noAttach || hasFlag('--no-attach');
 const WEB_ONLY = CFG.webOnly || hasFlag('--web-only');
 const CLAUDE_WRAPPER = path.join(__dirname, 'claude-wrapper.sh');
+// 会话引擎(config engine 键,缺省 claude):codex → tmux 会话内启动 OpenAI Codex CLI,
+// 走 codex-wrapper.sh(与 claude-wrapper.sh 对应的启动路径);jsonl 事前绑定/effort 是
+// claude 专属机制,对 codex 会话整体跳过(看板降级为无 jsonl 状态,终端镜像不受影响)。
+const CODEX_WRAPPER = path.join(__dirname, 'codex-wrapper.sh');
+const ENGINE = CFG.engine;
 const AUTH_TOKEN = CFG.authToken;
 const HUB_URL = CFG.hubUrl;
 const HUB_REGISTER_TOKEN = CFG.hubRegisterToken;
@@ -212,7 +223,19 @@ async function startClaudeInSession(sessionName, cwd, opts = {}) {
   // tmux pane_current_path 也返回 realpath;此处统一 realCwd,让 shouldContinue /
   // pickResumableSessionUuid 定位目录、writeBinding 的 slug 都与 listSessions 回读一致。
   const realCwd = tryRealpath(cwd) || cwd;
-  const escapedCwd = shellEscapeForDoubleQuotes(realCwd);
+  // engine=codex:无 jsonl 事前绑定(--session-id/--resume 是 claude 专属 flag)也不认
+  // --effort,slug/binding/续接逻辑整体跳过;经 codex-wrapper.sh 对应路径裸启动。
+  if (ENGINE === 'codex') {
+    const cmd = buildSessionStartCommand({ engine: 'codex', cwd: realCwd, wrapperPath: CODEX_WRAPPER });
+    await tmux.sendKeys(sessionName, cmd);
+    // spawn 级审计(best-effort:审计失败不阻断 codex 启动)。cmd 为传给 tmux 的精确命令串。
+    try {
+      await subprocessAudit.recordStart({ sessionName, cmd, cwd: realCwd });
+    } catch (e) {
+      console.error('[audit] recordStart 失败(非致命):', e.message);
+    }
+    return;
+  }
   const slug = cwdToSlug(realCwd);
   // 事前绑定(--session-id / --resume,评审团 2/3 号方案,替代已废弃的「启动后轮询捕获」):
   //   web 路径(默认):shouldContinue 判断 —— 有历史 → --resume <最近 uuid> 续接;无 → --session-id <新 uuid> 新建。
@@ -238,12 +261,13 @@ async function startClaudeInSession(sessionName, cwd, opts = {}) {
     sessionId = crypto.randomUUID();
     if (slug) writeBinding(slug, sessionName, sessionId);
   }
-  // cd 与 claude 启动合并为单条命令,消除慢盘 / direnv hook 下 cd 未生效就发 claude 的时序竞态
+  // cd 与 claude 启动合并为单条命令(消除慢盘 / direnv hook 下 cd 未生效就发 claude 的时序竞态);
   // effort(已校验枚举)作为 --effort <level> 拼进 launch:wrapper 消费并导出 CC_WEB_CLAUDE_EFFORT,
   // 不透传 claude(防拒未知参数)。档位是缓存匹配标识,启动即锁定。
   const validEffort = isValidEffort(opts.effort) ? opts.effort : null;
-  const launch = buildClaudeLaunchCommand({ wrapperPath: CLAUDE_WRAPPER, sessionId, resumeId, effort: validEffort });
-  const cmd = `cd "${escapedCwd}" && ${launch}`;
+  const cmd = buildSessionStartCommand({
+    engine: 'claude', cwd: realCwd, wrapperPath: CLAUDE_WRAPPER, sessionId, resumeId, effort: validEffort,
+  });
   await tmux.sendKeys(sessionName, cmd);
   // spawn 级审计(best-effort:审计失败不阻断 claude 启动)。cmd 为传给 tmux 的精确命令串。
   try {
@@ -321,9 +345,10 @@ async function initAndAttachSession() {
       // ANTHROPIC_API_KEY 经 tmux -e 进 session env(子进程继承,不落 shell 历史)
       await tmux.createSession(RESOLVED_DEFAULT_SESSION, null, { env: claudeSessionEnv() });
 
-      const hasClaude = await isCommandAvailable('claude', ['--version']);
-      if (!hasClaude) {
-        console.error('[Init] 错误: 未找到 claude 命令。请先安装 Claude Code CLI（命令为 claude），然后重启服务。');
+      // 引擎依赖检查:engine=codex → 查 codex(提示 npm install -g @openai/codex);与 bin 依赖门同口径。
+      const hasEngineCmd = await isCommandAvailable(engineCommand(ENGINE), ['--version']);
+      if (!hasEngineCmd) {
+        console.error(`[Init] 错误: 未找到 ${engineCommand(ENGINE)} 命令。${engineInstallHint(ENGINE)}，然后重启服务。`);
         return true;
       }
 
@@ -696,9 +721,11 @@ function startWebServer() {
       await tmux.createSession(name, null, { env: claudeSessionEnv() });
       if (cwd) {
         const normalizedCwd = normalizeProjectCwd(cwd);
-        const hasClaude = await isCommandAvailable('claude', ['--version']);
-        if (!hasClaude) {
-          res.status(503).json({ error: 'claude is not available on PATH' });
+        // 引擎依赖检查(与 Init/bin 依赖门同口径):engine=codex → 查 codex,503 附安装提示。
+        const engineCmd = engineCommand(ENGINE);
+        const hasEngineCmd = await isCommandAvailable(engineCmd, ['--version']);
+        if (!hasEngineCmd) {
+          res.status(503).json({ error: `${engineCmd} is not available on PATH (install: ${engineInstallHint(ENGINE)})` });
           return;
         }
         // web 选项目创建会话:startClaudeInSession 内部走 shouldContinue 续接优先

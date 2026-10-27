@@ -265,11 +265,11 @@ test('权限 warning 的 mode 显示为八进制(防 chmod 420 误用 — chmod 
   );
 });
 
-// ---- Task 4:SINGLE_SCHEMA(7684 全 25 字段)+ object passthrough ----
+// ---- Task 4:SINGLE_SCHEMA(7684 全 26 字段)+ object passthrough ----
 
-test('SINGLE_SCHEMA:25 字段全齐,env/default/type 对齐 spec §5.1', () => {
+test('SINGLE_SCHEMA:26 字段全齐,env/default/type 对齐 spec §5.1(+engine)', () => {
   const fields = Object.keys(SINGLE_SCHEMA);
-  assert.equal(fields.length, 25, `应有 25 字段,实际 ${fields.length}: ${fields.join(',')}`);
+  assert.equal(fields.length, 26, `应有 26 字段,实际 ${fields.length}: ${fields.join(',')}`);
   assert.equal(SINGLE_SCHEMA.port.env, 'CC_WEB_PORT');
   assert.equal(SINGLE_SCHEMA.port.default, 7684);
   assert.equal(SINGLE_SCHEMA.port.type, 'port');
@@ -282,6 +282,10 @@ test('SINGLE_SCHEMA:25 字段全齐,env/default/type 对齐 spec §5.1', () => {
   assert.equal(SINGLE_SCHEMA.wsPingInterval.env, 'CC_WEB_WS_PING_INTERVAL');
   assert.equal(SINGLE_SCHEMA.wsPingInterval.default, 30000);
   assert.equal(SINGLE_SCHEMA.captureHistory.type, 'string');
+  // engine:会话引擎枚举(claude 缺省/codex),enum 类型,非法值降级 + warning
+  assert.equal(SINGLE_SCHEMA.engine.type, 'enum');
+  assert.equal(SINGLE_SCHEMA.engine.env, 'CC_WEB_ENGINE');
+  assert.equal(SINGLE_SCHEMA.engine.default, 'claude');
   // anthropic_api_key:snake 字段名(匹配 PRD 文件 grep),env 沿用标准名,默认空
   assert.equal(SINGLE_SCHEMA.anthropic_api_key.type, 'string');
   assert.equal(SINGLE_SCHEMA.anthropic_api_key.env, 'ANTHROPIC_API_KEY');

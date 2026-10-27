@@ -47,8 +47,36 @@ function buildClaudeLaunchCommand({ wrapperPath, sessionId, resumeId, effort } =
   return `bash "${escapedWrapper}"${flag}`;
 }
 
+// 引擎分发:engine 缺省/'claude' → 既有 claude 路径(输出逐字节一致,回归保障);
+// 'codex' → 经 codex-wrapper.sh(与 claude-wrapper.sh 对应的启动路径)裸启动 codex。
+// codex 首版不支持 jsonl 事前绑定(--session-id/--resume 是 claude 专属 flag),
+// 也不认 --effort——sessionId/resumeId/effort 一律忽略,透传会被 codex 拒(unknown flag)。
+function buildEngineLaunchCommand({ engine = 'claude', wrapperPath, sessionId, resumeId, effort } = {}) {
+  if (engine === 'codex') {
+    if (typeof wrapperPath !== 'string' || !wrapperPath.trim()) {
+      throw new Error('wrapperPath must be a non-empty string');
+    }
+    return `bash "${shellEscapeForDoubleQuotes(wrapperPath)}"`;
+  }
+  return buildClaudeLaunchCommand({ wrapperPath, sessionId, resumeId, effort });
+}
+
+// tmux 会话内启动引擎的完整命令(cd + 引擎启动合并单条,消除慢盘 / direnv hook 下
+// cd 未生效就发引擎命令的时序竞态——从 server.cjs 抽出为纯函数,便于对"产出的 tmux
+// 命令"做逐字节单测)。cwd 经 shellEscapeForDoubleQuotes 转义(换行已在源头拒绝,纵深防御)。
+function buildSessionStartCommand({ engine = 'claude', cwd, wrapperPath, sessionId, resumeId, effort } = {}) {
+  if (typeof cwd !== 'string' || !cwd.trim()) {
+    throw new Error('cwd must be a non-empty string');
+  }
+  const escapedCwd = shellEscapeForDoubleQuotes(cwd);
+  const launch = buildEngineLaunchCommand({ engine, wrapperPath, sessionId, resumeId, effort });
+  return `cd "${escapedCwd}" && ${launch}`;
+}
+
 module.exports = {
   buildClaudeLaunchCommand,
+  buildEngineLaunchCommand,
+  buildSessionStartCommand,
   shellEscapeForDoubleQuotes,
 };
 

@@ -27,10 +27,12 @@ test('server.cjs: 定义 RESOLVED_DEFAULT_EFFORT(文档化默认档位,AC6)', ()
   assert.ok(/normalizeEffort\(\s*CFG\.defaultEffort/.test(SERVER), '默认档位未走 normalizeEffort 校验');
 });
 
-// AC1 启动下发
-test('startClaudeInSession: 接收 opts.effort 并传给 buildClaudeLaunchCommand(AC1)', () => {
+// AC1 启动下发(engine 重构:cd+launch 组装抽到 claude_launch.cjs 的 buildSessionStartCommand,
+// effort 语义不变——经该纯函数逐字节拼出与旧 buildClaudeLaunchCommand 相同的命令,
+// 字节级回归见 test/engine_codex.test.cjs「缺省 engine → 与既有 claude 组装格式逐字节一致」)
+test('startClaudeInSession: 接收 opts.effort 并经 buildSessionStartCommand 传给启动命令(AC1)', () => {
   assert.ok(/opts\.effort/.test(SERVER), 'startClaudeInSession 未读 opts.effort');
-  assert.ok(/buildClaudeLaunchCommand\(\s*\{[^}]*effort:/.test(SERVER), 'buildClaudeLaunchCommand 未传 effort');
+  assert.ok(/buildSessionStartCommand\(\s*\{[^}]*effort:/.test(SERVER), '启动命令构造未传 effort');
 });
 
 // AC1 路由:POST /api/sessions 接收 effort
