@@ -21,7 +21,7 @@ cc-web-control
 
 - **Node.js** ≥ 18
 - **tmux**（macOS: `brew install tmux`；Ubuntu: `sudo apt install tmux`）
-- **Claude Code CLI**（已完成 Claude 登录认证）
+- **Claude Code CLI**（已完成 Claude 登录认证）；或配置 `engine: "codex"` 改用 **OpenAI Codex CLI**（`npm install -g @openai/codex`）
 
 首次启动若缺少依赖，程序会打印安装提示并退出（exit code 1）。
 
@@ -155,6 +155,7 @@ Claude Code 有些交互会在输入 `/` 后弹出命令面板（不一定需要
 - `CC_WEB_HOST`：监听地址（默认 `127.0.0.1`）
 - `CC_WEB_PORT`：端口（默认 `7684`）
 - `CC_WEB_SESSION`：默认会话名（默认 `claude-web-session`）
+- `CC_WEB_ENGINE`：会话引擎（`claude` 缺省 / `codex`，也可在 config 文件配 `engine` 键）。`codex` 时 tmux 会话内启动 OpenAI Codex CLI（经 `codex-wrapper.sh`），依赖检查与安装提示按 codex 口径；非法值回退 `claude` 并告警。
 - `CC_WEB_POLL_INTERVAL`：输出轮询间隔 ms（默认 `100`）
 - `CC_WEB_CAPTURE_HISTORY`：控制台可回看的 tmux scrollback 历史行数。未设/`0`=原行为（只抓当前可见屏）；正整数 N=抓当前屏 + 往上 N 行（受 tmux `history-limit` 上限约束，默认 2000）。例：`CC_WEB_CAPTURE_HISTORY=2000` 让滚动条能回看更早的历史输出。
 - `CC_WEB_PROJECT_ROOTS`：允许扫描的项目根目录（逗号分隔；不设置则不展示项目下拉框）
