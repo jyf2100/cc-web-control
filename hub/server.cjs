@@ -29,6 +29,9 @@ const { AuditLog } = require('./audit_log.cjs');
 const rootTmux = require('../tmux.cjs');
 const { writeMainAgentFiles } = require('./main_agent_config.cjs');
 const { AgentStateStore } = require('./agent_state_store.cjs');
+// 登录页版本号注入:与单机(server.cjs)同源,{{APP_VERSION}} → package.json version。
+// hub 复用根 login.html,若仍 sendFile 原始模板会漏出 {{APP_VERSION}} 占位字面量。
+const { readLoginPageSync } = require('../login_page.cjs');
 
 function startHub(opts) {
   const {
@@ -172,8 +175,21 @@ function startHub(opts) {
     return true;
   };
 
-  // GET /login:复用根 public/login.html(纯静态表单,input name=token/next)
+  // GET /login:复用根 public/login.html(纯静态表单,input name=token/next);
+  // 版本号经 login_page.cjs 服务端注入(rootDir=仓根),footer 静态可见。
+  // 注入失败(模板/包缺失)降级 sendFile 原始模板,登录功能不受影响。
+  let loginPageHtml;
+  try {
+    loginPageHtml = readLoginPageSync(undefined, path.join(__dirname, '..'));
+  } catch (e) {
+    console.error(`[hub] login 版本注入失败,回退原始模板: ${e.message}`);
+    loginPageHtml = null;
+  }
   app.get('/login', (req, res) => {
+    if (loginPageHtml) {
+      res.status(200).type('html').send(loginPageHtml);
+      return;
+    }
     res.sendFile(path.join(__dirname, '..', 'public', 'login.html'));
   });
 

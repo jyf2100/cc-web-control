@@ -22,3 +22,8 @@ __pycache__/
 /state/
 .playwright-mcp/
 .superpowers/
+
+# Playwright e2e(e2e/ 验收套件)运行产物
+test-results/
+playwright-report/
+.blob-report/

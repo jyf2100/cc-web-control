@@ -44,16 +44,18 @@
     .btn-ghost[aria-disabled="true"] { opacity: 0.45; pointer-events: none; }
     .l-hint { margin: 22px 0 0; font-family: var(--mono); font-size: 10.5px; line-height: 1.7; color: var(--fg-3); }
     .l-hint .k { color: var(--fg-2); }
+    /* 底部版本 footer:{{APP_VERSION}} 占位由服务端(login_page.cjs)替换为 package.json version */
+    .login-footer { margin-top: 18px; font-family: var(--mono); font-size: 10.5px; color: var(--fg-3); letter-spacing: 0.04em; text-align: center; }
     @media (max-width: 480px) { .login-card { max-width: 100%; } }
   </style>
 </head>
 <body>
   <main class="login-card">
-    <p class="l-eyebrow">[ login ] · v2.4</p>
+    <p class="l-eyebrow">[ login ] · {{APP_VERSION}}</p>
     <div class="brand-row">
       <span class="brand-mark brand-mark--lg" aria-hidden="true"></span>
       <span class="brand-name">Roc-CC</span>
-      <span class="brand-ver">v2.4</span>
+      <span class="brand-ver">{{APP_VERSION}}</span>
     </div>
     <h1>Roc-CC Remote Control</h1>
     <p class="lede">输入访问 token,连接你的 Claude Code 会话。</p>
@@ -73,6 +75,7 @@
       仅在可信设备与网络使用,妥善保管 token。
     </p>
   </main>
+  <footer class="login-footer">Roc-CC · {{APP_VERSION}}</footer>
   <script>
     (function () {
       try {

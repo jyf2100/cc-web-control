@@ -43,6 +43,9 @@ const { inspectModsEnv, detectClaudeVersion, evaluateModsStatus } = require('./m
 // 此前缺失本 import,scanTrajectories/DEFAULT_TRAJECTORY_ROOT 未定义,端点恒降级
 // "trajectory scan failed"(main 上 4 条端到端测试红的根因)。
 const { scanTrajectories, DEFAULT_TRAJECTORY_ROOT } = require('./trajectory_scan.cjs');
+// 登录页版本号注入(login_page.cjs):{{APP_VERSION}} 占位 → package.json version,
+// 版本 footer 静态存在于 /login 响应 HTML,不依赖前端 JS。
+const { readLoginPageSync } = require('./login_page.cjs');
 
 // 配置文件(~/.cc-web-control/config.json,--config 覆盖)+ env 覆盖(env > file > default)。
 // 无文件 = 纯 env/默认 = 现状行为(向后兼容)。warnings:未知字段 / token 权限过松。
@@ -112,6 +115,17 @@ const RESOLVED_DEFAULT_EFFORT = normalizeEffort(CFG.defaultEffort, DEFAULT_EFFOR
 if (CFG.defaultEffort && !isValidEffort(CFG.defaultEffort)) {
   console.error(`[config] defaultEffort "${CFG.defaultEffort}" 非合法档位,降级为 ${RESOLVED_DEFAULT_EFFORT}`);
 }
+
+// 登录页模板预渲染(启动一次,请求零额外 IO)。版本注入失败不阻断启动:
+// 降级回原始模板(占位原样显示),登录功能本身不受影响。
+const LOGIN_PAGE_HTML = (() => {
+  try {
+    return readLoginPageSync();
+  } catch (e) {
+    console.error(`[login] 版本注入失败,回退原始模板: ${e.message}`);
+    return fs.readFileSync(path.join(__dirname, 'public', 'login.html'), 'utf8');
+  }
+})();
 
 // —— keychain + 子进程审计(本 PR:secret 不落盘明文 + spawn 级可观测)——
 // secret 唯一落盘点:OS keychain;启动时迁移明文 → keychain 引用,解析后内存持有,
@@ -446,7 +460,8 @@ function startWebServer() {
       res.redirect(nextPath);
       return;
     }
-    res.sendFile(path.join(__dirname, 'public', 'login.html'));
+    // sendFile → 预渲染 HTML(版本号已注入,静态可见;ac3 不依赖前端 JS)
+    res.status(200).type('html').send(LOGIN_PAGE_HTML);
   });
 
   app.post('/login', (req, res) => {
