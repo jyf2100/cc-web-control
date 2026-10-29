@@ -79,7 +79,7 @@ html, body {
 .live-dot { display: inline-flex; align-items: center; gap: 6px; font-family: var(--sans); font-size: 11px; color: var(--fg-2); }
 .live-dot-pulse {
     width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
-    box-shadow: 0 0 6px rgba(217, 101, 26, 0.5); animation: live-glow 2.4s ease-in-out infinite;
+    box-shadow: 0 0 6px rgba(200, 116, 26, 0.5); animation: live-glow 2.4s ease-in-out infinite;
 }
 
 .status { font-size: 12px; color: var(--fg-2); padding: 4px 10px; background-color: var(--surface-2); border-radius: var(--r-pill); border: 1px solid var(--border); }

@@ -414,7 +414,7 @@ html, body {
 .session__del:disabled { opacity: 0.22; cursor: not-allowed; }
 .session__del:disabled:hover { background: transparent; color: inherit; opacity: 0.22; }
 
-.session--current { border-left: 3px solid var(--accent, #d9651a); }
+.session--current { border-left: 3px solid var(--accent, #c8741a); }
 .session--current .s-name::after {
     content: ' · 当前'; color: var(--accent-2, #b54e0e); font-size: 11px; font-weight: 400;
 }
