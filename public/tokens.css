@@ -1,11 +1,11 @@
 /**
  * cc-web-control 设计令牌(单一事实来源)
- * 方向:editorial 开发者工具风(暖灰米 + 暖橙)。三页共用。纯浅色。
+ * 方向:editorial 开发者工具风(秋感:米白 + 焦橙)。三页共用。纯浅色。
  * 语义分工:--accent 仅填色/装饰;--accent-2 用于所有文字/图标/按钮底(达 WCAG AA)。
  */
 :root {
-  /* 暖灰米底 */
-  --bg: #f2f1ed;
+  /* 米白底(秋感) */
+  --bg: #f7f2e9;
   --bg-2: #f7f7f4;
   /* surface 层级 */
   --surface: #ebeae5;
@@ -20,10 +20,10 @@
   --border: rgba(38,37,30,0.1);
   --border-2: rgba(38,37,30,0.2);
   /* 暖橙强调:双语义分工(达 WCAG AA) */
-  --accent: #d9651a;     /* 仅大面积填色/装饰图形,不用于小号文字/图标 */
-  --accent-2: #b54e0e;   /* 文字/图标/按钮底/focus outline 语义色(白字 5.17:1、on bg 4.58:1 达 AA) */
-  --accent-bg: rgba(217,101,26,0.08);
-  --accent-dim: rgba(217,101,26,0.25);
+  --accent: #c8741a;     /* 仅大面积填色/装饰图形,不用于小号文字/图标 */
+  --accent-2: #b54e0e;   /* 文字/图标/按钮底/focus outline 语义色(白字 5.17:1 达 AA) */
+  --accent-bg: rgba(200,116,26,0.08);
+  --accent-dim: rgba(200,116,26,0.25);
   /* 状态色谱:状态点用(与品牌暖橙拉开色相,避免与 CTA 语义混淆) */
   --waiting: #c08532;    /* 偏黄琥珀,区别于 accent 的 CTA 暖橙 */
   --working: #1f8a65;
