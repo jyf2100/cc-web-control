@@ -74,6 +74,18 @@ npm start
    - `Tab`：发送给 tmux 用于补全
    - 输入框为空时：`↑/↓/Esc/Enter` 会作为按键发送给 tmux（用于在面板里移动/确认/退出）
 
+## 本地构建
+
+从仓库源码安装依赖、启动与测试（命令与 `package.json` 的 `scripts` 一致）：
+
+```bash
+npm install   # 安装依赖
+npm start     # 启动服务（node server.cjs）
+npm test      # 运行全部测试（node --test test/*.test.cjs）
+```
+
+镜像分发：CI 构建后经内网 save|load 分发
+
 ## 文件结构
 
 ```
