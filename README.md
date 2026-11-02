@@ -74,6 +74,18 @@ npm start
    - `Tab`：发送给 tmux 用于补全
    - 输入框为空时：`↑/↓/Esc/Enter` 会作为按键发送给 tmux（用于在面板里移动/确认/退出）
 
+## 开发
+
+面向二次开发者与贡献者。完整架构说明、二次开发扩展点、已知风险与改进路线见 [docs/repo_review.md](./docs/repo_review.md)（含「上手实操与二次开发」与「二次开发指南（可操作清单）」两节）。
+
+## 快速启动
+
+克隆仓后的本地三步开发流程（命令以 `package.json` scripts 为准）：
+
+1. **安装依赖**：`npm install`
+2. **环境变量**：按需设 `CC_WEB_HOST` / `CC_WEB_PORT` / `CC_WEB_SESSION` / `CC_WEB_AUTH_TOKEN` 等（见下文「配置项（环境变量 / 启动参数）」；也可写 `~/.cc-web-control/config.json`）
+3. **启动开发**：`npm run dev`（`nodemon server.js` 热重载）
+
 ## 文件结构
 
 ```

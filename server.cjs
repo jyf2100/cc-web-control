@@ -519,6 +519,13 @@ function startWebServer() {
     res.redirect(`/login?next=${encodeURIComponent(nextUrl)}`);
   };
 
+  // /README.md:公开文档,与 logo/manifest 同等级的静态资源,无鉴权。
+  app.get('/README.md', (req, res) => {
+    res.type('text/markdown').sendFile(path.join(__dirname, 'README.md'), (err) => {
+      if (err) res.status(404).type('text/plain').send('README.md not found');
+    });
+  });
+
   app.use(requireAuth);
 
   // 一次性 ticket mint:hub 持 Bearer 调此端点 → 返回 15s 内有效的 ticket。
