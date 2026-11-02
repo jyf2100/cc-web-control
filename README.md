@@ -28,6 +28,10 @@ cc-web-control
 > 部署与运维入口：`docs/部署使用文档.md`  
 > 完整中文手册：`docs/操作手册.md`
 
+## License
+
+本项目基于 [MIT](./LICENSE) 协议开源。
+
 ## 功能特性
 
 - **自动启动 Claude Code**: `npm start` 自动创建 tmux 会话并启动 Claude Code
