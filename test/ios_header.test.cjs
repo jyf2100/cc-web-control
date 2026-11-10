@@ -8,11 +8,23 @@ const readCss = () => fs.readFileSync(`${P}/style.css`, 'utf8');
 const readClient = () => fs.readFileSync(`${P}/client.js`, 'utf8');
 const readMulti = () => fs.readFileSync(`${P}/modules/multi_line_input.js`, 'utf8');
 
-test('index.html header: brand 区 + brand-mark--sm + brand-name,无 brand-ver', () => {
+test('index.html header: brand 区 + NL logo(小老虎 SVG + NL 字样)+ brand-name,无 brand-ver', () => {
     const h = readHtml();
     assert.ok(h.includes('class="brand"') || h.includes('class="header-left"'), 'header 有 brand 区');
-    assert.ok(h.includes('class="brand-mark brand-mark--sm"'));
+    // NL logo:旧 brand-mark 方块由「内联 SVG 小老虎 + CSS 绘制 NL 字样」取代(login 页 brand-mark 不受影响)
+    assert.ok(/<svg[^>]*class="brand-logo"/.test(h), '左上角应有内联 SVG 小老虎 brand-logo');
+    const svgBlock = h.match(/<svg[^>]*class="brand-logo"[\s\S]*?<\/svg>/);
+    assert.ok(svgBlock, 'brand-logo SVG 应有闭合标签');
+    assert.ok(svgBlock[0].includes('viewBox'), 'SVG 应有 viewBox(可缩放)');
+    assert.ok(svgBlock[0].includes('var(--accent)'), '小老虎主体填色应用 --accent');
+    assert.ok(svgBlock[0].includes('var(--accent-2)'), '耳朵填色应用 --accent-2');
+    assert.ok(svgBlock[0].includes('var(--fg)'), '条纹/五官应用 --fg');
+    assert.ok(!/#[0-9a-fA-F]{3,}/.test(svgBlock[0]), 'SVG 不应硬编码色值(随 tokens.css 主题适配)');
+    assert.ok(/class="brand-nl"[^>]*>NL</.test(h), '应有 CSS 绘制的 NL 字样');
+    assert.ok(/\.brand-nl\s*\{[^}]*color:\s*var\(--accent-2\)/.test(h), 'NL 字样色应用 --accent-2(达 AA)');
+    assert.ok(!h.includes('brand-mark'), 'index.html 旧 brand-mark 方块应已移除');
     assert.ok(h.includes('class="brand-name"'));
+    assert.ok(/>Roc-CC</.test(h), 'brand 右侧 Roc-CC 文字保留');
     assert.ok(!h.includes('class="brand-ver"'), 'brand-ver v2.4 应删除');
 });
 
